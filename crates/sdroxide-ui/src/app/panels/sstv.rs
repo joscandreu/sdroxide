@@ -7,7 +7,7 @@
 //! currently arriving is the exception: scanlines are painted into a texture as
 //! they come, so a picture builds up on screen exactly as it does on the air.
 //!
-//! Compositing stays here. The crop, the header strip and the overlay text are
+//! Compositing stays here. The crop, the header strip and the text layers are
 //! applied to the fetched source client-side, so the preview redraws on every
 //! keystroke without a round trip, and only the finished picture goes back to
 //! the engine as an ordinary `SstvTx` / `RifpTx`.
@@ -17,8 +17,9 @@ use std::sync::{Arc, Mutex};
 
 use eframe::egui::{self, Color32, RichText};
 use sdroxide_types::{
-    Command, IMAGE_SLOTS, IMAGE_UPLOAD_MAX, ImageEntry, ImageKind, ImagePresets, Mode,
-    RifpEncoding, RifpProfile, RifpSize, RifpStatus, SstvMode, SstvStatus,
+    Command, IMAGE_LAYERS_MAX, IMAGE_SLOTS, IMAGE_UPLOAD_MAX, ImageEntry, ImageKind, ImagePresets,
+    Mode, RifpEncoding, RifpProfile, RifpSize, RifpStatus, SstvMode, SstvStatus, TextAnchor,
+    TextLayer,
 };
 
 use crate::theme::ThemedScroll;
@@ -46,6 +47,38 @@ pub(in crate::app) struct SstvSlot {
 /// textures.
 const GALLERY_MAX: usize = 240;
 
+/// The source crop-scaled to the transmitted size, kept so recomposing the
+/// preview — every frame while a layer is dragged — only redraws the text.
+pub(in crate::app) struct SstvBase {
+    slot: usize,
+    version: u32,
+    dims: (u16, u16),
+    rgb: Vec<u8>,
+}
+
+/// A text layer being dragged on the preview: moved by its body, or resized
+/// by a corner handle.
+#[derive(Clone)]
+pub(in crate::app) struct LayerDrag {
+    layer: usize,
+    kind: DragKind,
+}
+
+#[derive(Clone)]
+enum DragKind {
+    /// Where in the layer's box it was grabbed, in picture pixels from the
+    /// box's top-left, so the box does not jump to put its corner under the
+    /// pointer.
+    Move { grab: egui::Vec2 },
+    /// Which corner is held, as fractions of the box (`(1, 1)` bottom-right),
+    /// and the layer and its box as they were when it was grabbed — the
+    /// resize is always worked out from those, so it does not drift.
+    Resize { corner: (f32, f32), start: TextLayer, b0: crate::sstv::LayerBox },
+}
+
+/// Side of a corner handle on the preview, in screen points.
+const HANDLE: f32 = 7.0;
+
 /// A received-picture gallery entry.
 pub(in crate::app) struct SstvRecv {
     entry: ImageEntry,
@@ -57,7 +90,7 @@ pub(in crate::app) struct SstvRecv {
 }
 
 /// Image-panel state, shared by SSTV and RIFP: received gallery, in-progress
-/// incoming picture, transmit slots, the overlay message, the current mode, and
+/// incoming picture, transmit slots, their text layers, the current mode, and
 /// cached textures.
 ///
 /// One workspace for both modes on purpose. The pictures an operator wants to
@@ -82,24 +115,41 @@ pub(in crate::app) struct SstvUi {
     /// template is edited, when a colour is picked, and comparing the composed
     /// banner catches all of that with one test.
     pub(in crate::app) banner: Option<crate::sstv::Banner>,
-    /// How the banner and message are styled — the gradient, outlines and ink.
-    /// Kept beside the banner for the same staleness test: a colour picked in
-    /// the editor changes this and the preview is recomposed.
-    pub(in crate::app) style: sdroxide_types::SstvStyle,
+    /// What the `{…}` placeholders stand for this frame. Compared like the
+    /// banner: a callsign edited, a mode changed or a minute ticking over all
+    /// make the preview stale.
+    pub(in crate::app) fields: crate::sstv::Fields,
     /// Whether the banner editor window is open.
     pub(in crate::app) banner_open: bool,
     /// Auto mode: RX auto-detects the mode; TX defaults to Martin 1 until a mode
     /// is heard or the operator picks one.
     pub(in crate::app) auto: bool,
-    /// The engine's transmit presets: what is in each slot and the message over
+    /// The engine's transmit presets: what is in each slot and the text over
     /// it. The truth — `slots` below only caches its pixels.
     pub(in crate::app) presets: ImagePresets,
     /// Thumbnails of the presets, rebuilt when the engine announces a change.
     pub(in crate::app) slot_thumbs: Vec<Option<egui::TextureHandle>>,
-    /// The message being typed and which slot it belongs to. Only that one slot
-    /// is client-owned, so an echo of our own write — or an edit made on another
-    /// screen — can update the other four without fighting the keyboard.
-    pub(in crate::app) msg_edit: Option<(usize, String)>,
+    /// The layers being edited and which slot they belong to. Only that one
+    /// slot is client-owned, so an echo of our own write — or an edit made on
+    /// another screen — can update the other four without fighting the
+    /// keyboard or the pointer. See [`crate::sstv::tick`].
+    pub(in crate::app) edit: Option<crate::sstv::LayerEdit>,
+    /// Which of the slot's layers the editor controls act on.
+    pub(in crate::app) sel_layer: usize,
+    /// The layer being dragged on the preview, if one is.
+    pub(in crate::app) drag: Option<LayerDrag>,
+    /// Whether the layer's text box had the cursor last frame — with a drag,
+    /// what keeps the slot in hand.
+    pub(in crate::app) text_focus: bool,
+    /// Put the cursor in the text box next frame: a layer was just added.
+    pub(in crate::app) focus_text: bool,
+    /// Where each layer landed in the last composed preview, for hit-testing a
+    /// click and outlining the selection.
+    pub(in crate::app) boxes: Vec<Option<crate::sstv::LayerBox>>,
+    /// Where the preview was drawn on screen last frame.
+    pub(in crate::app) preview_rect: egui::Rect,
+    /// The crop-scaled source the preview is composed over.
+    pub(in crate::app) base: Option<SstvBase>,
     /// Fetched source pictures, keyed by slot; `None` until one arrives.
     pub(in crate::app) slots: Vec<Option<SstvSlot>>,
     /// The version last asked for per slot.
@@ -172,12 +222,19 @@ impl Default for SstvUi {
             rx_dims: (0, 0),
             preview_dims: (0, 0),
             banner: None,
-            style: sdroxide_types::SstvStyle::default(),
+            fields: crate::sstv::Fields::default(),
             banner_open: false,
             auto: true,
             presets: ImagePresets::default(),
             slot_thumbs: (0..IMAGE_SLOTS).map(|_| None).collect(),
-            msg_edit: None,
+            edit: None,
+            sel_layer: 0,
+            drag: None,
+            text_focus: false,
+            focus_text: false,
+            boxes: Vec::new(),
+            preview_rect: egui::Rect::NOTHING,
+            base: None,
             slots: (0..IMAGE_SLOTS).map(|_| None).collect(),
             src_asked: HashMap::new(),
             selected_slot: 0,
@@ -302,10 +359,10 @@ impl SstvUi {
                 *cell = thumb;
             }
         }
-        // The message box takes the engine's text for every slot except the one
-        // under the cursor, so an edit made elsewhere shows up.
-        if self.presets.slot(self.selected_slot).message != presets.slot(self.selected_slot).message
-            && !matches!(&self.msg_edit, Some((i, _)) if *i == self.selected_slot)
+        // The editor takes the engine's layers for every slot except the one in
+        // hand, so an edit made elsewhere shows up.
+        if self.presets.slot(self.selected_slot).layers != presets.slot(self.selected_slot).layers
+            && !matches!(&self.edit, Some(e) if e.slot == self.selected_slot)
         {
             self.preview_dirty = true;
         }
@@ -440,12 +497,70 @@ impl SstvUi {
         self.received.truncate(GALLERY_MAX);
     }
 
-    /// The overlay message for the slot currently being edited.
-    pub(in crate::app) fn current_message(&self) -> &str {
-        crate::sstv::message_shown(&self.msg_edit, &self.presets, self.selected_slot)
+    /// The text layers of the slot currently being edited.
+    pub(in crate::app) fn current_layers(&self) -> &[TextLayer] {
+        crate::sstv::layers_shown(&self.edit, &self.presets, self.selected_slot)
     }
 
-    /// Rebuild the transmit preview when the size, slot, or message changed.
+    /// Change the selected slot's layers: takes the slot in hand, committing
+    /// any other, and marks the preview stale.
+    pub(in crate::app) fn layers_mut(
+        &mut self,
+        now: f64,
+        cmds: &mut Vec<Command>,
+    ) -> &mut Vec<TextLayer> {
+        self.preview_dirty = true;
+        crate::sstv::edit_layers(&mut self.edit, &self.presets, self.selected_slot, now, cmds)
+    }
+
+    /// The per-frame half of editing: send a layer edit the operator has
+    /// paused on, and hand the slot back to the engine once it agrees.
+    pub(in crate::app) fn sync_edit(&mut self, now: f64, cmds: &mut Vec<Command>) {
+        let busy = self.drag.is_some() || self.text_focus;
+        let held = self.edit.is_some();
+        cmds.extend(crate::sstv::tick(&mut self.edit, &self.presets, now, busy));
+        if held && self.edit.is_none() {
+            // Handed back: what shows is the engine's now, which may differ.
+            self.preview_dirty = true;
+        }
+    }
+
+    /// Move to another slot, handing the one being left back to the engine
+    /// first so an edit is never lost to a click.
+    pub(in crate::app) fn select_slot(&mut self, slot: usize, cmds: &mut Vec<Command>) {
+        cmds.extend(crate::sstv::commit(&mut self.edit, &self.presets));
+        self.selected_slot = slot;
+        self.sel_layer = 0;
+        self.drag = None;
+        self.preview_dirty = true;
+    }
+
+    /// The selected slot's picture composed at `dims`, and where each layer
+    /// landed. `None` until its source has arrived.
+    fn compose_current(
+        &mut self,
+        dims: (u16, u16),
+    ) -> Option<(Vec<u8>, Vec<Option<crate::sstv::LayerBox>>)> {
+        let sel = self.selected_slot;
+        let slot = self.slots.get(sel).and_then(|s| s.as_ref())?;
+        let fresh = self
+            .base
+            .as_ref()
+            .is_some_and(|b| b.slot == sel && b.version == slot.version && b.dims == dims);
+        if !fresh {
+            self.base = Some(SstvBase {
+                slot: sel,
+                version: slot.version,
+                dims,
+                rgb: crate::sstv::crop_scale(&slot.src_rgb, slot.sw, slot.sh, dims.0, dims.1),
+            });
+        }
+        let base = self.base.as_ref()?.rgb.clone();
+        let layers = crate::sstv::resolve(self.current_layers(), &self.fields);
+        Some(crate::sstv::compose(base, dims.0, dims.1, self.banner.as_ref(), &layers))
+    }
+
+    /// Rebuild the transmit preview when the size, slot, or text changed.
     /// `dims` is the transmitted picture size — the SSTV line format's, or the
     /// operator's chosen RIFP size.
     pub(in crate::app) fn ensure_preview(&mut self, dims: (u16, u16), ctx: &egui::Context) {
@@ -453,41 +568,495 @@ impl SstvUi {
             return;
         }
         self.preview_dirty = false;
-        let message = self.current_message().to_string();
-        match self.slots.get(self.selected_slot).and_then(|s| s.as_ref()) {
-            Some(slot) => {
-                let (rgb, w, h) = crate::sstv::compose(
-                    dims.0,
-                    dims.1,
-                    &slot.src_rgb,
-                    slot.sw,
-                    slot.sh,
-                    &message,
-                    self.banner.as_ref(),
-                    &self.style,
-                );
-                let ci = crate::sstv::color_image(&rgb, w, h);
-                self.preview_tex =
-                    Some(ctx.load_texture("sstv_preview", ci, egui::TextureOptions::NEAREST));
+        match self.compose_current(dims) {
+            Some((rgb, boxes)) => {
+                let ci = crate::sstv::color_image(&rgb, dims.0, dims.1);
+                self.boxes = boxes;
+                match &mut self.preview_tex {
+                    Some(tex) => tex.set(ci, egui::TextureOptions::NEAREST),
+                    None => {
+                        self.preview_tex = Some(ctx.load_texture(
+                            "sstv_preview",
+                            ci,
+                            egui::TextureOptions::NEAREST,
+                        ))
+                    }
+                }
             }
-            None => self.preview_tex = None,
+            None => {
+                self.preview_tex = None;
+                self.boxes.clear();
+            }
         }
     }
 
     /// The composed PNG for the current selection, for transmit.
-    pub(in crate::app) fn compose_png(&self, dims: (u16, u16)) -> Option<Vec<u8>> {
-        let slot = self.slots.get(self.selected_slot).and_then(|s| s.as_ref())?;
-        let (rgb, w, h) = crate::sstv::compose(
-            dims.0,
-            dims.1,
-            &slot.src_rgb,
-            slot.sw,
-            slot.sh,
-            self.current_message(),
-            self.banner.as_ref(),
-            &self.style,
-        );
-        crate::sstv::encode_png(&rgb, w, h)
+    pub(in crate::app) fn compose_png(&mut self, dims: (u16, u16)) -> Option<Vec<u8>> {
+        let (rgb, _) = self.compose_current(dims)?;
+        crate::sstv::encode_png(&rgb, dims.0, dims.1)
+    }
+
+    /// The transmit preview, with the slot's text layers live on it: click a
+    /// layer to pick it, drag it to move it, double-click an empty part of the
+    /// picture to add one there.
+    fn preview_ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        max: egui::Vec2,
+        dims: (u16, u16),
+        now: f64,
+        cmds: &mut Vec<Command>,
+    ) {
+        let Some(tex) = self.preview_tex.clone() else {
+            self.drag = None;
+            let waiting = self.presets.slot(self.selected_slot).has_picture();
+            ui.label(
+                RichText::new(if waiting {
+                    "Fetching this slot's picture…"
+                } else {
+                    "Load an image into this slot →"
+                })
+                .size(11.0)
+                .weak(),
+            );
+            return;
+        };
+        // Allocated and painted by hand rather than `ui.add(Image)`: in the
+        // centred, justified box the preview sits in, the response of an added
+        // image spans the whole box while the picture is painted smaller in
+        // its middle, and every layer box would be mapped to the wrong place.
+        let image = egui::Image::new(&tex).max_width(max.x).max_height(max.y);
+        let size = image.calc_size(ui.available_size(), Some(tex.size_vec2()));
+        let (r, resp) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+        image.paint_at(ui, r);
+        self.preview_rect = r;
+        // Screen points per picture pixel; the image keeps its aspect ratio.
+        let k = r.width() / f32::from(dims.0).max(1.0);
+        let boxes = self.boxes.clone();
+        let screen = |b: &crate::sstv::LayerBox| {
+            egui::Rect::from_min_max(
+                r.min + egui::vec2(b.x0, b.y0) * k,
+                r.min + egui::vec2(b.x1, b.y1) * k,
+            )
+        };
+        let pic = |p: egui::Pos2| (p - r.min) / k;
+        // Every layer under the pointer, topmost first.
+        let under = |p: egui::Pos2| -> Vec<usize> {
+            (0..boxes.len())
+                .rev()
+                .filter(|&i| boxes[i].is_some_and(|b| screen(&b).expand(3.0).contains(p)))
+                .collect()
+        };
+        // The layer a press grabs: the selected one if the pointer is on it —
+        // otherwise a layer picked with its chip could never be dragged out
+        // from under one drawn over it — and the topmost one if not.
+        let sel = self.sel_layer;
+        let grab = |p: egui::Pos2| {
+            let u = under(p);
+            if u.contains(&sel) { Some(sel) } else { u.first().copied() }
+        };
+        let hovered = resp.hover_pos().and_then(grab);
+        let top = crate::sstv::banner_rows(self.banner.as_ref(), dims.1);
+
+        // The selected layer's four corners, as fractions of its box and as
+        // points on screen: where its resize handles are drawn and grabbed.
+        let corners: Vec<((f32, f32), egui::Pos2)> = boxes
+            .get(sel)
+            .copied()
+            .flatten()
+            .map(|b| {
+                let o = screen(&b).expand(2.0);
+                [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
+                    .map(|c| (c, o.min + o.size() * egui::vec2(c.0, c.1)))
+                    .to_vec()
+            })
+            .unwrap_or_default();
+        let handle_at = |p: egui::Pos2| {
+            corners
+                .iter()
+                .find(|(_, at)| {
+                    egui::Rect::from_center_size(*at, egui::Vec2::splat(HANDLE + 4.0)).contains(p)
+                })
+                .map(|(c, _)| *c)
+        };
+        let resize_cursor = |c: (f32, f32)| {
+            if c.0 == c.1 { egui::CursorIcon::ResizeNwSe } else { egui::CursorIcon::ResizeNeSw }
+        };
+
+        if resp.drag_started() {
+            // Where the button went down, not where the pointer is now: egui
+            // calls it a drag only once the pointer has moved a few points,
+            // which is enough to have left a seven-point handle behind.
+            let origin = ui.input(|i| i.pointer.press_origin());
+            if let Some(p) = origin.or(resp.interact_pointer_pos()) {
+                if let (Some(corner), Some(b0), Some(start)) = (
+                    handle_at(p),
+                    boxes.get(sel).copied().flatten(),
+                    self.current_layers().get(sel),
+                ) {
+                    let start = start.clone();
+                    self.drag = Some(LayerDrag {
+                        layer: sel,
+                        kind: DragKind::Resize { corner, start, b0 },
+                    });
+                } else if let Some((i, b)) = grab(p).and_then(|i| boxes[i].map(|b| (i, b))) {
+                    self.sel_layer = i;
+                    let grab = pic(p) - egui::vec2(b.x0, b.y0);
+                    self.drag = Some(LayerDrag { layer: i, kind: DragKind::Move { grab } });
+                }
+            }
+        }
+        if let (Some(d), Some(p)) = (self.drag.clone(), resp.interact_pointer_pos()) {
+            if resp.dragged() {
+                let at = pic(p);
+                let b = boxes.get(d.layer).copied().flatten();
+                if let Some(l) = self.layers_mut(now, cmds).get_mut(d.layer) {
+                    match d.kind {
+                        DragKind::Move { grab } => {
+                            if let Some(b) = b {
+                                let o = at - grab;
+                                crate::sstv::place_at(
+                                    l,
+                                    (o.x, o.y),
+                                    (b.x1 - b.x0, b.y1 - b.y0),
+                                    dims.0,
+                                    dims.1,
+                                    top,
+                                );
+                            }
+                        }
+                        DragKind::Resize { corner, start, b0 } => crate::sstv::resize_from(
+                            l,
+                            &start,
+                            b0,
+                            corner,
+                            (at.x, at.y),
+                            dims.0,
+                            dims.1,
+                            top,
+                        ),
+                    }
+                }
+            }
+        }
+        if !resp.dragged() {
+            self.drag = None;
+        }
+        if resp.double_clicked() && hovered.is_none() {
+            if let Some(p) = resp.interact_pointer_pos() {
+                if self.current_layers().len() < IMAGE_LAYERS_MAX {
+                    let at = pic(p);
+                    let l = crate::sstv::layer_at("Text", (at.x, at.y), dims.0, dims.1, top);
+                    let ls = self.layers_mut(now, cmds);
+                    ls.push(l);
+                    self.sel_layer = ls.len() - 1;
+                    self.focus_text = true;
+                }
+            }
+        } else if resp.clicked() {
+            // Clicking the selected layer again where others overlap it steps
+            // down through them, so every layer can be reached from the
+            // picture, however they are stacked.
+            if let Some(p) = resp.interact_pointer_pos() {
+                let u = under(p);
+                if let Some(at) = u.iter().position(|&i| i == sel) {
+                    self.sel_layer = u[(at + 1) % u.len()];
+                } else if let Some(&top) = u.first() {
+                    self.sel_layer = top;
+                }
+            }
+        }
+        // A press on the picture takes the keyboard from the text box, so the
+        // arrow keys that follow move the layer rather than the text cursor.
+        if resp.clicked() || resp.drag_started() {
+            resp.request_focus();
+        }
+        if resp.has_focus() {
+            // Keep the arrows here rather than letting them walk the focus off
+            // to the next widget.
+            ui.memory_mut(|m| {
+                m.set_focus_lock_filter(
+                    resp.id,
+                    egui::EventFilter {
+                        horizontal_arrows: true,
+                        vertical_arrows: true,
+                        ..Default::default()
+                    },
+                )
+            });
+        }
+
+        // Arrow keys nudge the selected layer a picture pixel, ten with
+        // Shift — while the picture has the keyboard, or the pointer is over it
+        // and the text box does not.
+        if !self.text_focus && (resp.has_focus() || resp.hovered()) {
+            let d = ui.input_mut(|i| {
+                let mut d = egui::Vec2::ZERO;
+                for (key, dir) in [
+                    (egui::Key::ArrowLeft, egui::vec2(-1.0, 0.0)),
+                    (egui::Key::ArrowRight, egui::vec2(1.0, 0.0)),
+                    (egui::Key::ArrowUp, egui::vec2(0.0, -1.0)),
+                    (egui::Key::ArrowDown, egui::vec2(0.0, 1.0)),
+                ] {
+                    while i.consume_key(egui::Modifiers::SHIFT, key) {
+                        d += dir * 10.0;
+                    }
+                    while i.consume_key(egui::Modifiers::NONE, key) {
+                        d += dir;
+                    }
+                }
+                d
+            });
+            if d != egui::Vec2::ZERO {
+                if let Some(b) = boxes.get(sel).copied().flatten() {
+                    if let Some(l) = self.layers_mut(now, cmds).get_mut(sel) {
+                        crate::sstv::nudge(l, b, (d.x, d.y), dims.0, dims.1, top);
+                    }
+                }
+            }
+        }
+
+        // The boxes: the selected layer's always, with its resize handles; the
+        // others while the pointer is over the picture, so the operator can see
+        // what there is to grab.
+        let painter = ui.painter_at(r.expand(HANDLE));
+        for (i, b) in boxes.iter().enumerate() {
+            let Some(b) = b else { continue };
+            let rect = screen(b).expand(2.0);
+            if i == self.sel_layer {
+                painter.rect_stroke(
+                    rect,
+                    2.0,
+                    egui::Stroke::new(1.5, crate::theme::CYAN()),
+                    egui::StrokeKind::Middle,
+                );
+            } else if resp.hovered() || self.drag.is_some() {
+                let a = if hovered == Some(i) { 170 } else { 70 };
+                painter.rect_stroke(
+                    rect,
+                    2.0,
+                    egui::Stroke::new(1.0, Color32::from_white_alpha(a)),
+                    egui::StrokeKind::Middle,
+                );
+            }
+        }
+        for (_, at) in &corners {
+            let h = egui::Rect::from_center_size(*at, egui::Vec2::splat(HANDLE));
+            painter.rect_filled(h, 1.0, crate::theme::CYAN());
+            painter.rect_stroke(
+                h,
+                1.0,
+                egui::Stroke::new(1.0, Color32::BLACK),
+                egui::StrokeKind::Outside,
+            );
+        }
+        match self.drag.as_ref().map(|d| &d.kind) {
+            Some(DragKind::Resize { corner, .. }) => {
+                ui.ctx().set_cursor_icon(resize_cursor(*corner))
+            }
+            Some(DragKind::Move { .. }) => ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing),
+            None => {
+                if let Some(c) = resp.hover_pos().and_then(handle_at) {
+                    ui.ctx().set_cursor_icon(resize_cursor(c));
+                } else if hovered.is_some() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                }
+            }
+        }
+    }
+
+    /// The selected slot's text layers: a chip per layer, the look of the one
+    /// picked, and a text box for what it says.
+    fn layer_editor(
+        &mut self,
+        ui: &mut egui::Ui,
+        inner_w: f32,
+        below: f32,
+        dims: (u16, u16),
+        now: f64,
+        cmds: &mut Vec<Command>,
+    ) {
+        let layers = self.current_layers().to_vec();
+        let n = layers.len();
+        self.sel_layer = self.sel_layer.min(n.saturating_sub(1));
+        let sel = self.sel_layer;
+
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
+            ui.label(RichText::new("Text").size(10.0).weak()).on_hover_text(
+                "Each piece of text is its own layer, drawn in this order — the last on \
+                 top. Drag one on the picture to move it; double-click the picture to add \
+                 one there.",
+            );
+            for (i, l) in layers.iter().enumerate() {
+                let first = l.text.lines().find(|t| !t.trim().is_empty()).unwrap_or("(empty)");
+                let mut label = RichText::new(shorten(first.trim(), 14)).size(10.5);
+                if !l.visible {
+                    label = label.weak().italics();
+                }
+                if crate::chrome::chip(ui, i == sel, label).clicked() {
+                    self.sel_layer = i;
+                }
+            }
+            if n < IMAGE_LAYERS_MAX
+                && crate::chrome::chip(ui, false, "+ Add")
+                    .on_hover_text("Add a text layer in the middle of the picture")
+                    .clicked()
+            {
+                let l = self.new_centre_layer(dims);
+                let ls = self.layers_mut(now, cmds);
+                ls.push(l);
+                self.sel_layer = ls.len() - 1;
+                self.focus_text = true;
+            }
+        });
+        let sel = self.sel_layer;
+
+        if let Some(orig) = layers.get(sel) {
+            let mut cur = orig.clone();
+            let mut delete = false;
+            let mut shift: isize = 0;
+            ui.add_space(3.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
+                ui.label(RichText::new("Size").size(10.0).weak())
+                    .on_hover_text("Type size, as a share of the picture's height");
+                ui.spacing_mut().slider_width = 90.0;
+                crate::chrome::slider(
+                    ui,
+                    egui::Slider::new(&mut cur.size, TextLayer::SIZE_MIN..=40.0)
+                        .step_by(0.5)
+                        .show_value(false),
+                );
+                ui.add_enabled_ui(!cur.rainbow, |ui| {
+                    ui.color_edit_button_srgb(&mut cur.ink).on_hover_text("Text colour");
+                });
+                crate::chrome::checkbox(ui, &mut cur.outline, "Outline").on_hover_text(
+                    "An edge around the letters, so they read over any part of the picture",
+                );
+                ui.add_enabled_ui(cur.outline, |ui| {
+                    ui.color_edit_button_srgb(&mut cur.outline_ink).on_hover_text("Outline colour");
+                });
+                crate::chrome::checkbox(ui, &mut cur.shadow, "Shadow");
+                crate::chrome::checkbox(ui, &mut cur.rainbow, "Rainbow");
+            });
+            ui.add_space(3.0);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 5.0;
+                ui.label(RichText::new("Pin").size(10.0).weak()).on_hover_text(
+                    "Which part of the picture the text keeps to. It stays there in every \
+                     mode, whatever size the picture is sent at. Dragging picks the \
+                     nearest one by itself.",
+                );
+                anchor_picker(ui, &mut cur);
+                ui.add_space(6.0);
+                let (vis, vis_hint) = if cur.visible {
+                    ("Hide", "Keep this text in the slot but leave it off the picture")
+                } else {
+                    ("Show", "Put this text back on the picture")
+                };
+                if crate::chrome::chip(ui, false, vis).on_hover_text(vis_hint).clicked() {
+                    cur.visible = !cur.visible;
+                }
+                if n > 1 {
+                    if crate::chrome::chip(ui, false, "▲")
+                        .on_hover_text("Draw this text above the next one")
+                        .clicked()
+                        && sel + 1 < n
+                    {
+                        shift = 1;
+                    }
+                    if crate::chrome::chip(ui, false, "▼")
+                        .on_hover_text("Draw this text below the previous one")
+                        .clicked()
+                        && sel > 0
+                    {
+                        shift = -1;
+                    }
+                }
+                if crate::chrome::chip(ui, false, "Delete").clicked() {
+                    delete = true;
+                }
+            });
+            if delete {
+                self.layers_mut(now, cmds).remove(sel);
+                self.sel_layer = sel.saturating_sub(1);
+            } else if shift != 0 {
+                let to = (sel as isize + shift) as usize;
+                self.layers_mut(now, cmds).swap(sel, to);
+                self.sel_layer = to;
+            } else if cur != *orig {
+                if let Some(l) = self.layers_mut(now, cmds).get_mut(sel) {
+                    *l = cur;
+                }
+            }
+            ui.add_space(3.0);
+        }
+
+        // What the selected layer says. With no layers yet, typing here makes
+        // the first — the slot message this editor grew out of.
+        let sel = self.sel_layer;
+        let mut buf = self.current_layers().get(sel).map(|l| l.text.clone()).unwrap_or_default();
+        let hint: String = std::iter::once("Substituted when the picture is composed:".to_string())
+            .chain(crate::sstv::PLACEHOLDERS.iter().map(|(k, what)| format!("  {k} — {what}")))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let text_h = (ui.available_height() - below).max(48.0);
+        let resp = ui
+            .push_id(("sstv-layer-text", self.selected_slot, sel), |ui| {
+                crate::chrome::field_sized(
+                    ui,
+                    egui::vec2(inner_w, text_h),
+                    egui::TextEdit::multiline(&mut buf).hint_text(if n == 0 {
+                        "Type to put text on this slot's picture"
+                    } else {
+                        "This layer's text"
+                    }),
+                )
+            })
+            .inner
+            .on_hover_text(hint);
+        if std::mem::take(&mut self.focus_text) {
+            resp.request_focus();
+        }
+        self.text_focus = resp.has_focus();
+        if resp.changed() {
+            let ls = self.layers_mut(now, cmds);
+            if let Some(l) = ls.get_mut(sel) {
+                l.text = buf;
+            } else if !buf.is_empty() {
+                ls.push(TextLayer { text: buf, ..TextLayer::default() });
+                self.sel_layer = self.current_layers().len() - 1;
+            }
+        }
+    }
+
+    /// A fresh layer for "+ Add": in the middle of the picture, or stepped a
+    /// line at a time below or above it until it is clear of the layers
+    /// already there. Added exactly on top of one, it would hide it — and a
+    /// second press of the button would bury the first new layer.
+    fn new_centre_layer(&self, dims: (u16, u16)) -> TextLayer {
+        let mut l = TextLayer { text: "Text".into(), size: 12.0, ..TextLayer::default() };
+        crate::sstv::pin(&mut l, TextAnchor::Center);
+        let (w, h) = (f32::from(dims.0), f32::from(dims.1));
+        let top = crate::sstv::banner_rows(self.banner.as_ref(), dims.1) as f32;
+        let step = l.size * 1.2;
+        let taken = |y: f32| {
+            let (cx, cy) = (w / 2.0, top + (h - top) / 2.0 + y / 100.0 * h);
+            self.boxes
+                .iter()
+                .flatten()
+                .any(|b| b.x0 <= cx && cx <= b.x1 && b.y0 <= cy && cy <= b.y1)
+        };
+        let reach = ((h - top) / 2.0 / h * 100.0 / step) as i32;
+        if let Some(y) = (1..=reach)
+            .flat_map(|n| [n as f32 * step, -(n as f32) * step])
+            .find(|&y| !taken(y))
+            .filter(|_| taken(0.0))
+        {
+            l.y = y;
+        }
+        l
     }
 
     /// Send a picked file to the engine for a slot.
@@ -516,6 +1085,33 @@ impl SstvUi {
         }
         self.pick_error = None;
         cmds.push(Command::ImageSetSlot { slot: slot as u8, bytes });
+    }
+}
+
+/// A 3×3 grid of small squares, one per anchor, the layer's own lit.
+fn anchor_picker(ui: &mut egui::Ui, layer: &mut TextLayer) {
+    let cell = 9.0;
+    let gap = 2.0;
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(3.0 * cell + 2.0 * gap, 3.0 * cell + 2.0 * gap),
+        egui::Sense::hover(),
+    );
+    for (i, a) in TextAnchor::ALL.into_iter().enumerate() {
+        let min = rect.min + egui::vec2((i % 3) as f32, (i / 3) as f32) * (cell + gap);
+        let r = egui::Rect::from_min_size(min, egui::vec2(cell, cell));
+        let resp = ui.interact(r, ui.id().with(("sstv-pin", i)), egui::Sense::click());
+        let on = layer.anchor == a;
+        let fill = if on {
+            crate::theme::CYAN()
+        } else if resp.hovered() {
+            crate::theme::gray(120)
+        } else {
+            crate::theme::gray(55)
+        };
+        ui.painter().rect_filled(r, 1.5, fill);
+        if resp.clicked() {
+            crate::sstv::pin(layer, a);
+        }
     }
 }
 
@@ -618,19 +1214,26 @@ impl SdroxideApp {
             self.sstv.src_asked.insert(sel, want.version);
             cmds.push(Command::ImageGetSlot(sel as u8));
         }
+        // What the placeholders stand for: the station, the mode, the clock.
+        let fields = crate::sstv::Fields::new(
+            &self.digi_cfg_edit.my_call,
+            &self.digi_cfg_edit.my_grid,
+            if rifp { "RIFP" } else { self.sstv.tx_mode.label() },
+            crate::time::now_unix(),
+        );
+        if self.sstv.fields != fields {
+            self.sstv.fields = fields;
+            self.sstv.preview_dirty = true;
+        }
         // Keep the banner in sync with the operator config — the callsign it
         // prints, the two templates, the colours and the height.
-        let banner = crate::sstv::Banner::from_config(&self.digi_cfg_edit);
+        let banner = crate::sstv::Banner::from_config(&self.digi_cfg_edit, &self.sstv.fields);
         if self.sstv.banner != banner {
             self.sstv.banner = banner;
             self.sstv.preview_dirty = true;
         }
-        // ...and the style, which the message overlay needs whether or not
-        // there is a banner.
-        if self.sstv.style != self.digi_cfg_edit.sstv_style {
-            self.sstv.style = self.digi_cfg_edit.sstv_style;
-            self.sstv.preview_dirty = true;
-        }
+        let now = ctx.input(|i| i.time);
+        self.sstv.sync_edit(now, cmds);
         // The transmitted size: SSTV's line format fixes it, RIFP leaves it to
         // the operator. Changing it invalidates the composed preview.
         let dims = if rifp {
@@ -1126,7 +1729,7 @@ impl SdroxideApp {
                                     resp
                                 };
                                 // Active-tab highlight: a cyan wash + heavier border so
-                                // it is obvious which slot the message box targets.
+                                // it is obvious which slot the text editor targets.
                                 if sel {
                                     ui.painter().rect_filled(
                                         resp.rect,
@@ -1154,22 +1757,13 @@ impl SdroxideApp {
                                     if sel { crate::theme::CYAN() } else { crate::theme::gray(170) },
                                 );
                                 let resp = resp.on_hover_text(
-                                    "Click to edit this slot's message · double-click to load an image",
+                                    "Click to edit this slot's text · double-click to load an image",
                                 );
                                 if resp.double_clicked() {
                                     self.sstv.pick_target = Some(i);
                                     pick_image(self.sstv.inbox.clone());
                                 } else if resp.clicked() && !sel {
-                                    // Hand the slot we are leaving back to the
-                                    // engine before moving on, so an edit is never
-                                    // lost to a click.
-                                    cmds.extend(crate::sstv::claim_message(
-                                        &mut self.sstv.msg_edit,
-                                        &self.sstv.presets,
-                                        i,
-                                    ));
-                                    self.sstv.selected_slot = i;
-                                    self.sstv.preview_dirty = true;
+                                    self.sstv.select_slot(i, cmds);
                                 }
                             }
                         });
@@ -1186,7 +1780,7 @@ impl SdroxideApp {
                             }
                             if has_img
                                 && crate::chrome::chip(ui, false, "Clear")
-                                    .on_hover_text("Empty this slot's picture (the message stays)")
+                                    .on_hover_text("Empty this slot's picture (the text stays)")
                                     .clicked()
                             {
                                 cmds.push(Command::ImageClearSlot(sel as u8));
@@ -1208,7 +1802,7 @@ impl SdroxideApp {
                         }
                         ui.add_space(6.0);
 
-                        // Preview gets a capped share of the height; the message box
+                        // Preview gets a capped share of the height; the text box
                         // grows to fill whatever's left above the buttons.
                         let btn_h = 42.0;
                         let gap = 6.0;
@@ -1221,61 +1815,21 @@ impl SdroxideApp {
                                 ui.set_min_size(egui::vec2(inner_w, preview_h));
                                 ui.set_max_size(egui::vec2(inner_w, preview_h));
                                 ui.centered_and_justified(|ui| {
-                                    if let Some(tex) = &self.sstv.preview_tex {
-                                        ui.add(
-                                            egui::Image::new(tex)
-                                                .max_height(preview_h - 4.0)
-                                                .max_width(inner_w - 4.0),
-                                        );
-                                    } else {
-                                        let waiting =
-                                            self.sstv.presets.slot(self.sstv.selected_slot).has_picture();
-                                        ui.label(
-                                            RichText::new(if waiting {
-                                                "Fetching this slot's picture…"
-                                            } else {
-                                                "Load an image into this slot →"
-                                            })
-                                            .size(11.0)
-                                            .weak(),
-                                        );
-                                    }
+                                    self.sstv.preview_ui(
+                                        ui,
+                                        egui::vec2(inner_w - 4.0, preview_h - 4.0),
+                                        dims,
+                                        now,
+                                        cmds,
+                                    );
                                 });
                             });
                         ui.add_space(gap);
 
-                        // Overlay message for the active slot — fills the height
-                        // above the buttons. The engine owns the text; this box
-                        // claims the slot while the cursor is in it and hands it
-                        // back when focus leaves, so an edit made on another screen
-                        // still reaches every slot but this one.
-                        let sel = self.sstv.selected_slot;
-                        let msg_h = (ui.available_height() - btn_h - gap).max(48.0);
-                        let mut buf = self.sstv.current_message().to_string();
-                        let resp = ui
-                            .push_id(sel, |ui| {
-                                crate::chrome::field_sized(ui, egui::vec2(inner_w, msg_h),
-                                    egui::TextEdit::multiline(&mut buf)
-                                        .hint_text("Drawn on this slot's image"),
-                                )
-                            })
-                            .inner;
-                        if resp.changed() {
-                            self.sstv.msg_edit = Some((sel, buf));
-                            self.sstv.preview_dirty = true;
-                        } else if resp.gained_focus() {
-                            cmds.extend(crate::sstv::claim_message(
-                                &mut self.sstv.msg_edit,
-                                &self.sstv.presets,
-                                sel,
-                            ));
-                        }
-                        if resp.lost_focus() {
-                            cmds.extend(crate::sstv::commit_message(
-                                &mut self.sstv.msg_edit,
-                                &self.sstv.presets,
-                            ));
-                        }
+                        // The slot's text layers: which one, how it looks, and
+                        // what it says — the text box filling the height above
+                        // the buttons.
+                        self.sstv.layer_editor(ui, inner_w, btn_h + gap, dims, now, cmds);
                         ui.add_space(gap);
 
                         // Large cut-corner TX / ABORT buttons.
@@ -1308,14 +1862,14 @@ impl SdroxideApp {
                                 })
                                 .inner;
                             if tx.clicked() {
-                                // Compose before committing: what goes on the air is
-                                // what is on screen, including an edit the operator
-                                // never clicked out of. The commit follows so the
-                                // engine stores it too.
+                                // Compose from what is on screen, including an edit
+                                // not yet sent, and send that edit now so the
+                                // engine stores what went on the air.
                                 let png = self.sstv.compose_png(dims);
-                                cmds.extend(crate::sstv::commit_message(
-                                    &mut self.sstv.msg_edit,
+                                cmds.extend(crate::sstv::send_now(
+                                    &mut self.sstv.edit,
                                     &self.sstv.presets,
+                                    now,
                                 ));
                                 if let Some(png) = png {
                                     cmds.push(if rifp {
@@ -1562,7 +2116,7 @@ impl SdroxideApp {
                             "Substituted when the picture is composed:".to_string(),
                         )
                         .chain(
-                            crate::sstv::BANNER_PLACEHOLDERS
+                            crate::sstv::PLACEHOLDERS
                                 .iter()
                                 .map(|(k, what)| format!("  {k} — {what}")),
                         )
@@ -1697,37 +2251,13 @@ impl SdroxideApp {
                                 changed |= crate::chrome::checkbox(
                                     ui,
                                     &mut cfg.sstv_style.rainbow_text,
-                                    "all text, overriding the colours above",
+                                    "overriding the colours above",
                                 )
                                 .on_hover_text(
-                                    "Draw every text in the picture — banner and message — as a \
-                                     horizontal rainbow, ignoring the colours above.",
+                                    "Draw the banner's text as a horizontal rainbow, ignoring the \
+                                     colours above. Each text layer has a rainbow of its own.",
                                 )
                                 .changed();
-                                ui.end_row();
-
-                                ui.label("Message");
-                                ui.horizontal(|ui| {
-                                    changed |= ui
-                                        .color_edit_button_srgb(&mut cfg.sstv_style.message_ink)
-                                        .on_hover_text("The slot message's text colour")
-                                        .changed();
-                                    ui.label(RichText::new("text").size(10.5).weak());
-                                    ui.add_space(8.0);
-                                    changed |= crate::chrome::checkbox(
-                                        ui,
-                                        &mut cfg.sstv_style.message_outline,
-                                        "outline in",
-                                    )
-                                    .changed();
-                                    ui.add_enabled_ui(cfg.sstv_style.message_outline, |ui| {
-                                        changed |= ui
-                                            .color_edit_button_srgb(
-                                                &mut cfg.sstv_style.message_outline_ink,
-                                            )
-                                            .changed();
-                                    });
-                                });
                                 ui.end_row();
 
                                 ui.label("Height").on_hover_text(
@@ -2052,5 +2582,351 @@ impl SdroxideApp {
         } else {
             format!("in {dir}")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui::{Event, PointerButton, Pos2, Rect, vec2};
+
+    const DIMS: (u16, u16) = (320, 256);
+
+    /// The transmit editor driven headlessly: the real preview and layer
+    /// editor in an egui frame, synthetic pointer input, and every layer
+    /// command echoed back the way the engine does.
+    struct Rig {
+        ctx: egui::Context,
+        ui: SstvUi,
+        t: f64,
+        sent: Vec<Command>,
+        pointer: Pos2,
+        /// Echoes on their way back, and the frame each lands on.
+        echoes: Vec<(usize, ImagePresets)>,
+        frames: usize,
+    }
+
+    impl Rig {
+        fn new(layers: Vec<TextLayer>) -> Rig {
+            let mut ui = SstvUi::default();
+            let s = &mut ui.presets.slots[0];
+            (s.layers, s.width, s.height, s.version) = (layers, 64, 64, 1);
+            ui.slots[0] =
+                Some(SstvSlot { src_rgb: vec![90; 64 * 64 * 3], sw: 64, sh: 64, version: 1 });
+            let mut rig = Rig {
+                ctx: egui::Context::default(),
+                ui,
+                t: 0.0,
+                sent: Vec::new(),
+                pointer: Pos2::ZERO,
+                echoes: Vec::new(),
+                frames: 0,
+            };
+            rig.idle(3);
+            rig
+        }
+
+        fn frame(&mut self, events: Vec<Event>) {
+            self.t += 1.0 / 30.0;
+            let input = egui::RawInput {
+                time: Some(self.t),
+                events,
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(700.0, 900.0))),
+                ..Default::default()
+            };
+            let mut cmds = Vec::new();
+            let (ui, ctx) = (&mut self.ui, &self.ctx);
+            // Laid out as the panel lays it out: a scrolled column, the
+            // preview framed and centred in a box of fixed height.
+            let mut out = ctx.run_ui(input, |p| {
+                let now = p.ctx().input(|i| i.time);
+                ui.sync_edit(now, &mut cmds);
+                ui.ensure_preview(DIMS, &p.ctx().clone());
+                egui::ScrollArea::vertical().auto_shrink([false, false]).show(p, |p| {
+                    let (w, h) = (640.0, 300.0);
+                    egui::Frame::new().inner_margin(2.0).show(p, |p| {
+                        p.set_min_size(vec2(w, h));
+                        p.set_max_size(vec2(w, h));
+                        p.centered_and_justified(|p| {
+                            ui.preview_ui(p, vec2(w - 4.0, h - 4.0), DIMS, now, &mut cmds);
+                        });
+                    });
+                    ui.layer_editor(p, 640.0, 50.0, DIMS, now, &mut cmds);
+                });
+            });
+            // No renderer to hand the textures to.
+            out.textures_delta.clear();
+            // The engine answers a few frames later, as it does over the
+            // channel.
+            self.frames += 1;
+            for c in &cmds {
+                if let Command::ImageSetLayers { slot, layers } = c {
+                    let mut p = self.echoes.last().map_or(self.ui.presets.clone(), |e| e.1.clone());
+                    p.slots[*slot as usize].layers = layers.clone();
+                    self.echoes.push((self.frames + 4, p));
+                }
+            }
+            while self.echoes.first().is_some_and(|e| e.0 <= self.frames) {
+                let (_, p) = self.echoes.remove(0);
+                self.ui.on_presets(p, &self.ctx);
+            }
+            self.sent.extend(cmds);
+        }
+
+        fn idle(&mut self, n: usize) {
+            for _ in 0..n {
+                self.frame(Vec::new());
+            }
+        }
+
+        /// The centre of a layer's box, on screen.
+        fn centre_of(&self, i: usize) -> Pos2 {
+            let b = self.ui.boxes[i].expect("layer has a box");
+            let r = self.ui.preview_rect;
+            let k = r.width() / f32::from(DIMS.0);
+            r.min + vec2((b.x0 + b.x1) / 2.0, (b.y0 + b.y1) / 2.0) * k
+        }
+
+        fn button(&mut self, pressed: bool) {
+            let pos = self.pointer;
+            self.frame(vec![Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed,
+                modifiers: Default::default(),
+            }]);
+        }
+
+        fn move_to(&mut self, p: Pos2) {
+            self.pointer = p;
+            self.frame(vec![Event::PointerMoved(p)]);
+        }
+
+        fn drag(&mut self, from: Pos2, by: egui::Vec2) {
+            self.move_to(from);
+            self.button(true);
+            for i in 1..=10 {
+                self.move_to(from + by * (i as f32 / 10.0));
+            }
+            self.button(false);
+            self.idle(2);
+        }
+
+        fn click(&mut self, at: Pos2) {
+            self.move_to(at);
+            self.button(true);
+            self.button(false);
+            self.idle(2);
+        }
+
+        /// A corner of a layer's outline on screen, where its handle is.
+        fn corner_of(&self, i: usize, c: (f32, f32)) -> Pos2 {
+            let b = self.ui.boxes[i].expect("layer has a box");
+            let r = self.ui.preview_rect;
+            let k = r.width() / f32::from(DIMS.0);
+            let o = Rect::from_min_max(r.min + vec2(b.x0, b.y0) * k, r.min + vec2(b.x1, b.y1) * k)
+                .expand(2.0);
+            o.min + o.size() * vec2(c.0, c.1)
+        }
+
+        fn key(&mut self, key: egui::Key, shift: bool) {
+            let modifiers = if shift { egui::Modifiers::SHIFT } else { egui::Modifiers::NONE };
+            let ev =
+                |pressed| Event::Key { key, physical_key: None, pressed, repeat: false, modifiers };
+            self.frame(vec![ev(true)]);
+            self.frame(vec![ev(false)]);
+        }
+
+        /// What "+ Add" does.
+        fn add(&mut self) {
+            let l = self.ui.new_centre_layer(DIMS);
+            let now = self.t;
+            let mut cmds = Vec::new();
+            let ls = self.ui.layers_mut(now, &mut cmds);
+            ls.push(l);
+            self.ui.sel_layer = ls.len() - 1;
+            self.ui.focus_text = true;
+            self.sent.extend(cmds);
+            self.idle(3);
+        }
+    }
+
+    fn first() -> Vec<TextLayer> {
+        vec![TextLayer { text: "CQ SSTV".into(), size: 15.0, ..TextLayer::default() }]
+    }
+
+    /// Where a station that upgraded starts: its old message, converted.
+    fn converted() -> Vec<TextLayer> {
+        TextLayer::from_message("CQ SSTV\nde OE1TEST\nMartin 1", [255; 3], Some([0; 3]), false)
+    }
+
+    /// Every layer in turn: picked by a click, then dragged.
+    fn pick_and_drag_all(rig: &mut Rig) {
+        for i in 0..rig.ui.boxes.len() {
+            rig.click(rig.centre_of(i));
+            assert_eq!(rig.ui.sel_layer, i, "clicking layer {i} picks it");
+            let before = rig.ui.boxes[i].unwrap();
+            rig.drag(rig.centre_of(i), vec2(20.0, 20.0));
+            let after = rig.ui.boxes[i].unwrap();
+            assert!(after.x0 > before.x0 + 5.0, "layer {i}: {before:?} -> {after:?}");
+            rig.idle(30);
+        }
+    }
+
+    #[test]
+    fn every_layer_of_a_converted_slot_can_be_picked_and_dragged_after_an_add() {
+        let mut rig = Rig::new(converted());
+        rig.add();
+        rig.idle(20);
+        assert_eq!(rig.ui.boxes.len(), 3);
+        pick_and_drag_all(&mut rig);
+    }
+
+    #[test]
+    fn two_adds_in_a_row_leave_every_layer_draggable() {
+        let mut rig = Rig::new(first());
+        rig.add();
+        rig.add();
+        rig.idle(20);
+        assert_eq!(rig.ui.boxes.len(), 3);
+        pick_and_drag_all(&mut rig);
+    }
+
+    /// Pulling the bottom-right handle out grows the selected layer about its
+    /// top-left corner.
+    #[test]
+    fn a_corner_handle_resizes_the_selected_layer() {
+        let mut rig = Rig::new(first());
+        let size0 = rig.ui.current_layers()[0].size;
+        let b0 = rig.ui.boxes[0].unwrap();
+        rig.drag(rig.corner_of(0, (1.0, 1.0)), vec2(60.0, 30.0));
+        let l = &rig.ui.current_layers()[0];
+        assert!(l.size > size0 * 1.2, "{size0} -> {}", l.size);
+        let b = rig.ui.boxes[0].unwrap();
+        assert!((b.x0 - b0.x0).abs() < 1.0 && (b.y0 - b0.y0).abs() < 1.0, "{b0:?} -> {b:?}");
+        assert!(b.x1 > b0.x1 + 10.0);
+        // And the top-left one pushed in shrinks it about its bottom-right.
+        let (size1, b1) = (l.size, b);
+        rig.drag(rig.corner_of(0, (0.0, 0.0)), vec2(40.0, 20.0));
+        let b = rig.ui.boxes[0].unwrap();
+        assert!(rig.ui.current_layers()[0].size < size1, "it shrank");
+        assert!((b.x1 - b1.x1).abs() < 1.0 && (b.y1 - b1.y1).abs() < 1.0, "{b1:?} -> {b:?}");
+    }
+
+    /// With the pointer over the picture, the arrows nudge the selected layer
+    /// a pixel at a time, ten with Shift.
+    #[test]
+    fn arrow_keys_nudge_the_selected_layer() {
+        let mut rig = Rig::new(first());
+        let b0 = rig.ui.boxes[0].unwrap();
+        rig.move_to(rig.centre_of(0));
+        for _ in 0..3 {
+            rig.key(egui::Key::ArrowRight, false);
+        }
+        rig.key(egui::Key::ArrowDown, true);
+        rig.idle(2);
+        let b = rig.ui.boxes[0].unwrap();
+        assert!((b.x0 - b0.x0 - 3.0).abs() < 0.01, "{b0:?} -> {b:?}");
+        assert!((b.y0 - b0.y0 - 10.0).abs() < 0.01, "{b0:?} -> {b:?}");
+    }
+
+    /// While the text box has the cursor, the arrows are the text's.
+    #[test]
+    fn arrow_keys_leave_the_layer_alone_while_typing() {
+        let mut rig = Rig::new(first());
+        rig.ui.focus_text = true;
+        rig.idle(2);
+        let b0 = rig.ui.boxes[0].unwrap();
+        rig.move_to(rig.centre_of(0));
+        rig.key(egui::Key::ArrowRight, false);
+        rig.idle(2);
+        assert_eq!(rig.ui.boxes[0].unwrap(), b0);
+        // A click on the picture takes the keyboard back.
+        rig.click(rig.centre_of(0));
+        rig.key(egui::Key::ArrowRight, false);
+        rig.idle(2);
+        assert!((rig.ui.boxes[0].unwrap().x0 - b0.x0 - 1.0).abs() < 0.01);
+    }
+
+    /// Two layers stacked exactly on one another: the one picked with its
+    /// chip is the one a drag moves, and clicking there steps between them.
+    #[test]
+    fn a_layer_under_another_can_still_be_reached() {
+        let l = TextLayer { text: "SAME".into(), size: 12.0, ..TextLayer::default() };
+        let mut rig = Rig::new(vec![l.clone(), l]);
+        let at = rig.centre_of(0);
+        rig.click(at);
+        assert_eq!(rig.ui.sel_layer, 1, "the top one first");
+        rig.click(at);
+        assert_eq!(rig.ui.sel_layer, 0, "then the one beneath");
+        rig.click(at);
+        assert_eq!(rig.ui.sel_layer, 1, "and round again");
+        // Picked by its chip, the lower one is what a drag takes.
+        rig.ui.sel_layer = 0;
+        rig.idle(2);
+        let (b0, b1) = (rig.ui.boxes[0].unwrap(), rig.ui.boxes[1].unwrap());
+        rig.drag(at, vec2(0.0, 80.0));
+        assert!(rig.ui.boxes[0].unwrap().y0 > b0.y0 + 20.0, "the selected layer moved");
+        assert_eq!(rig.ui.boxes[1].unwrap(), b1, "the one on top stayed");
+    }
+
+    /// "+ Add" twice does not stack the second new layer on the first.
+    #[test]
+    fn added_layers_do_not_land_on_each_other() {
+        let mut rig = Rig::new(first());
+        rig.add();
+        rig.add();
+        rig.idle(5);
+        let (a, b) = (rig.ui.boxes[1].unwrap(), rig.ui.boxes[2].unwrap());
+        assert!(b.y0 >= a.y1 - 0.5 || b.y1 <= a.y0 + 0.5, "{a:?} overlaps {b:?}");
+    }
+
+    /// The preview box is wider than a 5:4 picture, so the picture is drawn
+    /// centred in it. Layer boxes have to be mapped onto the picture as drawn
+    /// — mapped onto the whole box, they were stretched and shifted, harmless
+    /// near the top-left corner and wildly off for a layer in the middle.
+    #[test]
+    fn layer_boxes_are_mapped_onto_the_picture_as_drawn() {
+        let rig = Rig::new(first());
+        let r = rig.ui.preview_rect;
+        let aspect = f32::from(DIMS.0) / f32::from(DIMS.1);
+        assert!((r.width() / r.height() - aspect).abs() < 0.01, "{r:?}");
+        // Centred in the 640-wide box the rig lays it out in.
+        assert!(r.min.x > 100.0, "{r:?}");
+    }
+
+    #[test]
+    fn the_first_layer_can_be_dragged() {
+        let mut rig = Rig::new(first());
+        let before = rig.ui.boxes[0].unwrap();
+        rig.drag(rig.centre_of(0), vec2(0.0, 150.0));
+        let after = rig.ui.boxes[0].unwrap();
+        assert!(after.y0 > before.y0 + 30.0, "{before:?} -> {after:?}");
+    }
+
+    #[test]
+    fn an_added_layer_can_be_dragged() {
+        let mut rig = Rig::new(first());
+        rig.add();
+        assert_eq!(rig.ui.boxes.len(), 2, "the new layer is composed");
+        let before = rig.ui.boxes[1].unwrap();
+        rig.drag(rig.centre_of(1), vec2(0.0, 150.0));
+        let after = rig.ui.boxes[1].unwrap();
+        assert!(after.y0 > before.y0 + 30.0, "{before:?} -> {after:?}");
+    }
+
+    #[test]
+    fn an_added_layer_can_be_picked_after_the_first() {
+        let mut rig = Rig::new(first());
+        rig.add();
+        rig.idle(40);
+        rig.click(rig.centre_of(0));
+        assert_eq!(rig.ui.sel_layer, 0);
+        rig.click(rig.centre_of(1));
+        assert_eq!(rig.ui.sel_layer, 1);
+        let before = rig.ui.boxes[1].unwrap();
+        rig.drag(rig.centre_of(1), vec2(0.0, 150.0));
+        let after = rig.ui.boxes[1].unwrap();
+        assert!(after.y0 > before.y0 + 30.0, "{before:?} -> {after:?}");
     }
 }

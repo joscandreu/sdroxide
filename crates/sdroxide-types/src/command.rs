@@ -351,10 +351,13 @@ pub enum Command {
     /// Empty a preset's picture. The overlay message is the operator's text and
     /// stays — clearing a picture is replacing it, not forgetting what it said.
     ImageClearSlot(u8),
-    /// Set the text composited over a preset's picture.
-    ImageSetMessage {
+    /// Set the text layers composited over a preset's picture, bottom first.
+    /// The whole list, not an edit to it: a list is a few hundred bytes, and
+    /// sending it whole means two screens can never merge into a mixture of
+    /// both. The engine clamps it with [`crate::sanitise_layers`].
+    ImageSetLayers {
         slot: u8,
-        message: String,
+        layers: Vec<crate::TextLayer>,
     },
     /// Ask for a preset's stored source picture; the answer is
     /// [`crate::RadioEvent::ImageSlotSource`]. Requested lazily and cached

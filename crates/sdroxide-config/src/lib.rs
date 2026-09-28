@@ -1765,15 +1765,68 @@ pub fn save_input_settings(cfg: &sdroxide_types::InputSettings) -> Result<(), Co
     save_json("input.json", cfg)
 }
 
-/// SSTV per-slot transmit overlay messages (one entry per image slot). The
-/// image pixels live as PNGs under [`sstv_tx_dir`]; this stores just the text
-/// that is composited over each slot's picture.
-pub fn load_sstv_messages() -> Vec<String> {
-    load_json("sstv_messages.json")
+/// SSTV per-slot transmit text layers (one list per image slot). The image
+/// pixels live as PNGs under [`sstv_tx_dir`]; this stores just the text that is
+/// composited over each slot's picture.
+///
+/// A station that predates layers has `sstv_messages.json` instead — one
+/// string per slot, drawn in the colours `digi.json` kept for "the message".
+/// That is converted once, here, into the layers that draw it the same way,
+/// and written out under the new name. The old file is left where it was, so
+/// going back to an older build finds its messages still there.
+pub fn load_sstv_layers() -> Vec<Vec<sdroxide_types::TextLayer>> {
+    let Ok(dir) = config_dir() else { return Vec::new() };
+    if !matches!(read_config_text(&dir, SSTV_LAYERS), FileText::Missing) {
+        let mut all: Vec<Vec<sdroxide_types::TextLayer>> = load_json(SSTV_LAYERS);
+        all.iter_mut().for_each(sdroxide_types::sanitise_layers);
+        return all;
+    }
+    let messages: Vec<String> = load_json("sstv_messages.json");
+    if messages.iter().all(|m| m.trim().is_empty()) {
+        return Vec::new();
+    }
+    let style = match read_config_text(&dir, "digi.json") {
+        FileText::Text(t) => serde_json::from_str::<serde_json::Value>(&t)
+            .ok()
+            .and_then(|v| v.get("sstv_style").cloned())
+            .unwrap_or_default(),
+        _ => serde_json::Value::Null,
+    };
+    let layers = layers_from_messages(&messages, &style);
+    if let Err(e) = save_sstv_layers(&layers) {
+        warn!("could not write the converted SSTV text layers: {e}");
+    }
+    layers
 }
 
-pub fn save_sstv_messages(messages: &[String]) -> Result<(), ConfigError> {
-    save_json("sstv_messages.json", &messages)
+pub fn save_sstv_layers(layers: &[Vec<sdroxide_types::TextLayer>]) -> Result<(), ConfigError> {
+    save_json(SSTV_LAYERS, &layers)
+}
+
+const SSTV_LAYERS: &str = "sstv_layers.json";
+
+/// The conversion behind [`load_sstv_layers`], given the old messages and the
+/// `sstv_style` object `digi.json` held beside them (`Null` when there was
+/// none, which means the stock white-on-black look).
+fn layers_from_messages(
+    messages: &[String],
+    style: &serde_json::Value,
+) -> Vec<Vec<sdroxide_types::TextLayer>> {
+    let rgb = |key: &str, dflt: [u8; 3]| {
+        style
+            .get(key)
+            .and_then(|v| serde_json::from_value::<[u8; 3]>(v.clone()).ok())
+            .unwrap_or(dflt)
+    };
+    let flag = |key: &str, dflt: bool| style.get(key).and_then(|v| v.as_bool()).unwrap_or(dflt);
+    let ink = rgb("message_ink", [255, 255, 255]);
+    let outline = flag("message_outline", true).then(|| rgb("message_outline_ink", [0, 0, 0]));
+    // The rainbow used to cover every text in the picture, the message too.
+    let rainbow = flag("rainbow_text", false);
+    messages
+        .iter()
+        .map(|m| sdroxide_types::TextLayer::from_message(m, ink, outline, rainbow))
+        .collect()
 }
 
 /// The operator's satellite additions: element sets pasted in by hand, and
@@ -2162,6 +2215,26 @@ pub fn save_voice_names(names: &[String]) -> Result<(), ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A station's old messages come across in the colours it drew them in,
+    /// and an empty slot stays empty.
+    #[test]
+    fn old_sstv_messages_become_layers_in_their_old_colours() {
+        let style = serde_json::json!({
+            "message_ink": [255, 200, 0],
+            "message_outline": false,
+            "rainbow_text": true,
+        });
+        let msgs = vec!["CQ\nde OE1TEST".to_string(), String::new()];
+        let out = layers_from_messages(&msgs, &style);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].len(), 2);
+        assert!(out[1].is_empty());
+        assert!(out[0].iter().all(|l| l.ink == [255, 200, 0] && !l.outline && l.rainbow));
+        // No style at all is the stock look: white, black edge.
+        let plain = layers_from_messages(&msgs[..1], &serde_json::Value::Null);
+        assert!(plain[0].iter().all(|l| l.ink == [255; 3] && l.outline && !l.rainbow));
+    }
 
     #[test]
     fn published_version_parses_from_release_constant() {

@@ -25,7 +25,8 @@ use tracing::{info, warn};
 
 use sdroxide_types::{
     IMAGE_PAGE_MAX, IMAGE_SLOT_THUMB_EDGE, IMAGE_SLOTS, IMAGE_SOURCE_MAX_EDGE, IMAGE_THUMB_EDGE,
-    ImageEntry, ImageKind, ImageListing, ImagePresets, ImageSlotInfo, RifpMeta,
+    ImageEntry, ImageKind, ImageListing, ImagePresets, ImageSlotInfo, RifpMeta, TextLayer,
+    sanitise_layers,
 };
 
 /// Widest and tallest picture the decoder is allowed to believe in.
@@ -276,7 +277,7 @@ struct Slot {
     thumb: Vec<u8>,
 }
 
-/// The five transmit presets: a source picture and an overlay message each.
+/// The five transmit presets: a source picture and its text layers each.
 ///
 /// Only the source is kept. The crop, the header strip and the text are
 /// composited client-side, so the panel can redraw a preview on every keystroke
@@ -284,7 +285,7 @@ struct Slot {
 /// an ordinary `SstvTx` / `RifpTx`.
 pub struct ImagePresetStore {
     slots: Vec<Slot>,
-    messages: Vec<String>,
+    layers: Vec<Vec<TextLayer>>,
     /// Where `slot{i}.png` lives. `None` when the config directory could not be
     /// resolved — the presets then work for the session and store nothing,
     /// exactly as the voice keyer does.
@@ -303,12 +304,12 @@ impl ImagePresetStore {
         };
         let mut store = ImagePresetStore {
             slots: vec![Slot::default(); IMAGE_SLOTS],
-            messages: vec![String::new(); IMAGE_SLOTS],
+            layers: vec![Vec::new(); IMAGE_SLOTS],
             dir,
         };
-        let saved = sdroxide_config::load_sstv_messages();
-        for (i, m) in saved.into_iter().take(IMAGE_SLOTS).enumerate() {
-            store.messages[i] = m;
+        let saved = sdroxide_config::load_sstv_layers();
+        for (i, l) in saved.into_iter().take(IMAGE_SLOTS).enumerate() {
+            store.layers[i] = l;
         }
         for i in 0..IMAGE_SLOTS {
             let Some(path) = store.dir.as_ref().map(|d| slot_path(d, i)) else { continue };
@@ -341,7 +342,7 @@ impl ImagePresetStore {
     pub fn detached() -> ImagePresetStore {
         ImagePresetStore {
             slots: vec![Slot::default(); IMAGE_SLOTS],
-            messages: vec![String::new(); IMAGE_SLOTS],
+            layers: vec![Vec::new(); IMAGE_SLOTS],
             dir: None,
         }
     }
@@ -351,9 +352,9 @@ impl ImagePresetStore {
             slots: self
                 .slots
                 .iter()
-                .zip(&self.messages)
-                .map(|(s, m)| ImageSlotInfo {
-                    message: m.clone(),
+                .zip(&self.layers)
+                .map(|(s, l)| ImageSlotInfo {
+                    layers: l.clone(),
                     width: s.w,
                     height: s.h,
                     version: s.version,
@@ -378,7 +379,7 @@ impl ImagePresetStore {
         true
     }
 
-    /// Empty a slot's picture. The message is the operator's text and stays —
+    /// Empty a slot's picture. The text is the operator's and stays —
     /// clearing a picture is replacing it, not forgetting what it said.
     pub fn clear(&mut self, slot: usize) -> bool {
         if slot >= self.slots.len() || self.slots[slot].png.is_empty() {
@@ -391,14 +392,17 @@ impl ImagePresetStore {
         true
     }
 
-    pub fn set_message(&mut self, slot: usize, message: String) -> bool {
-        if slot >= self.messages.len() || self.messages[slot] == message {
+    /// Replace a slot's text layers, clamped into range first. False when
+    /// nothing changed, so an echo of what is already stored announces nothing.
+    pub fn set_layers(&mut self, slot: usize, mut layers: Vec<TextLayer>) -> bool {
+        sanitise_layers(&mut layers);
+        if slot >= self.layers.len() || self.layers[slot] == layers {
             return false;
         }
-        self.messages[slot] = message;
+        self.layers[slot] = layers;
         if self.dir.is_some() {
-            if let Err(e) = sdroxide_config::save_sstv_messages(&self.messages) {
-                warn!("saving transmit-image messages: {e}");
+            if let Err(e) = sdroxide_config::save_sstv_layers(&self.layers) {
+                warn!("saving transmit-image text: {e}");
             }
         }
         true
@@ -829,26 +833,27 @@ mod tests {
         assert!(!after_picture.thumb.is_empty(), "the slot strip paints from this");
         assert_eq!(store.source(1), (after_picture.version, png));
 
-        assert!(store.set_message(1, "CQ CQ".into()));
+        let cq = vec![TextLayer { text: "CQ CQ".into(), ..TextLayer::default() }];
+        assert!(store.set_layers(1, cq.clone()));
         let after_message = store.status().slot(1);
-        assert_eq!(after_message.message, "CQ CQ");
+        assert_eq!(after_message.layers, cq);
         assert_eq!(after_message.version, after_picture.version, "text is not pixels");
         // Setting the same text again is not a change, so it emits nothing.
-        assert!(!store.set_message(1, "CQ CQ".into()));
+        assert!(!store.set_layers(1, cq.clone()));
 
         let (png2, w2, h2) = normalise(&png_of(80, 40), 1024).unwrap();
         assert!(store.adopt(1, png2, w2, h2));
         assert_ne!(store.status().slot(1).version, after_picture.version);
         // The caption survives its picture being replaced.
-        assert_eq!(store.status().slot(1).message, "CQ CQ");
+        assert_eq!(store.status().slot(1).layers, cq);
 
         assert!(store.clear(1));
         assert!(!store.status().slot(1).has_picture());
-        assert_eq!(store.status().slot(1).message, "CQ CQ", "clearing a picture keeps the text");
+        assert_eq!(store.status().slot(1).layers, cq, "clearing a picture keeps the text");
         assert!(!store.clear(1), "an empty slot is not a change");
         // Out-of-range indices are a client bug, not a panic.
         assert!(!store.adopt(99, vec![1], 1, 1));
-        assert!(!store.set_message(99, "x".into()));
+        assert!(!store.set_layers(99, cq));
     }
 
     /// CRC-32 as PNG defines it, for the malformed-header test above.

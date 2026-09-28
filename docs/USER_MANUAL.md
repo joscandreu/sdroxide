@@ -4135,23 +4135,61 @@ one of the two.
 
 - The **TRANSMIT** side has five image slots that work like **tabs**. **Click** a
   slot to make it the active tab (highlighted with a cyan border and its number);
-  the message box below then edits *that slot's* message. Use the **Load image…**
+  the text editor below then edits *that slot's* text. Use the **Load image…**
   button (or **double-click** a slot) to pick an image file, which is
   automatically cropped and scaled to the current mode's dimensions and stored
   under `~/.config/sdroxide/sstv_tx/`.
-- Type a **message** for the active slot. Each slot keeps its own message —
-  switching slots swaps the text — and the messages are saved to
-  `~/.config/sdroxide/sstv_messages.json`, so they persist across restarts. The
-  lines are drawn over the image in bold with a black outline for readability;
-  the **first line is rendered at double size** as a title. A **live preview**
-  shows exactly what will be transmitted, banner and all.
+- Put **text** on the active slot's picture as **layers** — as many pieces of
+  text as you like (up to 16), each with its own size, colour and place. Each
+  slot keeps its own layers — switching slots swaps them — and they are saved to
+  `~/.config/sdroxide/sstv_layers.json`, so they persist across restarts. A
+  **live preview** shows exactly what will be transmitted, banner and all.
+  - **Adding.** With no text yet, just type in the text box: that makes the
+    first layer. **+ Add** puts another one in the middle of the picture (a
+    line lower, or higher, if something is already there), and
+    **double-clicking** an empty part of the preview adds one right there.
+  - **Moving.** **Drag** a layer on the preview. Pointing at the picture
+    outlines every layer you can grab; the selected one is outlined in cyan.
+    Where layers overlap, a drag takes the selected one, and clicking there
+    again steps down through the ones beneath — so a layer picked with its chip
+    can always be dragged, whatever is drawn over it. The **arrow keys** nudge
+    the selected layer one pixel of the transmitted picture at a time (ten with
+    **Shift**) while the pointer is over the preview or after clicking it —
+    click in the text box to have them back for the text.
+  - **Resizing.** Drag one of the four **handles** on the corners of the
+    selected layer's outline: the text grows or shrinks and the opposite corner
+    stays where it is. It keeps its proportions, so a handle scales the text
+    rather than stretching it; the **Size** slider does the same by number.
+    Where you drop it, it is **pinned** to the nearest of nine points of the
+    picture — a corner, the middle of an edge, or the centre — so a caption
+    dropped in the bottom-right corner stays in that corner in every mode,
+    whatever size the picture is sent at. The **Pin** grid does the same with a
+    click, just inside the chosen corner or edge. Lines of a layer line up with
+    the side it is pinned to.
+  - **Styling.** The chips above the text box pick a layer; below them are its
+    **Size** (a share of the picture's height, so it looks the same in Robot 36
+    and in PD-290 — text too wide for the picture is shrunk to fit), its
+    **colour**, an **Outline** in a colour of its own (on by default: plain
+    coloured text is hard to read once noise and the mode's coarse colour have
+    had their way with it), a **Shadow**, and **Rainbow**.
+  - **Hide** keeps a layer in the slot but off the picture; **▲ / ▼** change
+    which layer is drawn over which; **Delete** removes it.
+  - The same placeholders as the banner work in any layer — `{call}`, `{grid}`,
+    `{mode}` (the transmit mode), `{date}` and `{time}` (UTC) and `{version}` —
+    so one preset can say `CQ de {call} · {mode}` whatever you send it in.
+
+  A slot message from an earlier version is converted the first time this one
+  starts: its first line becomes a large title layer and the rest a second
+  layer beneath it, in the colours it was drawn in, so the picture looks as it
+  did.
 - **Banner…** opens the editor for the strip across the top of every picture
   this station sends. Out of the box it is the one sdroxide has always drawn: a
   red→black strip with your **callsign** at the top left and `SDRoxide` + the
   version at the top right. All of it is yours to change:
-  - **Top left** and **Top right** are free text, with three placeholders
+  - **Top left** and **Top right** are free text, with placeholders
     substituted when the picture is composed — `{call}` (your callsign, put into
-    capitals), `{grid}` (your locator) and `{version}` (the sdroxide version).
+    capitals), `{grid}` (your locator), `{mode}`, `{date}`, `{time}` (UTC) and
+    `{version}` (the sdroxide version).
     Anything else in braces is printed as you typed it, so a mistyped
     placeholder shows up in the preview instead of quietly printing nothing.
     Leave a field empty to print nothing at that end.
@@ -4162,7 +4200,7 @@ one of the two.
     matters: an SSTV frame is only 320 pixels across and lands on the other
     operator's screen as a small window, and a 16-pixel banner is hard to read
     there.
-  - Untick **Draw the banner** to send the picture and its message with nothing
+  - Untick **Draw the banner** to send the picture and its text with nothing
     over the top, and **Reset** puts the whole thing back to the callsign and
     the version.
 
@@ -4215,7 +4253,7 @@ continuous-phase binary FSK, 4800 baud, ±4 kHz deviation, in a channel about
 25 kHz wide. **The dial is the middle of the signal, not its lower edge.**
 
 The panel is the SSTV panel — the same live picture, the same received gallery,
-the same five transmit slots with their own overlay messages — with a RIFP
+the same five transmit slots with their own text layers — with a RIFP
 control strip in place of the SSTV mode buttons. Pictures you load are shared
 between the two modes.
 
@@ -14631,7 +14669,7 @@ and not the station's.
 | `relay.json` | JSON | The station's external transmit/receive switch ([§6.11](#611-tr-switch-protecting-the-receiver-on-transmit)): which relay board or contact closure, the contact table, the sequencer's lead and hold times, what to do if it stops answering, and the transmit sense input. Belongs to the engine — the relay is bolted to the antenna — so remote and browser clients set up the real one. |
 | `broadcast_stations.json` | JSON | *Your own* broadcast stations and corrections, merged over the downloaded schedule ([§10.6](#106-broadcast-stations-on-longwave-and-shortwave)). Never written by sdroxide, and absent until you create it. |
 | `broadcast/` | CSV | The broadcasting season's schedule as downloaded from eibispace.de, one file per season. Managed by sdroxide: refetched when the season changes, and safe to delete. |
-| `sstv_messages.json` | JSON | The overlay message stored for each of the five SSTV transmit slots. |
+| `sstv_layers.json` | JSON | The text layers stored for each of the five SSTV transmit slots. (`sstv_messages.json`, from earlier versions, is converted into it once and then left alone.) |
 | `voice_names.json` | JSON | The label given to each of the ten voice-keyer slots. |
 | `voice/` | dir | The voice-keyer recordings (`slot1.wav`…`slot10.wav`), 48 kHz mono. Drop your own WAV in to replace a message. |
 | `speech_voices/` | dir | Extra voices for the spoken announcements: a Piper `.onnx` model and its `.onnx.json` config, side by side. Absent until you create it — the shipped voice lives with the program, not here. Note this is *not* `voice/`, which is the voice keyer. |

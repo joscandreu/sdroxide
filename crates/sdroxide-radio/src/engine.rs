@@ -9309,8 +9309,8 @@ impl Engine {
                 }
                 return;
             }
-            ImageSetMessage { slot, message } => {
-                if self.images.set_message(slot as usize, message) {
+            ImageSetLayers { slot, layers } => {
+                if self.images.set_layers(slot as usize, layers) {
                     self.emit_image_presets();
                 }
                 return;

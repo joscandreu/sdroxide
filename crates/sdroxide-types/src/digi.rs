@@ -1377,7 +1377,7 @@ impl CwMacro {
 /// one idea — "how do I want my picture to look" — and because `DigiConfig`
 /// rides the wire whole: one appended field means one protocol bump instead of
 /// six. The defaults reproduce the original look exactly (strip fades to black,
-/// banner text plain, message white on black), so an existing `digi.json` and
+/// banner text plain), so an existing `digi.json` and
 /// an operator who never opens the editor both see no change.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1396,17 +1396,9 @@ pub struct SstvStyle {
     /// strip, left to right.
     pub banner_ink_gradient: bool,
     pub banner_ink2: [u8; 3],
-    /// Override every colour the picture's text would use — the banner's ink
-    /// and its gradient, and the slot message — with a horizontal rainbow.
-    /// Takes precedence over all of them.
+    /// Paint the banner's text as a horizontal rainbow, overriding its ink and
+    /// its gradient. The slot's text layers carry a rainbow of their own.
     pub rainbow_text: bool,
-    /// The colour the slot message is printed in.
-    pub message_ink: [u8; 3],
-    /// Draw the message text with an outline in [`Self::message_outline_ink`].
-    /// On by default, which is what the message has always been: white text
-    /// with a black edge, readable over any picture.
-    pub message_outline: bool,
-    pub message_outline_ink: [u8; 3],
 }
 
 impl Default for SstvStyle {
@@ -1419,9 +1411,6 @@ impl Default for SstvStyle {
             banner_ink_gradient: false,
             banner_ink2: [0, 0, 0],
             rainbow_text: false,
-            message_ink: [255, 255, 255],
-            message_outline: true,
-            message_outline_ink: [0, 0, 0],
         }
     }
 }

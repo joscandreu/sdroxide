@@ -1492,7 +1492,17 @@ use sdroxide_types::{
 /// `Command::SetDigiConfig` and `DigiStatus` whole, so a v169 peer reads the
 /// extra bytes as the start of the next field and fails to decode every
 /// digital status — the same break as v162's appended CW settings.
-pub const PROTO_VERSION: u16 = 170;
+///
+/// v171: SSTV text layers. A transmit slot's one overlay message became a list
+/// of `TextLayer`s — each pinned to one of nine points of the picture, with its
+/// own size, colours, outline and shadow. `ImageSlotInfo::message` is replaced
+/// by `layers`, and `Command::ImageSetMessage` by `ImageSetLayers` in the same
+/// position, so no discriminant moves but the payload at it changes; and
+/// `SstvStyle` lost the three message colours the layers now carry, which
+/// shortens `DigiConfig`. Postcard is not self-describing, so a v170 peer would
+/// read every preset announcement, every digital status and that command from
+/// the wrong offsets.
+pub const PROTO_VERSION: u16 = 171;
 const VERSION_BYTE: u8 = 0x12;
 
 #[derive(Debug, thiserror::Error)]
@@ -2145,7 +2155,12 @@ mod tests {
             ServerMsg::ImagePresets(ImagePresets {
                 slots: vec![
                     ImageSlotInfo {
-                        message: "CQ SSTV de OE1TEST".into(),
+                        layers: sdroxide_types::TextLayer::from_message(
+                            "CQ SSTV\nde OE1TEST",
+                            [255, 255, 255],
+                            Some([0, 0, 0]),
+                            false,
+                        ),
                         width: 1024,
                         height: 768,
                         version: 0xdead_beef,
@@ -2203,7 +2218,14 @@ mod tests {
 
         let cmds = [
             ClientMsg::Command(Command::ImageSetSlot { slot: 2, bytes: vec![0xff, 0xd8, 0xff] }),
-            ClientMsg::Command(Command::ImageSetMessage { slot: 2, message: "73".into() }),
+            ClientMsg::Command(Command::ImageSetLayers {
+                slot: 2,
+                layers: vec![sdroxide_types::TextLayer {
+                    text: "73".into(),
+                    anchor: sdroxide_types::TextAnchor::BottomRight,
+                    ..Default::default()
+                }],
+            }),
             ClientMsg::Command(Command::ImageGetSlot(4)),
             ClientMsg::Command(Command::ImageClearSlot(0)),
             ClientMsg::Command(Command::ImageList { kind: ImageKind::Wefax, offset: 0, count: 48 }),

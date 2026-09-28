@@ -84,10 +84,10 @@ pub const IMAGE_NAME_MAX: usize = 128;
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImageSlotInfo {
-    /// Text composited over this slot's picture. Per slot, not per session:
-    /// switching slots swaps the text, which is what makes the five of them
-    /// presets rather than one picture and one caption.
-    pub message: String,
+    /// The text composited over this slot's picture, bottom layer first. Per
+    /// slot, not per session: switching slots swaps the text, which is what
+    /// makes the five of them presets rather than one picture and one caption.
+    pub layers: Vec<TextLayer>,
     /// Size of the stored source; `(0, 0)` when the slot holds no picture.
     pub width: u16,
     pub height: u16,
@@ -131,6 +131,217 @@ impl Default for ImagePresets {
 impl ImagePresets {
     pub fn slot(&self, i: usize) -> ImageSlotInfo {
         self.slots.get(i).cloned().unwrap_or_default()
+    }
+}
+
+/// Most text layers one slot keeps. Far more than a 320-pixel picture can
+/// carry legibly; the cap is there so a client cannot grow the preset file
+/// without bound.
+pub const IMAGE_LAYERS_MAX: usize = 16;
+
+/// Longest text one layer keeps, in characters.
+pub const IMAGE_LAYER_TEXT_MAX: usize = 512;
+
+/// Where a text layer is pinned: one of nine points of the picture — its
+/// corners, the middles of its edges, and its centre. The part of the picture
+/// below the banner strip, when there is one, so a layer pinned to the top is
+/// never printed over the banner's own text.
+///
+/// Pinned rather than placed at a pixel because the transmitted size changes
+/// with the mode: a caption pinned bottom-right stays bottom-right in Robot 36
+/// and in PD-290, where a pixel position would drift off one edge or the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum TextAnchor {
+    #[default]
+    TopLeft,
+    Top,
+    TopRight,
+    Left,
+    Center,
+    Right,
+    BottomLeft,
+    Bottom,
+    BottomRight,
+}
+
+impl TextAnchor {
+    /// Row by row, top-left first — the order a 3×3 picker lays them out in.
+    pub const ALL: [TextAnchor; 9] = [
+        TextAnchor::TopLeft,
+        TextAnchor::Top,
+        TextAnchor::TopRight,
+        TextAnchor::Left,
+        TextAnchor::Center,
+        TextAnchor::Right,
+        TextAnchor::BottomLeft,
+        TextAnchor::Bottom,
+        TextAnchor::BottomRight,
+    ];
+
+    /// Where the anchor sits along each axis: 0 at the left or top edge, 0.5
+    /// in the middle, 1 at the right or bottom edge. The same fraction places
+    /// the anchor on the picture and on the layer's own box, which is what
+    /// makes a bottom-right layer hang up and left from the corner.
+    pub fn fraction(self) -> (f32, f32) {
+        let i = TextAnchor::ALL.iter().position(|a| *a == self).unwrap_or(0);
+        ((i % 3) as f32 * 0.5, (i / 3) as f32 * 0.5)
+    }
+
+    /// The anchor nearest a point given as fractions of the picture.
+    pub fn nearest(fx: f32, fy: f32) -> TextAnchor {
+        let third = |f: f32| {
+            if f < 1.0 / 3.0 {
+                0
+            } else if f < 2.0 / 3.0 {
+                1
+            } else {
+                2
+            }
+        };
+        TextAnchor::ALL[third(fy) * 3 + third(fx)]
+    }
+
+    /// How lines of a layer line up with one another: flush with whichever
+    /// edge the layer is pinned to, centred when it is pinned to neither.
+    pub fn align(self) -> f32 {
+        self.fraction().0
+    }
+}
+
+/// One piece of text over a transmit picture.
+///
+/// Positions and sizes are fractions of the transmitted picture, not pixels,
+/// for the reason [`TextAnchor`] gives: the same preset is sent at 320×240 and
+/// at 800×616, and has to look the same in both.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TextLayer {
+    /// What is printed. May run over several lines, and may carry the same
+    /// `{call}`-style placeholders as the banner.
+    pub text: String,
+    pub anchor: TextAnchor,
+    /// Offset from the anchor, in percent of the picture's width; positive is
+    /// to the right.
+    pub x: f32,
+    /// Offset from the anchor, in percent of the picture's height; positive is
+    /// down.
+    pub y: f32,
+    /// Type size, in percent of the picture's height. Text wider than the
+    /// picture is shrunk to fit rather than cut off.
+    pub size: f32,
+    pub ink: [u8; 3],
+    /// Draw an edge around the glyphs in [`Self::outline_ink`], so the text
+    /// stays readable over any part of any photograph.
+    pub outline: bool,
+    pub outline_ink: [u8; 3],
+    /// A soft dark shadow below and right of the text.
+    pub shadow: bool,
+    /// Paint the text as a horizontal rainbow instead of [`Self::ink`].
+    pub rainbow: bool,
+    /// Hidden layers stay in the preset but are not drawn.
+    pub visible: bool,
+}
+
+impl Default for TextLayer {
+    /// White with a black edge, which is what the slot message always was:
+    /// readable over anything.
+    fn default() -> Self {
+        TextLayer {
+            text: String::new(),
+            anchor: TextAnchor::TopLeft,
+            x: 2.0,
+            y: 2.0,
+            size: 10.0,
+            ink: [255, 255, 255],
+            outline: true,
+            outline_ink: [0, 0, 0],
+            shadow: false,
+            rainbow: false,
+            visible: true,
+        }
+    }
+}
+
+impl TextLayer {
+    /// Smallest and largest type size accepted, in percent of the height.
+    pub const SIZE_MIN: f32 = 2.0;
+    pub const SIZE_MAX: f32 = 60.0;
+
+    /// Bring a layer from a client, or from disk, into range: a size that
+    /// cannot be drawn, an offset that throws the text a mile off the picture,
+    /// or a paste of a novel.
+    pub fn sanitise(&mut self) {
+        let fix = |v: f32, lo: f32, hi: f32, dflt: f32| {
+            if v.is_finite() { v.clamp(lo, hi) } else { dflt }
+        };
+        self.size = fix(self.size, Self::SIZE_MIN, Self::SIZE_MAX, 10.0);
+        self.x = fix(self.x, -100.0, 100.0, 0.0);
+        self.y = fix(self.y, -100.0, 100.0, 0.0);
+        if let Some((cut, _)) = self.text.char_indices().nth(IMAGE_LAYER_TEXT_MAX) {
+            self.text.truncate(cut);
+        }
+    }
+
+    /// The layers a slot message from before layers existed becomes.
+    ///
+    /// The old overlay printed its first line half as large again as the rest
+    /// — a title — at the top left, starting just below the banner, at a fixed
+    /// 45 and 30 pixels. Those are fractions of the 256-row Martin and Scottie
+    /// picture most stations send, which is the size an existing preset has to
+    /// look unchanged at. One layer for the title and one for the lines below
+    /// it, the second offset by exactly the title's line.
+    pub fn from_message(
+        message: &str,
+        ink: [u8; 3],
+        outline: Option<[u8; 3]>,
+        rainbow: bool,
+    ) -> Vec<TextLayer> {
+        const REF_H: f32 = 256.0;
+        const REF_W: f32 = 320.0;
+        const LINE: f32 = 1.2;
+        // The old overlay put a line's baseline a whole line height (1.2 of
+        // the size) below where the line started. A layer sits its glyphs
+        // snugly in its box instead — half the leading, then the ascent, 0.763
+        // of the size in the bundled ChakraPetch — so its text starts this
+        // much higher, and the converted layer is moved down by the difference.
+        const DROP: f32 = LINE - (0.1 + 992.0 / 1300.0);
+        if message.trim().is_empty() {
+            return Vec::new();
+        }
+        let base = TextLayer {
+            anchor: TextAnchor::TopLeft,
+            x: 6.0 / REF_W * 100.0,
+            y: DROP * 45.0 / REF_H * 100.0,
+            ink,
+            outline: outline.is_some(),
+            outline_ink: outline.unwrap_or([0, 0, 0]),
+            rainbow,
+            ..TextLayer::default()
+        };
+        let title_px = 45.0;
+        let (first, rest) = message.split_once('\n').unwrap_or((message, ""));
+        let mut out = vec![TextLayer {
+            text: first.to_string(),
+            size: title_px / REF_H * 100.0,
+            ..base.clone()
+        }];
+        if !rest.trim().is_empty() {
+            out.push(TextLayer {
+                text: rest.to_string(),
+                size: 30.0 / REF_H * 100.0,
+                y: (title_px * LINE + DROP * 30.0) / REF_H * 100.0,
+                ..base
+            });
+        }
+        out
+    }
+}
+
+/// Bring a slot's layer list from a client or from disk into range.
+pub fn sanitise_layers(layers: &mut Vec<TextLayer>) {
+    layers.truncate(IMAGE_LAYERS_MAX);
+    for l in layers.iter_mut() {
+        l.sanitise();
     }
 }
 
@@ -290,9 +501,58 @@ mod tests {
     fn the_presets_default_to_five_empty_slots() {
         let p = ImagePresets::default();
         assert_eq!(p.slots.len(), IMAGE_SLOTS);
-        assert!(p.slots.iter().all(|s| !s.has_picture() && s.version == 0 && s.message.is_empty()));
+        assert!(p.slots.iter().all(|s| !s.has_picture() && s.version == 0 && s.layers.is_empty()));
         // Asking for a slot that is not there gives an empty one rather than
         // panicking — the panel indexes this from a fixed-size strip.
         assert!(!p.slot(99).has_picture());
+    }
+
+    /// A pre-layer message has to come out looking as it did: a large title
+    /// line and the smaller lines below it, at the top left.
+    #[test]
+    fn an_old_message_becomes_a_title_layer_and_a_body_layer() {
+        let l = TextLayer::from_message(
+            "CQ SSTV\nde OE1TEST\nJN88",
+            [255, 0, 0],
+            Some([0, 0, 0]),
+            false,
+        );
+        assert_eq!(l.len(), 2);
+        assert_eq!(l[0].text, "CQ SSTV");
+        assert_eq!(l[1].text, "de OE1TEST\nJN88");
+        assert!(l[0].size > l[1].size);
+        assert!(l[1].y > l[0].y && l[0].y > 0.0);
+        assert!(l.iter().all(|x| x.anchor == TextAnchor::TopLeft && x.ink == [255, 0, 0]));
+        // One line is one layer, and nothing is none.
+        assert_eq!(TextLayer::from_message("73", [255; 3], None, false).len(), 1);
+        assert!(TextLayer::from_message("  \n ", [255; 3], None, false).is_empty());
+    }
+
+    #[test]
+    fn anchors_round_trip_through_their_grid_position() {
+        for a in TextAnchor::ALL {
+            let (fx, fy) = a.fraction();
+            assert_eq!(TextAnchor::nearest(fx, fy), a);
+        }
+        assert_eq!(TextAnchor::nearest(0.9, 0.95), TextAnchor::BottomRight);
+        assert_eq!(TextAnchor::nearest(0.5, 0.1), TextAnchor::Top);
+    }
+
+    #[test]
+    fn a_layer_from_outside_is_brought_into_range() {
+        let mut v = vec![
+            TextLayer {
+                size: f32::NAN,
+                x: 1e9,
+                text: "x".repeat(2000),
+                ..TextLayer::default()
+            };
+            40
+        ];
+        sanitise_layers(&mut v);
+        assert_eq!(v.len(), IMAGE_LAYERS_MAX);
+        assert_eq!(v[0].size, 10.0);
+        assert_eq!(v[0].x, 100.0);
+        assert_eq!(v[0].text.chars().count(), IMAGE_LAYER_TEXT_MAX);
     }
 }
