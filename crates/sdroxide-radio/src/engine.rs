@@ -2552,6 +2552,12 @@ struct Engine {
     /// of it off this thread, because this loop is the audio loop and decoding
     /// a two-megapixel chart in it drops a block. Drained by `poll_images`.
     gallery: crate::image_store::GalleryWorker,
+    /// The last FSK ID count seen in the SSTV status, so each new
+    /// identification is acted on once.
+    sstv_id_seq: u32,
+    /// The SSTV picture most recently received, and when — the one an FSK ID
+    /// arriving just after it belongs to.
+    last_sstv_pic: Option<(String, std::time::Instant)>,
     /// True while the voice keyer owns the transmitter. Set from the moment it
     /// keys up until the over has fully ended — including a digital-voice tail
     /// after the message itself has played out, so the live microphone can
@@ -4066,7 +4072,13 @@ fn engine_thread(
         hop_suspended: false,
         voice: VoiceKeyer::load(),
         images: crate::image_store::ImagePresetStore::load(),
-        gallery: crate::image_store::GalleryWorker::new(),
+        gallery: {
+            let g = crate::image_store::GalleryWorker::new();
+            g.load_senders();
+            g
+        },
+        sstv_id_seq: 0,
+        last_sstv_pic: None,
         voice_tx: false,
         voice_rec_buf: Vec::new(),
         voice_prev_q: Vec::new(),
@@ -6542,6 +6554,7 @@ impl Engine {
                         // immediately; the gallery entry follows from the
                         // worker, carrying the name it was filed under.
                         if let Some(name) = save_sstv_rx(&png) {
+                            self.last_sstv_pic = Some((name.clone(), std::time::Instant::now()));
                             self.gallery.entry(ImageKind::Sstv, name, None);
                         }
                         let _ =
@@ -6549,6 +6562,12 @@ impl Engine {
                     }
                 }
                 DigiAction::SstvStatus(s) => {
+                    if s.rx_id_seq != self.sstv_id_seq {
+                        self.sstv_id_seq = s.rx_id_seq;
+                        if let Some(id) = s.rx_id.clone() {
+                            self.on_sstv_id(id);
+                        }
+                    }
                     let _ = self.event_tx.send(RadioEvent::SstvStatus(s));
                 }
                 DigiAction::WefaxLine { image_id, y, gray } => {
@@ -6580,6 +6599,9 @@ impl Engine {
                         // is the only chance the gallery has to record who sent
                         // the picture and how it was carried.
                         if let Some(name) = save_sstv_rx(&png) {
+                            if let Some(from) = meta.sender.as_deref() {
+                                self.gallery.note_sender(&name, from);
+                            }
                             self.gallery.entry(ImageKind::Sstv, name, Some(meta.clone()));
                         }
                         let _ = self.event_tx.send(RadioEvent::RifpImage { image_id, meta, png });
@@ -9309,6 +9331,12 @@ impl Engine {
                 }
                 return;
             }
+            ImageSetQso(qso) => {
+                if self.images.set_qso(qso) {
+                    self.emit_image_presets();
+                }
+                return;
+            }
             ImageSetLayers { slot, layers } => {
                 if self.images.set_layers(slot as usize, layers) {
                     self.emit_image_presets();
@@ -11785,6 +11813,24 @@ impl Engine {
     fn emit_digi_status(&self) {
         if let Some(d) = self.digi.as_ref() {
             let _ = self.event_tx.send(RadioEvent::Ft8Status(d.status()));
+        }
+    }
+
+    /// A station identified itself in an FSK ID. It fills the QSO box — or is
+    /// offered there, when the operator has typed in the contact (see
+    /// [`SstvQso::offer_id`](sdroxide_types::SstvQso::offer_id)) — and it is
+    /// who sent the picture that has just finished, if one has.
+    fn on_sstv_id(&mut self, call: String) {
+        let mut qso = self.images.qso().clone();
+        if qso.offer_id(&call, sdroxide_types::CallSource::FskId) && self.images.set_qso(qso) {
+            self.emit_image_presets();
+        }
+        // The ID follows its picture by a second or two; half a minute is far
+        // more than that, and far less than the next picture takes.
+        if let Some((name, at)) = self.last_sstv_pic.take() {
+            if at.elapsed() < std::time::Duration::from_secs(30) {
+                self.gallery.record_sender(ImageKind::Sstv, name, call);
+            }
         }
     }
 

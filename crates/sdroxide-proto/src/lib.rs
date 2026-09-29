@@ -1502,7 +1502,20 @@ use sdroxide_types::{
 /// shortens `DigiConfig`. Postcard is not self-describing, so a v170 peer would
 /// read every preset announcement, every digital status and that command from
 /// the wrong offsets.
-pub const PROTO_VERSION: u16 = 171;
+///
+/// v172: the SSTV contact in progress. `ImagePresets` gained `qso` (an
+/// `SstvQso`: the other station's call and where it came from, the reports
+/// both ways, a name and a note) on its tail, so the fields the transmit
+/// pictures print reach every screen with the presets they are printed on; and
+/// `Command::ImageSetQso` is appended. The contact also says whether the
+/// operator has typed in it and whether it has been logged, and holds a newer
+/// ID heard meanwhile — what decides if the next FSK ID replaces it or is only
+/// offered. `ImageEntry` gained `sender` (who sent a received picture, from
+/// the FSK ID after it or its RIFP manifest) and `SstvStatus` gained
+/// `rx_id_seq` (a count of IDs decoded, so the same call heard again still
+/// registers). A v171 peer would read the tails of all three as the start of
+/// the next message.
+pub const PROTO_VERSION: u16 = 172;
 const VERSION_BYTE: u8 = 0x12;
 
 #[derive(Debug, thiserror::Error)]
@@ -2168,6 +2181,7 @@ mod tests {
                     },
                     ImageSlotInfo::default(),
                 ],
+                qso: sdroxide_types::SstvQso { call: "EA3XYZ".into(), ..Default::default() },
             }),
             ServerMsg::ImageSlotSource {
                 slot: 3,
@@ -2187,6 +2201,7 @@ mod tests {
                     bytes: 1_234_567,
                     thumb: vec![0x89, 0x50, 0x4e, 0x47],
                     rifp: None,
+                    sender: Some("EA3XYZ".into()),
                 }],
                 dir: "/home/op/Pictures/sdroxide/wefax".into(),
             }),
@@ -2204,6 +2219,7 @@ mod tests {
                 bytes: 40_000,
                 thumb: vec![0x89, 0x50],
                 rifp: None,
+                sender: None,
             }),
             ServerMsg::ImageDeleted {
                 kind: ImageKind::Wefax,
@@ -2227,6 +2243,12 @@ mod tests {
                 }],
             }),
             ClientMsg::Command(Command::ImageGetSlot(4)),
+            ClientMsg::Command(Command::ImageSetQso(sdroxide_types::SstvQso {
+                call: "EA3XYZ".into(),
+                call_from: sdroxide_types::CallSource::FskId,
+                rsv_rcvd: "575".into(),
+                ..Default::default()
+            })),
             ClientMsg::Command(Command::ImageClearSlot(0)),
             ClientMsg::Command(Command::ImageList { kind: ImageKind::Wefax, offset: 0, count: 48 }),
             ClientMsg::Command(Command::ImageGet {

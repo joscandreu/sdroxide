@@ -141,6 +141,21 @@ pub(in crate::app) struct SstvUi {
     /// Whether the layer's text box had the cursor last frame — with a drag,
     /// what keeps the slot in hand.
     pub(in crate::app) text_focus: bool,
+    /// The SSTV contact while this screen is editing it — the same
+    /// hold-while-typing arrangement as the layers, for the QSO box.
+    pub(in crate::app) qso_edit: Option<crate::sstv::Held<sdroxide_types::SstvQso>>,
+    /// Whether a QSO box field had the cursor last frame.
+    pub(in crate::app) qso_focus: bool,
+    /// The call the QSO box last asked a callsign lookup about, so each call is
+    /// looked up once rather than once a frame.
+    pub(in crate::app) looked_up: String,
+    /// The panel's clock (egui time) as of this frame, for the edits made from
+    /// outside it — a lookup answering, a log entry saved — which have to be
+    /// stamped on the same clock the held values are timed on.
+    pub(in crate::app) now: f64,
+    /// The slot whose "Remove image" has been pressed once, and when — armed
+    /// for a few seconds, waiting for the confirming second press.
+    pub(in crate::app) confirm_remove: Option<(usize, f64)>,
     /// Put the cursor in the text box next frame: a layer was just added.
     pub(in crate::app) focus_text: bool,
     /// Where each layer landed in the last composed preview, for hit-testing a
@@ -231,6 +246,11 @@ impl Default for SstvUi {
             sel_layer: 0,
             drag: None,
             text_focus: false,
+            qso_edit: None,
+            qso_focus: false,
+            confirm_remove: None,
+            looked_up: String::new(),
+            now: 0.0,
             focus_text: false,
             boxes: Vec::new(),
             preview_rect: egui::Rect::NOTHING,
@@ -402,6 +422,14 @@ impl SstvUi {
     /// gallery, taking the full-size texture the panel already holds from the
     /// picture that has this moment finished arriving.
     pub(in crate::app) fn on_saved(&mut self, entry: ImageEntry, ctx: &egui::Context) {
+        // A picture already listed, announced again because who sent it has
+        // just become known. Whichever of the two announcements lands second,
+        // a sender once known is kept.
+        if let Some(r) = self.received.iter_mut().find(|r| r.entry.name == entry.name) {
+            let sender = entry.sender.clone().or_else(|| r.entry.sender.take());
+            r.entry = ImageEntry { sender, ..entry };
+            return;
+        }
         let fresh = self.fresh.take();
         if let Some((_, png)) = &fresh {
             self.full_png = Some((entry.name.clone(), png.clone()));
@@ -497,6 +525,58 @@ impl SstvUi {
         self.received.truncate(GALLERY_MAX);
     }
 
+    /// A callsign lookup answered: fill the QSO box's blank name and QTH, if
+    /// it is about the call in the box. See [`SdroxideApp::sstv_apply_lookup`].
+    pub(in crate::app) fn apply_lookup(&mut self, info: &sdroxide_types::CallsignInfo) {
+        let q = self.qso();
+        if !q.call.trim().eq_ignore_ascii_case(info.call.trim()) {
+            return;
+        }
+        let name = info.name.clone().filter(|_| q.name.trim().is_empty());
+        let qth = info.qth.clone().filter(|_| q.qth.trim().is_empty());
+        if name.is_none() && qth.is_none() {
+            return;
+        }
+        let q = crate::sstv::held_edit(&mut self.qso_edit, &self.presets.qso, self.now);
+        if let Some(n) = name {
+            q.name = n;
+        }
+        if let Some(t) = qth {
+            q.qth = t;
+        }
+        self.preview_dirty = true;
+    }
+
+    /// A log entry for `call` was saved: if that is the contact in progress,
+    /// it is finished.
+    pub(in crate::app) fn mark_logged(&mut self, call: &str) {
+        let q = self.qso();
+        if q.logged || q.call.trim().is_empty() || !q.call.trim().eq_ignore_ascii_case(call.trim())
+        {
+            return;
+        }
+        crate::sstv::held_edit(&mut self.qso_edit, &self.presets.qso, self.now).logged = true;
+    }
+
+    /// The contact in progress, as this screen shows it.
+    pub(in crate::app) fn qso(&self) -> &sdroxide_types::SstvQso {
+        crate::sstv::held_shown(&self.qso_edit, &self.presets.qso)
+    }
+
+    /// The placeholders the selected slot's visible text uses that would
+    /// print nothing.
+    pub(in crate::app) fn empty_placeholders(&self) -> Vec<&'static str> {
+        let mut out = Vec::new();
+        for l in self.current_layers().iter().filter(|l| l.visible) {
+            for p in crate::sstv::empty_used(&l.text, &self.fields) {
+                if !out.contains(&p) {
+                    out.push(p);
+                }
+            }
+        }
+        out
+    }
+
     /// The text layers of the slot currently being edited.
     pub(in crate::app) fn current_layers(&self) -> &[TextLayer] {
         crate::sstv::layers_shown(&self.edit, &self.presets, self.selected_slot)
@@ -516,6 +596,11 @@ impl SstvUi {
     /// The per-frame half of editing: send a layer edit the operator has
     /// paused on, and hand the slot back to the engine once it agrees.
     pub(in crate::app) fn sync_edit(&mut self, now: f64, cmds: &mut Vec<Command>) {
+        if let Some(q) =
+            crate::sstv::held_tick(&mut self.qso_edit, &self.presets.qso, now, self.qso_focus)
+        {
+            cmds.push(Command::ImageSetQso(q));
+        }
         let busy = self.drag.is_some() || self.text_focus;
         let held = self.edit.is_some();
         cmds.extend(crate::sstv::tick(&mut self.edit, &self.presets, now, busy));
@@ -1088,6 +1173,29 @@ impl SstvUi {
     }
 }
 
+/// A new log entry for an SSTV contact: mode `SSTV` (ADIF has no sub-modes
+/// for it), the picture mode and the note as the comment.
+fn sstv_log_form(
+    q: &sdroxide_types::SstvQso,
+    freq_hz: f64,
+    picture_mode: &str,
+    now: i64,
+) -> crate::app::logbook::LogEditForm {
+    let mut form = crate::app::logbook::LogEditForm::new_entry(now, freq_hz, "SSTV");
+    form.call = q.call.trim().to_uppercase();
+    form.rst_sent = q.rsv_sent.trim().to_string();
+    form.rst_rcvd = q.rsv_rcvd.trim().to_string();
+    form.name = q.name.trim().to_string();
+    form.qth = q.qth.trim().to_string();
+    form.comment = [picture_mode, q.note.trim()]
+        .iter()
+        .filter(|t| !t.is_empty())
+        .copied()
+        .collect::<Vec<_>>()
+        .join(" · ");
+    form
+}
+
 /// A 3×3 grid of small squares, one per anchor, the layer's own lit.
 fn anchor_picker(ui: &mut egui::Ui, layer: &mut TextLayer) {
     let cell = 9.0;
@@ -1220,7 +1328,8 @@ impl SdroxideApp {
             &self.digi_cfg_edit.my_grid,
             if rifp { "RIFP" } else { self.sstv.tx_mode.label() },
             crate::time::now_unix(),
-        );
+        )
+        .with_qso(self.sstv.qso());
         if self.sstv.fields != fields {
             self.sstv.fields = fields;
             self.sstv.preview_dirty = true;
@@ -1233,7 +1342,9 @@ impl SdroxideApp {
             self.sstv.preview_dirty = true;
         }
         let now = ctx.input(|i| i.time);
+        self.sstv.now = now;
         self.sstv.sync_edit(now, cmds);
+        self.sstv_lookup_call();
         // The transmitted size: SSTV's line format fixes it, RIFP leaves it to
         // the operator. Changing it invalidates the composed preview.
         let dims = if rifp {
@@ -1293,6 +1404,8 @@ impl SdroxideApp {
             // not by index: the answer comes back asynchronously and the list
             // may have grown a picture at the front by then.
             let mut delete: Option<String> = None;
+            // "Reply to …" was picked on a received picture.
+            let mut reply: Option<String> = None;
 
             // ── LEFT: boxed controls, then LIVE + RECEIVED ──
             if pane.is_none_or(|p| p == 0) {
@@ -1610,9 +1723,15 @@ impl SdroxideApp {
                                                         .corner_radius(2.0)
                                                         .sense(egui::Sense::click()),
                                                 )
-                                                .on_hover_text(
-                                                    "Click to enlarge · right-click to delete",
-                                                );
+                                                .on_hover_text(match &r.entry.sender {
+                                                    Some(c) => format!(
+                                                        "From {c} · click to enlarge · \
+                                                         right-click to reply or delete"
+                                                    ),
+                                                    None => "Click to enlarge · right-click to \
+                                                             delete"
+                                                        .to_string(),
+                                                });
                                             if resp.clicked() {
                                                 enlarge = Some(i);
                                             }
@@ -1628,6 +1747,20 @@ impl SdroxideApp {
                                                         .size(10.0)
                                                         .weak(),
                                                 );
+                                                if let Some(c) = &r.entry.sender {
+                                                    if ui
+                                                        .button(format!("Reply to {c}"))
+                                                        .on_hover_text(
+                                                            "Start a contact with this station: \
+                                                             its call goes in the QSO box, and \
+                                                             the rest of the box is emptied",
+                                                        )
+                                                        .clicked()
+                                                    {
+                                                        reply = Some(c.clone());
+                                                        ui.close();
+                                                    }
+                                                }
                                                 if ui.button("Delete this picture").clicked() {
                                                     delete = Some(r.entry.name.clone());
                                                     ui.close();
@@ -1778,12 +1911,34 @@ impl SdroxideApp {
                                 self.sstv.pick_target = Some(sel);
                                 pick_image(self.sstv.inbox.clone());
                             }
-                            if has_img
-                                && crate::chrome::chip(ui, false, "Clear")
-                                    .on_hover_text("Empty this slot's picture (the text stays)")
-                                    .clicked()
-                            {
-                                cmds.push(Command::ImageClearSlot(sel as u8));
+                            // Two presses, like deleting from the gallery: the
+                            // stored picture goes for good, and a lone "Clear"
+                            // here read as clearing whatever was nearest — the
+                            // QSO box below, say. Armed per slot and only for a
+                            // few seconds, so it cannot go off long after.
+                            if has_img {
+                                let armed = self
+                                    .sstv
+                                    .confirm_remove
+                                    .is_some_and(|(s, t)| s == sel && now - t < 4.0);
+                                let (text, hint) = if armed {
+                                    ("Really remove?", "Click again to delete this slot's picture")
+                                } else {
+                                    (
+                                        "Remove image",
+                                        "Delete this slot's picture. Its text layers stay, and \
+                                         come back over the next picture you load.",
+                                    )
+                                };
+                                if crate::chrome::chip(ui, armed, text).on_hover_text(hint).clicked()
+                                {
+                                    if armed {
+                                        self.sstv.confirm_remove = None;
+                                        cmds.push(Command::ImageClearSlot(sel as u8));
+                                    } else {
+                                        self.sstv.confirm_remove = Some((sel, now));
+                                    }
+                                }
                             }
                             // The banner belongs to the station, not to the slot:
                             // one editor, reached from whichever slot is in front.
@@ -1800,6 +1955,11 @@ impl SdroxideApp {
                         if let Some(err) = &self.sstv.pick_error {
                             ui.label(RichText::new(err).size(10.0).color(crate::theme::YELLOW()));
                         }
+                        ui.add_space(4.0);
+
+                        // Who the contact is with: what `{tocall}` and friends
+                        // print, and what a log entry is filled from.
+                        self.sstv_qso_strip(ui, now, cmds);
                         ui.add_space(6.0);
 
                         // Preview gets a capped share of the height; the text box
@@ -1829,8 +1989,26 @@ impl SdroxideApp {
                         // The slot's text layers: which one, how it looks, and
                         // what it says — the text box filling the height above
                         // the buttons.
-                        self.sstv.layer_editor(ui, inner_w, btn_h + gap, dims, now, cmds);
+                        // A picture about to go out with a hole in it: a
+                        // `{tocall}` with no call in the QSO box.
+                        let empty = self.sstv.empty_placeholders();
+                        let warn_h = if empty.is_empty() { 0.0 } else { 18.0 };
+                        self.sstv.layer_editor(ui, inner_w, btn_h + gap + warn_h, dims, now, cmds);
                         ui.add_space(gap);
+                        if !empty.is_empty() {
+                            ui.label(
+                                RichText::new(format!(
+                                    "⚠ {} empty — fill it in the QSO box",
+                                    empty.join(", ")
+                                ))
+                                .size(10.5)
+                                .color(crate::theme::YELLOW()),
+                            )
+                            .on_hover_text(
+                                "The picture's text uses a placeholder with nothing to print. It \
+                                 will be sent with a gap where it goes.",
+                            );
+                        }
 
                         // Large cut-corner TX / ABORT buttons.
                         ui.horizontal(|ui| {
@@ -1871,6 +2049,14 @@ impl SdroxideApp {
                                     &self.sstv.presets,
                                     now,
                                 ));
+                                cmds.extend(
+                                    crate::sstv::held_send_now(
+                                        &mut self.sstv.qso_edit,
+                                        &self.sstv.presets.qso,
+                                        now,
+                                    )
+                                    .map(Command::ImageSetQso),
+                                );
                                 if let Some(png) = png {
                                     cmds.push(if rifp {
                                         Command::RifpTx { png }
@@ -1914,6 +2100,18 @@ impl SdroxideApp {
             // vanished from a delete that then failed would be a lie.
             if let Some(name) = delete {
                 cmds.push(Command::ImageDelete { kind: ImageKind::Sstv, name });
+            }
+            // Chosen by the operator, so theirs: a new contact, touched, that
+            // the next station's ID will not take away.
+            if let Some(call) = reply {
+                *crate::sstv::held_edit(&mut self.sstv.qso_edit, &self.sstv.presets.qso, now) =
+                    sdroxide_types::SstvQso {
+                        call,
+                        call_from: sdroxide_types::CallSource::FskId,
+                        touched: true,
+                        ..Default::default()
+                    };
+                self.sstv.preview_dirty = true;
             }
         });
 
@@ -2070,8 +2268,206 @@ impl SdroxideApp {
         }
     }
 
+    /// Look up the QSO box's call, once per call, when it has stopped being
+    /// typed — a lookup per keystroke would ask about "E", "EA" and "EA3" on
+    /// the way to the call. A call already looked up this session is answered
+    /// from the cache without asking again.
+    fn sstv_lookup_call(&mut self) {
+        if self.sstv.qso_focus {
+            return;
+        }
+        let call = self.sstv.qso().call.trim().to_uppercase();
+        if call == self.sstv.looked_up {
+            return;
+        }
+        self.sstv.looked_up = call.clone();
+        if call.len() < 3 {
+            return;
+        }
+        match self.callsign_cache.get(&call).cloned() {
+            Some(info) => self.sstv_apply_lookup(&info),
+            None => {
+                self.queue_lookup(call);
+            }
+        }
+    }
+
+    /// A callsign lookup answered: fill the QSO box's blank name and QTH, if
+    /// it is about the call in the box. Filled by the program, so the contact
+    /// stays untouched — the next station's ID may still replace it — and an
+    /// answer about a call the box has since moved on from is ignored.
+    pub(in crate::app) fn sstv_apply_lookup(&mut self, info: &sdroxide_types::CallsignInfo) {
+        self.sstv.apply_lookup(info);
+    }
+
+    /// A log entry was saved: if it is the SSTV contact in progress, that
+    /// contact is finished, and the next station's ID may start a new one.
+    pub(in crate::app) fn sstv_mark_logged(&mut self, call: &str) {
+        self.sstv.mark_logged(call);
+    }
+
+    /// The QSO box: the other station's call, the reports both ways, their
+    /// name and a note — what the pictures' `{tocall}`, `{rsv}`, `{rsvr}`,
+    /// `{name}` and `{note}` print — and the two things done with a contact:
+    /// log it, and clear it for the next.
+    fn sstv_qso_strip(&mut self, ui: &mut egui::Ui, now: f64, cmds: &mut Vec<Command>) {
+        use sdroxide_types::CallSource;
+        let shown = self.sstv.qso().clone();
+        let mut cur = shown.clone();
+        let mut focus = false;
+        let mut log = false;
+        let mut cleared = false;
+        // Framed, and titled, so it reads as its own thing and not as more of
+        // the slot's picture controls on the row above it.
+        egui::Frame::new()
+            .stroke(egui::Stroke::new(1.0, crate::theme::gray(45)))
+            .corner_radius(3.0)
+            .inner_margin(egui::Margin::symmetric(6, 4))
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(5.0, 4.0);
+                    let title = RichText::new("QSO").size(10.0).strong();
+                    ui.label(title.color(crate::theme::CYAN_DIM())).on_hover_text(
+                        "The contact in progress. The pictures' text can print it, and Log… \
+                         fills a log entry from it.",
+                    );
+                    let field = |ui: &mut egui::Ui, text: &mut String, w: f32, hint: &str| {
+                        crate::chrome::field(
+                            ui,
+                            egui::TextEdit::singleline(text).desired_width(w).hint_text(hint),
+                        )
+                    };
+                    let label =
+                        |ui: &mut egui::Ui, t: &str| ui.label(RichText::new(t).size(10.0).weak());
+
+                    label(ui, "To").on_hover_text("The station this contact is with — {tocall}");
+                    let r = field(ui, &mut cur.call, 78.0, "call");
+                    focus |= r.has_focus();
+                    if r.changed() {
+                        cur.call_from = CallSource::Typed;
+                    }
+                    if cur.call_from != CallSource::Typed {
+                        let what = if cur.call_from == CallSource::FskId { "FSK" } else { "CW" };
+                        ui.label(RichText::new(what).size(9.5).color(crate::theme::CYAN_DIM()))
+                            .on_hover_text(
+                                "Filled in from the ID this station sent after its picture",
+                            );
+                    }
+                    // Another station identified while this contact was the
+                    // operator's: theirs to take, not the program's to swap in.
+                    if let Some(o) = cur.offered.clone() {
+                        let offer = RichText::new(format!("← ID {o}")).size(10.5);
+                        if crate::chrome::chip(ui, false, offer)
+                            .on_hover_text(format!(
+                                "{o} sent an FSK ID. The contact is yours (you typed in it), so \
+                                 it was left alone — click to make {o} the call"
+                            ))
+                            .clicked()
+                        {
+                            cur.call = o;
+                            cur.call_from = CallSource::FskId;
+                            cur.offered = None;
+                        }
+                        if crate::chrome::chip(ui, false, RichText::new("×").size(10.5))
+                            .on_hover_text("Ignore this ID")
+                            .clicked()
+                        {
+                            cur.offered = None;
+                        }
+                    }
+
+                    label(ui, "RSV").on_hover_text(
+                        "The report you send them — {rsv}. Readability 1–5, strength 1–9, \
+                         video 1–5.",
+                    );
+                    focus |= field(ui, &mut cur.rsv_sent, 30.0, "595").has_focus();
+                    ui.menu_button(RichText::new("▾").size(10.0), |ui| {
+                        for v in sdroxide_types::SstvQso::RSV_PRESETS {
+                            if ui.button(v).clicked() {
+                                cur.rsv_sent = v.to_string();
+                                ui.close();
+                            }
+                        }
+                    });
+                    label(ui, "rcvd").on_hover_text("The report they sent you — {rsvr}");
+                    focus |= field(ui, &mut cur.rsv_rcvd, 30.0, "").has_focus();
+
+                    label(ui, "Name").on_hover_text("Their name — {name}");
+                    focus |= field(ui, &mut cur.name, 70.0, "").has_focus();
+                    label(ui, "QTH").on_hover_text("Where they are — {qth}");
+                    focus |= field(ui, &mut cur.qth, 80.0, "").has_focus();
+                    label(ui, "Note").on_hover_text("Anything else to print or log — {note}");
+                    focus |= field(ui, &mut cur.note, 90.0, "").has_focus();
+
+                    if cur.logged {
+                        ui.label(RichText::new("✓ logged").size(10.0).color(crate::theme::GREEN()))
+                            .on_hover_text(
+                                "This contact is in the log. The next station's ID starts a new \
+                                 one",
+                            );
+                    }
+                    if crate::chrome::chip(ui, false, "Log…")
+                        .on_hover_text(
+                            "Open a log entry filled in from this contact, to check and save",
+                        )
+                        .clicked()
+                    {
+                        log = true;
+                    }
+                    if crate::chrome::chip(ui, false, "Clear QSO")
+                        .on_hover_text(
+                            "Empty these fields for the next contact (the report sent goes back \
+                             to 595). The slots' pictures and text are not touched.",
+                        )
+                        .clicked()
+                    {
+                        cur = sdroxide_types::SstvQso::default();
+                        cleared = true;
+                    }
+                });
+            });
+        self.sstv.qso_focus = focus;
+        // Everything that changes the box from here is the operator's doing,
+        // so the contact becomes theirs: an ID on the air is only offered now.
+        // Clearing is the exception — it hands the box back to the program.
+        if cur != shown && !cleared {
+            cur.touched = true;
+            cur.logged = false;
+        }
+        if cur != shown {
+            *crate::sstv::held_edit(&mut self.sstv.qso_edit, &self.sstv.presets.qso, now) = cur;
+            self.sstv.preview_dirty = true;
+        }
+        if log {
+            // Stored now, so every screen agrees with what was logged.
+            cmds.extend(
+                crate::sstv::held_send_now(&mut self.sstv.qso_edit, &self.sstv.presets.qso, now)
+                    .map(Command::ImageSetQso),
+            );
+            self.log_sstv_qso();
+        }
+    }
+
+    /// Open a log entry filled in from the SSTV contact in progress: the call,
+    /// both reports, the name, and the picture mode and note as the comment.
+    /// Opened for checking rather than saved outright — a call read off an ID
+    /// is worth a look before it goes in the log for good.
+    fn log_sstv_qso(&mut self) {
+        let mode = if self.state.rx[0].mode.is_rifp() { "RIFP" } else { self.sstv.tx_mode.label() };
+        let form =
+            sstv_log_form(self.sstv.qso(), self.on_air_freq_hz(), mode, crate::time::now_unix());
+        let call = form.call.clone();
+        self.log_edit = Some(form);
+        self.show_logbook = true;
+        if !call.is_empty() {
+            self.queue_lookup(call);
+        }
+    }
+
     /// The editor for the banner drawn across the top of every transmitted
     /// picture: the two texts, the two colours, and how tall the strip is.
+    ///
+    /// (The QSO box is [`Self::sstv_qso_strip`], just below.)
     ///
     /// A window rather than another row in the transmit column, because this is
     /// set once for the station and then left alone, and the column it would
@@ -2660,6 +3056,11 @@ mod tests {
             // channel.
             self.frames += 1;
             for c in &cmds {
+                if let Command::ImageSetQso(q) = c {
+                    let mut p = self.echoes.last().map_or(self.ui.presets.clone(), |e| e.1.clone());
+                    p.qso = q.clone();
+                    self.echoes.push((self.frames + 4, p));
+                }
                 if let Command::ImageSetLayers { slot, layers } = c {
                     let mut p = self.echoes.last().map_or(self.ui.presets.clone(), |e| e.1.clone());
                     p.slots[*slot as usize].layers = layers.clone();
@@ -2846,6 +3247,117 @@ mod tests {
         rig.key(egui::Key::ArrowRight, false);
         rig.idle(2);
         assert!((rig.ui.boxes[0].unwrap().x0 - b0.x0 - 1.0).abs() < 0.01);
+    }
+
+    /// The log entry carries the contact as typed, tidied: the call in
+    /// capitals, the reports as the log parses them.
+    #[test]
+    fn a_contact_fills_a_log_entry() {
+        let q = sdroxide_types::SstvQso {
+            call: " ea3xyz".into(),
+            rsv_rcvd: "575".into(),
+            name: "Ana".into(),
+            note: "nice pic".into(),
+            ..Default::default()
+        };
+        let f = sstv_log_form(&q, 14_230_000.0, "Scottie 1", 0);
+        assert_eq!(f.call, "EA3XYZ");
+        assert_eq!((f.rst_sent.as_str(), f.rst_rcvd.as_str()), ("595", "575"));
+        assert_eq!(f.mode, "SSTV");
+        assert_eq!(f.name, "Ana");
+        assert_eq!(f.comment, "Scottie 1 · nice pic");
+        assert_eq!(f.freq_mhz, "14.2300");
+    }
+
+    /// A slot whose text asks for the other station's call, with no call in
+    /// the QSO box, is flagged; filling the box clears the flag and the call
+    /// is drawn.
+    #[test]
+    fn an_empty_tocall_is_flagged_until_the_box_is_filled() {
+        let l = TextLayer { text: "{call} de {tocall} {rsv}".into(), ..TextLayer::default() };
+        let mut rig = Rig::new(vec![l]);
+        rig.ui.fields =
+            crate::sstv::Fields::new("ea3abc", "", "Martin 1", 0).with_qso(rig.ui.qso());
+        assert_eq!(rig.ui.empty_placeholders(), vec!["{tocall}"]);
+        let w0 = rig.ui.boxes[0].map(|b| b.x1 - b.x0).unwrap();
+        *crate::sstv::held_edit(&mut rig.ui.qso_edit, &rig.ui.presets.qso, rig.t) =
+            sdroxide_types::SstvQso { call: "ea3xyz".into(), ..Default::default() };
+        rig.ui.fields = rig.ui.fields.clone().with_qso(rig.ui.qso());
+        rig.ui.preview_dirty = true;
+        rig.idle(30);
+        assert!(rig.ui.empty_placeholders().is_empty());
+        let w1 = rig.ui.boxes[0].map(|b| b.x1 - b.x0).unwrap();
+        assert!(w1 > w0, "the call now takes room: {w0} -> {w1}");
+        // And the contact went to the engine.
+        assert!(
+            rig.sent.iter().any(|c| matches!(c, Command::ImageSetQso(q) if q.call == "ea3xyz"))
+        );
+    }
+
+    fn lookup(call: &str, name: &str, qth: &str) -> sdroxide_types::CallsignInfo {
+        sdroxide_types::CallsignInfo {
+            call: call.into(),
+            name: Some(name.into()),
+            qth: Some(qth.into()),
+            ..Default::default()
+        }
+    }
+
+    /// A lookup fills the blanks of the contact it is about, and leaves the
+    /// contact untouched — still the program's, still replaceable by an ID.
+    #[test]
+    fn a_lookup_fills_the_blanks_of_its_own_contact_only() {
+        let mut rig = Rig::new(first());
+        rig.ui.presets.qso = sdroxide_types::SstvQso {
+            call: "EA3XYZ".into(),
+            qth: "Barcelona".into(),
+            ..Default::default()
+        };
+        rig.ui.apply_lookup(&lookup("ea1abc", "Bob", "Madrid"));
+        assert!(rig.ui.qso().name.is_empty(), "about another call");
+        rig.ui.apply_lookup(&lookup("ea3xyz", "Ana", "Girona"));
+        assert_eq!(rig.ui.qso().name, "Ana");
+        assert_eq!(rig.ui.qso().qth, "Barcelona", "not a blank");
+        assert!(!rig.ui.qso().touched);
+        rig.idle(30);
+        assert!(rig.sent.iter().any(|c| matches!(c, Command::ImageSetQso(q) if q.name == "Ana")));
+    }
+
+    /// Saving the log entry of the contact in progress finishes it.
+    #[test]
+    fn logging_the_contact_marks_it_logged() {
+        let mut rig = Rig::new(first());
+        rig.ui.presets.qso =
+            sdroxide_types::SstvQso { call: "EA3XYZ".into(), touched: true, ..Default::default() };
+        rig.ui.mark_logged("EA1ABC");
+        assert!(!rig.ui.qso().logged, "another call");
+        rig.ui.mark_logged("ea3xyz");
+        assert!(rig.ui.qso().logged);
+        assert!(!rig.ui.qso().locked(), "the next ID may replace it");
+    }
+
+    /// A picture announced again with its sender updates the entry in place,
+    /// and a sender once known survives the announcement without one landing
+    /// after it.
+    #[test]
+    fn a_pictures_sender_arrives_after_the_picture() {
+        let rig = Rig::new(first());
+        let mut ui = rig.ui;
+        let ctx = rig.ctx;
+        let thumb = crate::sstv::encode_png(&[9; 12], 2, 2).unwrap();
+        let entry = |sender: Option<&str>| ImageEntry {
+            kind: ImageKind::Sstv,
+            name: "sstv-1.png".into(),
+            unix: 1,
+            thumb: thumb.clone(),
+            sender: sender.map(Into::into),
+            ..Default::default()
+        };
+        ui.on_saved(entry(Some("EA3XYZ")), &ctx);
+        ui.on_saved(entry(None), &ctx);
+        assert_eq!(ui.received.len(), 1);
+        assert_eq!(ui.total, 1, "counted once");
+        assert_eq!(ui.received[0].entry.sender.as_deref(), Some("EA3XYZ"));
     }
 
     /// Two layers stacked exactly on one another: the one picked with its

@@ -668,6 +668,8 @@ impl SdroxideApp {
                             // contact, which used to reach the operator's own
                             // logbook and nothing beyond it (issue #341).
                             cmds.push(Command::LogQso(Box::new(rec.clone())));
+                            // Logging the SSTV contact in progress finishes it.
+                            self.sstv_mark_logged(&rec.call);
                             // ...and to the online logbooks set to take every
                             // new contact, the way a sequencer-logged one is
                             // (issue #428). New entries only: an edit is not a

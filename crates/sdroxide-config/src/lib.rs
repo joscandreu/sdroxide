@@ -1805,6 +1805,31 @@ pub fn save_sstv_layers(layers: &[Vec<sdroxide_types::TextLayer>]) -> Result<(),
 
 const SSTV_LAYERS: &str = "sstv_layers.json";
 
+/// The SSTV contact in progress, kept so a restart halfway through a contact
+/// does not lose who it was with.
+pub fn load_sstv_qso() -> sdroxide_types::SstvQso {
+    let mut q: sdroxide_types::SstvQso = load_json("sstv_qso.json");
+    q.sanitise();
+    q
+}
+
+pub fn save_sstv_qso(qso: &sdroxide_types::SstvQso) -> Result<(), ConfigError> {
+    save_json("sstv_qso.json", qso)
+}
+
+/// Who sent each received SSTV picture, by file name: the callsign in the ID
+/// that followed it, or in its RIFP manifest. Beside the pictures rather than
+/// in them, because the ID arrives after the picture has been written.
+pub fn load_sstv_senders() -> std::collections::HashMap<String, String> {
+    load_json("sstv_senders.json")
+}
+
+pub fn save_sstv_senders(
+    senders: &std::collections::HashMap<String, String>,
+) -> Result<(), ConfigError> {
+    save_json("sstv_senders.json", senders)
+}
+
 /// The conversion behind [`load_sstv_layers`], given the old messages and the
 /// `sstv_style` object `digi.json` held beside them (`Null` when there was
 /// none, which means the stock white-on-black look).

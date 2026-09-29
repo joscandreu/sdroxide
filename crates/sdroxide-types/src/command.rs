@@ -1149,4 +1149,10 @@ pub enum Command {
     ResetModeDefaults {
         mode: Option<Mode>,
     },
+    /// Replace the SSTV contact in progress — the other station's call, the
+    /// reports and the rest the transmit pictures can print. Answered, like
+    /// every preset change, with [`crate::RadioEvent::ImagePresets`].
+    ///
+    /// Appended for the usual reason — postcard numbers variants by position.
+    ImageSetQso(crate::SstvQso),
 }

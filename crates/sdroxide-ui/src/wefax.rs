@@ -530,6 +530,7 @@ mod tests {
                     bytes: 64,
                     thumb: dot_png(),
                     rifp: None,
+                    sender: None,
                 },
                 ctx,
             );

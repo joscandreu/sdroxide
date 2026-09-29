@@ -4136,7 +4136,9 @@ one of the two.
 - The **TRANSMIT** side has five image slots that work like **tabs**. **Click** a
   slot to make it the active tab (highlighted with a cyan border and its number);
   the text editor below then edits *that slot's* text. Use the **Load image…**
-  button (or **double-click** a slot) to pick an image file, which is
+  button (or **double-click** a slot) to pick an image file (**Remove image**,
+  pressed twice to confirm, deletes it again — the slot's text layers stay and
+  come back over the next picture), which is
   automatically cropped and scaled to the current mode's dimensions and stored
   under `~/.config/sdroxide/sstv_tx/`.
 - Put **text** on the active slot's picture as **layers** — as many pieces of
@@ -4175,8 +4177,47 @@ one of the two.
   - **Hide** keeps a layer in the slot but off the picture; **▲ / ▼** change
     which layer is drawn over which; **Delete** removes it.
   - The same placeholders as the banner work in any layer — `{call}`, `{grid}`,
-    `{mode}` (the transmit mode), `{date}` and `{time}` (UTC) and `{version}` —
-    so one preset can say `CQ de {call} · {mode}` whatever you send it in.
+    `{mode}` (the transmit mode), `{date}` and `{time}` (UTC) and `{version}`,
+    and the contact's own from the QSO box (below): `{tocall}`, `{rsv}`,
+    `{rsvr}`, `{name}`, `{qth}` and `{note}`. So one preset can say
+    `CQ de {call} · {mode}` and another `{tocall} de {call} · ur {rsv}`,
+    whatever mode you send them in. Names are matched without regard to case,
+    and a few spellings from other programs work too: `{dx}` and `{yourcall}`
+    for `{tocall}`, `{report}` and `{rsvs}` for `{rsv}`, `{mycall}` for
+    `{call}`. If a picture's text uses one with nothing to print — a
+    `{tocall}` with no call in the box — a yellow warning above **TX** says so
+    before the picture goes out with a gap in it.
+- The **QSO** box above the preview holds the contact in progress: **To** (the
+  other station's call), **RSV** (the report you send, 595 to start with; ▾
+  offers the usual ones) and **rcvd** (the one they sent), **Name**, **QTH**
+  and a **Note**. It is the station's, like the slots: every screen attached to
+  the radio shows the same contact, and it survives a restart.
+  - **Filled in for you.** When a station sends an FSK ID after its picture,
+    its call goes into **To** (marked **FSK**) — as long as the contact is
+    still the program's. With callsign lookups switched on, the call is then
+    looked up and a blank **Name** and **QTH** filled in from the answer. The
+    next station's ID replaces all of that — call, reports, name — because it
+    belonged to the station before.
+  - **Yours once you type.** As soon as you type in any field (or pick a
+    report from ▾), the contact is yours and nothing heard on the air changes
+    it. A different station's ID then shows as a **← ID** button beside the
+    call: click it to take that call, or **×** to ignore it. The same station
+    identifying again changes nothing.
+  - **Logged is finished.** Saving the log entry for the contact marks it
+    **✓ logged**, and the next station's ID starts a new contact — you do not
+    have to clear it first. Typing in it again makes it yours again.
+  - **Log…** opens a new log entry filled in from it — call, both reports,
+    name, mode `SSTV`, frequency and time, and the picture mode and note as the
+    comment — for you to check and save. If callsign lookups are on, the
+    entry's blank fields are filled in from the lookup as usual.
+  - **Clear QSO** empties it for the next contact and hands it back to the
+    program, so the next ID fills it in again. It touches nothing else — the
+    slots' pictures and their text stay as they are.
+- **Who sent it.** A received picture remembers the call in the FSK ID that
+  followed it (or in a RIFP picture's manifest); pointing at its thumbnail says
+  who, and **right-click → Reply to …** starts a contact with that station —
+  its call in the QSO box, the rest of the box emptied, and the contact yours.
+  The senders are kept in `sstv_senders.json` beside the other settings.
 
   A slot message from an earlier version is converted the first time this one
   starts: its first line becomes a large title layer and the rest a second

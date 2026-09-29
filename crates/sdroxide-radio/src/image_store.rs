@@ -16,8 +16,10 @@
 //!   picture — off the engine thread, because that loop is the audio loop and a
 //!   two-megapixel chart takes long enough to decode to drop a block.
 
+use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use crossbeam_channel::{Receiver, Sender};
 use image::ImageReader;
@@ -25,7 +27,7 @@ use tracing::{info, warn};
 
 use sdroxide_types::{
     IMAGE_PAGE_MAX, IMAGE_SLOT_THUMB_EDGE, IMAGE_SLOTS, IMAGE_SOURCE_MAX_EDGE, IMAGE_THUMB_EDGE,
-    ImageEntry, ImageKind, ImageListing, ImagePresets, ImageSlotInfo, RifpMeta, TextLayer,
+    ImageEntry, ImageKind, ImageListing, ImagePresets, ImageSlotInfo, RifpMeta, SstvQso, TextLayer,
     sanitise_layers,
 };
 
@@ -261,6 +263,7 @@ fn entry_for(kind: ImageKind, raw: &Raw, rifp: Option<RifpMeta>) -> Option<Image
         height,
         bytes: raw.bytes,
         thumb,
+        sender: rifp.as_ref().and_then(|m| m.sender.clone()),
         rifp,
     })
 }
@@ -286,6 +289,8 @@ struct Slot {
 pub struct ImagePresetStore {
     slots: Vec<Slot>,
     layers: Vec<Vec<TextLayer>>,
+    /// The contact in progress, which the layers' placeholders print.
+    qso: SstvQso,
     /// Where `slot{i}.png` lives. `None` when the config directory could not be
     /// resolved — the presets then work for the session and store nothing,
     /// exactly as the voice keyer does.
@@ -305,6 +310,7 @@ impl ImagePresetStore {
         let mut store = ImagePresetStore {
             slots: vec![Slot::default(); IMAGE_SLOTS],
             layers: vec![Vec::new(); IMAGE_SLOTS],
+            qso: sdroxide_config::load_sstv_qso(),
             dir,
         };
         let saved = sdroxide_config::load_sstv_layers();
@@ -343,6 +349,7 @@ impl ImagePresetStore {
         ImagePresetStore {
             slots: vec![Slot::default(); IMAGE_SLOTS],
             layers: vec![Vec::new(); IMAGE_SLOTS],
+            qso: SstvQso::default(),
             dir: None,
         }
     }
@@ -361,6 +368,7 @@ impl ImagePresetStore {
                     thumb: s.thumb.clone(),
                 })
                 .collect(),
+            qso: self.qso.clone(),
         }
     }
 
@@ -403,6 +411,27 @@ impl ImagePresetStore {
         if self.dir.is_some() {
             if let Err(e) = sdroxide_config::save_sstv_layers(&self.layers) {
                 warn!("saving transmit-image text: {e}");
+            }
+        }
+        true
+    }
+
+    /// The contact in progress.
+    pub fn qso(&self) -> &SstvQso {
+        &self.qso
+    }
+
+    /// Replace the contact in progress, clamped into range first. False when
+    /// nothing changed.
+    pub fn set_qso(&mut self, mut qso: SstvQso) -> bool {
+        qso.sanitise();
+        if self.qso == qso {
+            return false;
+        }
+        self.qso = qso;
+        if self.dir.is_some() {
+            if let Err(e) = sdroxide_config::save_sstv_qso(&self.qso) {
+                warn!("saving the SSTV contact: {e}");
             }
         }
         true
@@ -480,7 +509,14 @@ pub enum GalleryEvent {
 pub struct GalleryWorker {
     tx: Sender<GalleryEvent>,
     rx: Receiver<GalleryEvent>,
+    /// Who sent each received picture, by name — shared with the worker
+    /// threads, which label the entries they build from it.
+    senders: Arc<Mutex<HashMap<String, String>>>,
 }
+
+/// Most senders remembered. Names sort by the time they were received, so the
+/// oldest go first; a picture that old has long since left any gallery page.
+const SENDERS_MAX: usize = 5000;
 
 impl Default for GalleryWorker {
     fn default() -> Self {
@@ -491,7 +527,46 @@ impl Default for GalleryWorker {
 impl GalleryWorker {
     pub fn new() -> GalleryWorker {
         let (tx, rx) = crossbeam_channel::unbounded();
-        GalleryWorker { tx, rx }
+        GalleryWorker { tx, rx, senders: Arc::default() }
+    }
+
+    /// Read back who sent the pictures already in the store.
+    pub fn load_senders(&self) {
+        let saved = sdroxide_config::load_sstv_senders();
+        if let Ok(mut m) = self.senders.lock() {
+            *m = saved;
+        }
+    }
+
+    /// Record who sent a received picture, and announce its entry again with
+    /// the sender on it — the ID arrives after the picture's entry went out.
+    pub fn record_sender(&self, kind: ImageKind, name: String, call: String) {
+        self.note_sender(&name, &call);
+        self.entry(kind, name, None);
+    }
+
+    /// Record who sent a picture whose entry has not been announced yet.
+    pub fn note_sender(&self, name: &str, call: &str) {
+        let snapshot = {
+            let Ok(mut m) = self.senders.lock() else { return };
+            m.insert(name.to_string(), call.trim().to_uppercase());
+            while m.len() > SENDERS_MAX {
+                let Some(oldest) = m.keys().min().cloned() else { break };
+                m.remove(&oldest);
+            }
+            m.clone()
+        };
+        // Off the engine thread: a write to the config directory is a disk
+        // write like any other.
+        std::thread::spawn(move || {
+            if let Err(e) = sdroxide_config::save_sstv_senders(&snapshot) {
+                warn!("saving picture senders: {e}");
+            }
+        });
+    }
+
+    fn sender_of(senders: &Mutex<HashMap<String, String>>, name: &str) -> Option<String> {
+        senders.lock().ok().and_then(|m| m.get(name).cloned())
     }
 
     /// Decode, scale and re-encode a picked file for a preset slot.
@@ -511,10 +586,18 @@ impl GalleryWorker {
 
     pub fn list(&self, kind: ImageKind, offset: u32, count: u32) {
         let tx = self.tx.clone();
+        let senders = self.senders.clone();
         std::thread::spawn(move || {
             let (all, dir) = scan_all(kind);
             let (wanted, total) = page(all, offset, count);
-            let entries = wanted.iter().filter_map(|r| entry_for(kind, r, None)).collect();
+            let entries = wanted
+                .iter()
+                .filter_map(|r| entry_for(kind, r, None))
+                .map(|mut e| {
+                    e.sender = e.sender.or_else(|| Self::sender_of(&senders, &e.name));
+                    e
+                })
+                .collect();
             let _ =
                 tx.send(GalleryEvent::Listing(ImageListing { kind, offset, total, entries, dir }));
         });
@@ -572,6 +655,7 @@ impl GalleryWorker {
     /// again.
     pub fn entry(&self, kind: ImageKind, name: String, rifp: Option<RifpMeta>) {
         let tx = self.tx.clone();
+        let senders = self.senders.clone();
         std::thread::spawn(move || {
             let Some(path) = resolve(kind, &name) else { return };
             let meta = std::fs::metadata(&path).ok();
@@ -585,7 +669,8 @@ impl GalleryWorker {
                 name,
                 path,
             };
-            if let Some(entry) = entry_for(kind, &raw, rifp) {
+            if let Some(mut entry) = entry_for(kind, &raw, rifp) {
+                entry.sender = entry.sender.or_else(|| Self::sender_of(&senders, &entry.name));
                 let _ = tx.send(GalleryEvent::Saved(entry));
             }
         });
@@ -854,6 +939,12 @@ mod tests {
         // Out-of-range indices are a client bug, not a panic.
         assert!(!store.adopt(99, vec![1], 1, 1));
         assert!(!store.set_layers(99, cq));
+
+        // The contact rides the same announcement.
+        let q = SstvQso { call: "EA3XYZ".into(), ..SstvQso::default() };
+        assert!(store.set_qso(q.clone()));
+        assert_eq!(store.status().qso, q);
+        assert!(!store.set_qso(q), "the same contact again is not a change");
     }
 
     /// CRC-32 as PNG defines it, for the malformed-header test above.

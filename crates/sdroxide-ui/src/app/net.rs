@@ -150,6 +150,9 @@ impl SdroxideApp {
         // and that station may never have a log entry to merge into.
         self.callsign_cache.insert(info.call.to_ascii_uppercase(), info.clone());
 
+        // The SSTV QSO box, whose name and QTH print on the pictures.
+        self.sstv_apply_lookup(&info);
+
         // 1) The open entry form, if it's for this call.
         if let Some(f) = self.log_edit.as_mut() {
             if f.call.trim().eq_ignore_ascii_case(&info.call) {

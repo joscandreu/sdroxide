@@ -120,11 +120,158 @@ impl ImageSlotInfo {
 pub struct ImagePresets {
     /// Always [`IMAGE_SLOTS`] entries; index = slot number.
     pub slots: Vec<ImageSlotInfo>,
+    /// The contact in progress, whose details the slots' text can print.
+    /// Carried with the presets because it is part of what the station sends
+    /// — a `{tocall}` in a slot is drawn from it — and so it reaches every
+    /// screen, and is replayed to one that connects, exactly as they are.
+    pub qso: SstvQso,
 }
 
 impl Default for ImagePresets {
     fn default() -> Self {
-        ImagePresets { slots: vec![ImageSlotInfo::default(); IMAGE_SLOTS] }
+        ImagePresets { slots: vec![ImageSlotInfo::default(); IMAGE_SLOTS], qso: SstvQso::default() }
+    }
+}
+
+/// Where the other station's callsign in an [`SstvQso`] came from, so the
+/// panel can say so — a call copied off the air is worth a second look before
+/// it is logged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum CallSource {
+    /// Typed by the operator, or empty.
+    #[default]
+    Typed,
+    /// Read from the FSK ID sent after a picture.
+    FskId,
+    /// Read from a CW ID sent after a picture.
+    CwId,
+}
+
+/// The SSTV contact in progress: who it is with and the reports exchanged.
+///
+/// What the `{tocall}`, `{rsv}`, `{rsvr}`, `{name}` and `{note}` placeholders
+/// print, and what a log entry is filled from. Reports are text, not numbers:
+/// an RSV is three digits read one at a time (readability, strength, video),
+/// and the operator types it as such.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SstvQso {
+    /// The other station's callsign.
+    pub call: String,
+    pub call_from: CallSource,
+    /// The report sent to them.
+    pub rsv_sent: String,
+    /// The report they sent.
+    pub rsv_rcvd: String,
+    /// The other operator's name.
+    pub name: String,
+    /// Where they are.
+    pub qth: String,
+    /// Anything else worth printing or logging.
+    pub note: String,
+    /// The operator has typed in this contact since it was last cleared. A
+    /// touched contact is theirs: an ID heard on the air no longer replaces it,
+    /// it is only [offered](Self::offered). Filled in by the program — from an
+    /// ID or a callsign lookup — it is not touched, and the next station's ID
+    /// replaces the lot.
+    pub touched: bool,
+    /// The contact has been logged. Logged is finished, touched or not: the
+    /// next station's ID starts a new contact without waiting to be cleared.
+    pub logged: bool,
+    /// A different station's ID heard while the contact was the operator's —
+    /// held for them to take with one click rather than applied behind their
+    /// back.
+    pub offered: Option<String>,
+}
+
+impl Default for SstvQso {
+    /// Empty, but for the report sent: 595, the report a clean picture earns,
+    /// is what most contacts send and what a reply template wants to print.
+    fn default() -> Self {
+        SstvQso {
+            call: String::new(),
+            call_from: CallSource::Typed,
+            rsv_sent: SstvQso::RSV_PRESETS[0].to_string(),
+            rsv_rcvd: String::new(),
+            name: String::new(),
+            qth: String::new(),
+            note: String::new(),
+            touched: false,
+            logged: false,
+            offered: None,
+        }
+    }
+}
+
+impl SstvQso {
+    /// The reports offered beside the sent-report box, best first.
+    pub const RSV_PRESETS: [&str; 6] = ["595", "585", "575", "555", "455", "355"];
+
+    /// Longest any one field is kept, in characters.
+    pub const FIELD_MAX: usize = 64;
+
+    /// Whether an ID heard on the air may replace this contact: not while the
+    /// operator has typed in it, unless it has been logged since.
+    pub fn locked(&self) -> bool {
+        self.touched && !self.logged
+    }
+
+    /// A station identified itself on the air. Returns whether the contact
+    /// changed.
+    ///
+    /// The same station again — they ID after every picture — changes
+    /// nothing, and withdraws any offer of another. A different one replaces
+    /// the whole contact if the program filled it in, or it has been logged:
+    /// the call comes from the ID and everything else starts afresh, because a
+    /// name or a report belonged to the station before. If the operator has
+    /// typed in it, the new call is only [offered](Self::offered).
+    pub fn offer_id(&mut self, call: &str, from: CallSource) -> bool {
+        let call = call.trim().to_uppercase();
+        if call.is_empty() {
+            return false;
+        }
+        if self.call.trim().eq_ignore_ascii_case(&call) {
+            return self.offered.take().is_some();
+        }
+        if self.locked() {
+            if self.offered.as_deref() == Some(call.as_str()) {
+                return false;
+            }
+            self.offered = Some(call);
+            return true;
+        }
+        *self = SstvQso { call, call_from: from, ..SstvQso::default() };
+        true
+    }
+
+    /// Bring a contact from a client, or from disk, into range.
+    pub fn sanitise(&mut self) {
+        if let Some(o) = self.offered.as_mut() {
+            if let Some((cut, _)) = o.char_indices().nth(Self::FIELD_MAX) {
+                o.truncate(cut);
+            }
+        }
+        for f in [
+            &mut self.call,
+            &mut self.rsv_sent,
+            &mut self.rsv_rcvd,
+            &mut self.name,
+            &mut self.qth,
+            &mut self.note,
+        ] {
+            if let Some((cut, _)) = f.char_indices().nth(Self::FIELD_MAX) {
+                f.truncate(cut);
+            }
+        }
+    }
+
+    /// A report as the log keeps it — a number — when it is one. `None` for
+    /// an empty box, or for anything that is not a report.
+    pub fn report_number(text: &str) -> Option<i16> {
+        let t = text.trim();
+        (!t.is_empty() && t.len() <= 3 && t.chars().all(|c| c.is_ascii_digit()))
+            .then(|| t.parse().ok())
+            .flatten()
     }
 }
 
@@ -369,6 +516,9 @@ pub struct ImageEntry {
     /// in the PNG and there is nowhere it survives, so the enlarged view says
     /// nothing rather than inventing a sender.
     pub rifp: Option<crate::RifpMeta>,
+    /// Who sent it: the callsign in the FSK ID that followed it, or in a RIFP
+    /// manifest's sender field. `None` when nothing identified it.
+    pub sender: Option<String>,
 }
 
 /// One page of a received store, newest first.
@@ -554,5 +704,69 @@ mod tests {
         assert_eq!(v[0].size, 10.0);
         assert_eq!(v[0].x, 100.0);
         assert_eq!(v[0].text.chars().count(), IMAGE_LAYER_TEXT_MAX);
+    }
+
+    #[test]
+    fn a_contact_from_outside_is_brought_into_range() {
+        let mut q = SstvQso { call: "X".repeat(500), ..SstvQso::default() };
+        q.sanitise();
+        assert_eq!(q.call.chars().count(), SstvQso::FIELD_MAX);
+        assert_eq!(SstvQso::default().rsv_sent, "595");
+    }
+
+    #[test]
+    fn only_a_report_shaped_text_is_logged_as_a_report() {
+        assert_eq!(SstvQso::report_number(" 595 "), Some(595));
+        assert_eq!(SstvQso::report_number("59"), Some(59));
+        assert_eq!(SstvQso::report_number(""), None);
+        assert_eq!(SstvQso::report_number("5x5"), None);
+        assert_eq!(SstvQso::report_number("59595"), None);
+    }
+
+    fn typed(call: &str) -> SstvQso {
+        SstvQso { call: call.into(), rsv_rcvd: "575".into(), touched: true, ..SstvQso::default() }
+    }
+
+    /// Filled in by the program, a contact gives way to the next station's
+    /// ID entirely — a name or report of the last station must not stick to
+    /// the new one.
+    #[test]
+    fn an_id_replaces_a_contact_nobody_typed_in() {
+        let mut q = SstvQso { call: "EA3XYZ".into(), name: "Ana".into(), ..SstvQso::default() };
+        q.call_from = CallSource::FskId;
+        assert!(q.offer_id(" ea1abc ", CallSource::FskId));
+        assert_eq!(q.call, "EA1ABC");
+        assert_eq!(q.call_from, CallSource::FskId);
+        assert!(q.name.is_empty());
+        assert_eq!(q.rsv_sent, "595");
+        // And an empty box simply fills.
+        let mut e = SstvQso::default();
+        assert!(e.offer_id("EA3XYZ", CallSource::FskId));
+        assert_eq!(e.call, "EA3XYZ");
+    }
+
+    /// Typed in, the contact is the operator's: another station's ID is only
+    /// offered, once, and the same station's ID withdraws the offer.
+    #[test]
+    fn an_id_is_only_offered_for_a_contact_the_operator_typed_in() {
+        let mut q = typed("EA3XYZ");
+        assert!(q.offer_id("EA1ABC", CallSource::FskId));
+        assert_eq!(q.call, "EA3XYZ");
+        assert_eq!(q.rsv_rcvd, "575");
+        assert_eq!(q.offered.as_deref(), Some("EA1ABC"));
+        assert!(!q.offer_id("ea1abc", CallSource::FskId), "offered already");
+        assert!(q.offer_id("EA3XYZ", CallSource::FskId), "their own ID withdraws it");
+        assert_eq!(q.offered, None);
+        assert!(!q.offer_id("EA3XYZ", CallSource::FskId), "and again is nothing");
+    }
+
+    /// Logged is finished: the next ID starts a new contact, reports reset.
+    #[test]
+    fn a_logged_contact_gives_way_to_the_next_id() {
+        let mut q = SstvQso { logged: true, rsv_sent: "575".into(), ..typed("EA3XYZ") };
+        assert!(q.offer_id("EA1ABC", CallSource::FskId));
+        assert_eq!(q.call, "EA1ABC");
+        assert_eq!(q.rsv_sent, "595");
+        assert!(!q.touched && !q.logged);
     }
 }

@@ -224,6 +224,12 @@ pub struct SstvStatus {
     /// looks for who sent it.
     #[serde(default)]
     pub rx_id: Option<String>,
+    /// How many FSK IDs have been decoded, counting from the receiver's start.
+    /// `rx_id` stays put when the same station identifies again, which is when
+    /// the counter still moves — so a station that re-sends its ID after the
+    /// QSO box was cleared is heard again.
+    #[serde(default)]
+    pub rx_id_seq: u32,
 }
 
 impl Default for SstvStatus {
@@ -237,6 +243,7 @@ impl Default for SstvStatus {
             signal: 0.0,
             unsupported: None,
             rx_id: None,
+            rx_id_seq: 0,
         }
     }
 }

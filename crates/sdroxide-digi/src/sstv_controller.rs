@@ -38,6 +38,9 @@ pub struct SstvController {
     /// The callsign the last station sent in its FSK ID, held until another one
     /// does. It arrives after the picture, so it cannot travel with it.
     rx_id: Option<String>,
+    /// Every ID decoded, counted, so the same call heard twice still reads
+    /// as a second identification.
+    rx_id_seq: u32,
     /// The last header for a mode this build cannot draw — see
     /// [`sdroxide_types::SstvStatus::unsupported`].
     unsupported: Option<String>,
@@ -86,6 +89,7 @@ impl SstvController {
             rx_active: false,
             detected: None,
             rx_id: None,
+            rx_id_seq: 0,
             unsupported: None,
             image_id: 0,
             tx: None,
@@ -116,6 +120,7 @@ impl SstvController {
             signal: self.rx.level(),
             unsupported: self.unsupported.clone(),
             rx_id: self.rx_id.clone(),
+            rx_id_seq: self.rx_id_seq,
         }
     }
 
@@ -202,6 +207,7 @@ impl DigiEngine for SstvController {
                     // transmission gets no VIS and no whole frame, and the
                     // callsign at the end is then the only thing that arrives.
                     self.rx_id = Some(id);
+                    self.rx_id_seq = self.rx_id_seq.wrapping_add(1);
                     self.status_dirty = true;
                 }
                 SstvEvent::UnsupportedMode { code, name } => {

@@ -91,6 +91,15 @@ pub struct Fields {
     /// pressed, and a preview redrawn every second for a clock nobody reads to
     /// the second would be work for nothing.
     pub time: String,
+    /// The contact in progress: the other station's call, in capitals…
+    pub tocall: String,
+    /// …the report sent to them and the one they sent…
+    pub rsv: String,
+    pub rsvr: String,
+    /// …their name and QTH, and a free note.
+    pub name: String,
+    pub qth: String,
+    pub note: String,
 }
 
 impl Fields {
@@ -102,35 +111,68 @@ impl Fields {
             mode: mode.to_string(),
             date: format!("{y:04}-{mo:02}-{d:02}"),
             time: format!("{h:02}:{mi:02}"),
+            ..Fields::default()
         }
+    }
+
+    /// These fields, with the contact in progress filled in.
+    pub fn with_qso(self, q: &sdroxide_types::SstvQso) -> Fields {
+        Fields {
+            tocall: q.call.trim().to_uppercase(),
+            rsv: q.rsv_sent.trim().to_string(),
+            rsvr: q.rsv_rcvd.trim().to_string(),
+            name: q.name.trim().to_string(),
+            qth: q.qth.trim().to_string(),
+            note: q.note.trim().to_string(),
+            ..self
+        }
+    }
+
+    /// What the placeholder `name` stands for, and the name it goes by in
+    /// [`PLACEHOLDERS`] — `None` for a name that is not a placeholder.
+    ///
+    /// Each has one documented name and quietly answers to a few more, so an
+    /// operator arriving from another program, or from the FT8 templates, is
+    /// not tripped up by spelling: `{dx}` and `{yourcall}` are `{tocall}`,
+    /// `{report}` and `{rsvs}` are `{rsv}`, `{mycall}` is `{call}`.
+    ///
+    /// Callsigns come out trimmed and in capitals, whatever was typed.
+    fn lookup(&self, name: &str) -> Option<(&'static str, String)> {
+        let callsign = |c: &str| c.trim().to_uppercase();
+        let (doc, v) = match name.to_ascii_lowercase().as_str() {
+            "call" | "mycall" => return Some(("{call}", callsign(&self.call))),
+            "tocall" | "dx" | "yourcall" => return Some(("{tocall}", callsign(&self.tocall))),
+            "grid" | "mygrid" => ("{grid}", self.grid.as_str()),
+            "rsv" | "report" | "rsvs" => ("{rsv}", self.rsv.as_str()),
+            "rsvr" => ("{rsvr}", self.rsvr.as_str()),
+            "name" => ("{name}", self.name.as_str()),
+            "qth" => ("{qth}", self.qth.as_str()),
+            "note" => ("{note}", self.note.as_str()),
+            "mode" => ("{mode}", self.mode.as_str()),
+            "date" => ("{date}", self.date.as_str()),
+            "time" => ("{time}", self.time.as_str()),
+            "version" => ("{version}", env!("CARGO_PKG_VERSION")),
+            _ => return None,
+        };
+        Some((doc, v.trim().to_string()))
     }
 }
 
-/// Substitute the placeholders in `template`.
-///
-/// `{call}` is uppercased — a callsign belongs in capitals on the air and the
-/// header always printed it that way — but the template around it is left as
-/// the operator typed it, which is what stops `SDRoxide` becoming `SDROXIDE`.
-/// An unrecognised `{…}` is copied through untouched so a typo is visible in
-/// the preview rather than silently printing nothing.
-pub fn expand(template: &str, f: &Fields) -> String {
+/// Walk the `{…}` runs of `template`, handing each name to `token`: what it
+/// returns replaces the run, `None` leaves it as typed. An unclosed brace is
+/// just text.
+fn scan(template: &str, mut token: impl FnMut(&str) -> Option<String>) -> String {
     let mut out = String::with_capacity(template.len());
     let mut rest = template;
     while let Some(open) = rest.find('{') {
         out.push_str(&rest[..open]);
         rest = &rest[open..];
         let Some(close) = rest.find('}') else {
-            // An unclosed brace is just text.
             break;
         };
-        match rest[1..close].to_ascii_lowercase().as_str() {
-            "call" => out.push_str(f.call.trim().to_uppercase().as_str()),
-            "grid" => out.push_str(f.grid.trim()),
-            "mode" => out.push_str(&f.mode),
-            "date" => out.push_str(&f.date),
-            "time" => out.push_str(&f.time),
-            "version" => out.push_str(env!("CARGO_PKG_VERSION")),
-            _ => out.push_str(&rest[..=close]),
+        match token(&rest[1..close]) {
+            Some(v) => out.push_str(&v),
+            None => out.push_str(&rest[..=close]),
         }
         rest = &rest[close + 1..];
     }
@@ -138,11 +180,45 @@ pub fn expand(template: &str, f: &Fields) -> String {
     out
 }
 
+/// Substitute the placeholders in `template`.
+///
+/// `{call}` is uppercased — a callsign belongs in capitals on the air and the
+/// header always printed it that way — but the template around it is left as
+/// the operator typed it, which is what stops `SDRoxide` becoming `SDROXIDE`.
+/// Placeholder names are matched without regard to case. An unrecognised
+/// `{…}` is copied through untouched so a typo is visible in the preview
+/// rather than silently printing nothing.
+pub fn expand(template: &str, f: &Fields) -> String {
+    scan(template, |name| f.lookup(name).map(|(_, v)| v))
+}
+
+/// The placeholders `template` uses that would print nothing — a `{tocall}`
+/// with no call in the QSO box — by their documented names, each once. What
+/// the panel warns about before a picture goes out with a hole in it.
+pub fn empty_used(template: &str, f: &Fields) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    scan(template, |name| {
+        if let Some((doc, v)) = f.lookup(name) {
+            if v.trim().is_empty() && !out.contains(&doc) {
+                out.push(doc);
+            }
+        }
+        None
+    });
+    out
+}
+
 /// The placeholders [`expand`] knows, with a word on each, for the hint text
 /// beside the fields that take them.
-pub const PLACEHOLDERS: [(&str, &str); 6] = [
+pub const PLACEHOLDERS: [(&str, &str); 12] = [
     ("{call}", "your callsign, in capitals"),
     ("{grid}", "your locator"),
+    ("{tocall}", "their callsign, from the QSO box ({dx} works too)"),
+    ("{rsv}", "the report you send them ({report} works too)"),
+    ("{rsvr}", "the report they sent you"),
+    ("{name}", "their name"),
+    ("{qth}", "their QTH"),
+    ("{note}", "the QSO box's note"),
     ("{mode}", "the transmit mode"),
     ("{date}", "today's date, UTC"),
     ("{time}", "the time, UTC"),
@@ -269,6 +345,65 @@ const SEND_AFTER: f64 = 0.4;
 /// Seconds after sending before the slot is handed back regardless.
 const RELEASE_AFTER: f64 = 3.0;
 
+/// A value the engine owns, held by this screen while the operator edits it —
+/// the same arrangement as [`LayerEdit`], for something that is not per slot:
+/// the SSTV contact in progress.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Held<T> {
+    pub value: T,
+    /// When the latest change not yet sent was made; `None` once sent.
+    pending: Option<f64>,
+    /// When the value was last sent.
+    sent: Option<f64>,
+}
+
+/// What to show: the value in hand, or the engine's.
+pub fn held_shown<'a, T>(held: &'a Option<Held<T>>, stored: &'a T) -> &'a T {
+    held.as_ref().map_or(stored, |h| &h.value)
+}
+
+/// Take the value in hand to change it, stamping the change `now`.
+pub fn held_edit<'a, T: Clone>(held: &'a mut Option<Held<T>>, stored: &T, now: f64) -> &'a mut T {
+    let h = held.get_or_insert_with(|| Held { value: stored.clone(), pending: None, sent: None });
+    h.pending = Some(now);
+    &mut h.value
+}
+
+/// Send the value once the operator pauses, and hand it back once the engine
+/// agrees — see [`tick`], which this mirrors.
+pub fn held_tick<T: Clone + PartialEq>(
+    held: &mut Option<Held<T>>,
+    stored: &T,
+    now: f64,
+    busy: bool,
+) -> Option<T> {
+    let h = held.as_mut()?;
+    if let Some(t) = h.pending {
+        if now - t < SEND_AFTER {
+            return None;
+        }
+        h.pending = None;
+        h.sent = Some(now);
+        return (h.value != *stored).then(|| h.value.clone());
+    }
+    if !busy && (h.value == *stored || h.sent.is_none_or(|t| now - t > RELEASE_AFTER)) {
+        *held = None;
+    }
+    None
+}
+
+/// Send the value in hand at once, if it has changed, keeping it in hand.
+pub fn held_send_now<T: Clone + PartialEq>(
+    held: &mut Option<Held<T>>,
+    stored: &T,
+    now: f64,
+) -> Option<T> {
+    let h = held.as_mut()?;
+    h.pending?;
+    h.pending = Some(now - SEND_AFTER);
+    held_tick(held, stored, now, true)
+}
+
 /// The layers of the one slot the operator is editing.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayerEdit {
@@ -375,7 +510,7 @@ pub fn commit(
 ) -> Option<sdroxide_types::Command> {
     let e = edit.take()?;
     (presets.slots.get(e.slot).map(|s| &s.layers) != Some(&e.layers))
-        .then(|| sdroxide_types::Command::ImageSetLayers { slot: e.slot as u8, layers: e.layers })
+        .then_some(sdroxide_types::Command::ImageSetLayers { slot: e.slot as u8, layers: e.layers })
 }
 
 fn put(img: &mut [u8], w: usize, h: usize, x: i32, y: i32, r: u8, g: u8, b: u8) {
@@ -831,6 +966,7 @@ mod tests {
                 .iter()
                 .map(|t| ImageSlotInfo { layers: text(t), ..ImageSlotInfo::default() })
                 .collect(),
+            ..ImagePresets::default()
         }
     }
 
@@ -1303,5 +1439,58 @@ mod tests {
         assert_eq!(edit.as_ref().map(|e| e.slot), Some(1));
         // Nothing left to send.
         assert_eq!(send_now(&mut edit, &p, 10.1), None);
+    }
+
+    fn qso_fields() -> Fields {
+        Fields::new("ea3abc", "JN11", "Martin 1", 0).with_qso(&sdroxide_types::SstvQso {
+            call: " ea3xyz ".into(),
+            rsv_sent: "595".into(),
+            rsv_rcvd: "575".into(),
+            name: "Ana".into(),
+            note: String::new(),
+            ..Default::default()
+        })
+    }
+
+    /// The contact's fields print under their documented names and under the
+    /// names other programs use, in any case.
+    #[test]
+    fn the_contact_prints_under_every_name_it_answers_to() {
+        let f = qso_fields();
+        assert_eq!(expand("{call} de {tocall} {rsv}", &f), "EA3ABC de EA3XYZ 595");
+        assert_eq!(
+            expand("{DX} {YOURCALL} {report} {RSVS} {rsvr}", &f),
+            "EA3XYZ EA3XYZ 595 595 575"
+        );
+        assert_eq!(expand("{mycall} {MYGRID} tnx {Name}", &f), "EA3ABC JN11 tnx Ana");
+    }
+
+    /// A placeholder that would print nothing is reported once, by its
+    /// documented name, whatever spelling was used.
+    #[test]
+    fn an_empty_placeholder_is_reported_by_its_documented_name() {
+        let mut f = qso_fields();
+        assert!(empty_used("{tocall} {rsv}", &f).is_empty());
+        assert_eq!(empty_used("{note} {NOTE} {bogus}", &f), vec!["{note}"]);
+        f.tocall.clear();
+        assert_eq!(empty_used("{dx} {tocall} {yourcall}", &f), vec!["{tocall}"]);
+    }
+
+    #[test]
+    fn a_held_value_is_sent_after_a_pause_and_released_on_its_echo() {
+        let stored = 1u32;
+        let mut held = None;
+        *held_edit(&mut held, &stored, 0.0) = 2;
+        assert_eq!(held_shown(&held, &stored), &2);
+        assert_eq!(held_tick(&mut held, &stored, 0.2, true), None);
+        assert_eq!(held_tick(&mut held, &stored, 0.5, true), Some(2));
+        assert_eq!(held_tick(&mut held, &stored, 0.6, false), None);
+        assert!(held.is_some(), "not echoed yet");
+        assert_eq!(held_tick(&mut held, &2, 0.7, false), None);
+        assert!(held.is_none(), "echoed");
+        // Sent at once on demand, and not twice.
+        *held_edit(&mut held, &stored, 1.0) = 3;
+        assert_eq!(held_send_now(&mut held, &stored, 1.0), Some(3));
+        assert_eq!(held_send_now(&mut held, &stored, 1.1), None);
     }
 }
