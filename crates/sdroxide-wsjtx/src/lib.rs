@@ -11,18 +11,21 @@
 //! whatsoever: a field of the wrong width doesn't fail, it just silently stops
 //! a logger from seeing contacts. The tests are the only check there is.
 //!
-//! Output only. sdroxide is driven from its own UI (and from rigctld/TCI for
-//! outside control), so the inbound half of the protocol — Reply, Halt Tx,
-//! Free Text — is not implemented; nothing is read from the socket.
+//! The clients talk back on the same socket: they answer the address our
+//! datagrams came from. [`WsjtxUdp::poll`] reads what they send — Reply, Halt
+//! Tx, Free Text, Replay, Highlight Callsign — and [`control::translate`]
+//! decides what each is allowed to do, which is nothing beyond Halt Tx unless
+//! the operator has switched control on.
 //!
 //! NATIVE ONLY — it binds a UDP socket.
 
+pub mod control;
 pub mod msg;
 pub mod n1mm;
 
 pub use n1mm::N1mmUdp;
 
-use std::net::{ToSocketAddrs, UdpSocket};
+use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 
 use sdroxide_types::{QsoRecord, WsjtxConfig};
 use tracing::{debug, info};
@@ -53,6 +56,8 @@ impl WsjtxUdp {
         if dest.ip().is_multicast() {
             let _ = sock.set_multicast_ttl_v4(2);
         }
+        // Read from the engine's tick, which must never wait on a client.
+        sock.set_nonblocking(true).map_err(|e| e.to_string())?;
         let addr = format!("{host}:{}", cfg.port);
         info!(dest = %addr, id = %cfg.id, "WSJT-X UDP broadcast started");
         Ok(WsjtxUdp { sock, dest, id: cfg.id.clone(), addr })
@@ -109,8 +114,152 @@ impl WsjtxUdp {
         self.send(msg::logged_adif(&self.id, &sdroxide_types::qso_to_adif_record(q)));
     }
 
+    /// Whatever the clients have sent since the last call, oldest first.
+    /// Never blocks.
+    ///
+    /// With a unicast destination only that host is listened to: the
+    /// operator named the machine their logger runs on, and a datagram from
+    /// any other is somebody else's. A multicast group has no one sender to
+    /// expect, so there every source is read and the id test in
+    /// [`control::translate`] is what remains.
+    pub fn poll(&self) -> Vec<msg::Inbound> {
+        /// A bound on one tick's work, whatever is queued behind it.
+        const MAX_PER_POLL: usize = 64;
+        let mut out = Vec::new();
+        let mut buf = [0u8; 2048];
+        for _ in 0..MAX_PER_POLL {
+            let (n, from) = match self.sock.recv_from(&mut buf) {
+                Ok(got) => got,
+                // WouldBlock is the queue running dry. A Windows socket also
+                // reports an ICMP port-unreachable from an earlier send here
+                // (no logger listening yet), which is no reason to stop.
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(e) => {
+                    debug!(error = %e, "WSJT-X UDP receive failed");
+                    continue;
+                }
+            };
+            if !self.accepts_from(from) {
+                debug!(%from, "WSJT-X UDP: datagram from an unexpected host dropped");
+                continue;
+            }
+            match msg::parse(&buf[..n]) {
+                Ok(m) => out.push(m),
+                Err(e) => debug!(%from, error = %e, "WSJT-X UDP: unreadable datagram dropped"),
+            }
+        }
+        out
+    }
+
+    fn accepts_from(&self, from: SocketAddr) -> bool {
+        self.dest.ip().is_multicast() || from.ip() == self.dest.ip()
+    }
+
     /// We're going away — clients drop us from their station lists.
     pub fn close(&self) {
         self.send(msg::close(&self.id));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    /// A client on loopback, and a broadcast aimed at it.
+    fn pair(client_ip: &str) -> (UdpSocket, WsjtxUdp) {
+        let client = UdpSocket::bind((client_ip, 0)).unwrap();
+        let cfg = WsjtxConfig {
+            enabled: true,
+            host: "127.0.0.1".into(),
+            port: client.local_addr().unwrap().port(),
+            id: "WSJT-X".into(),
+            ..WsjtxConfig::default()
+        };
+        (client, WsjtxUdp::start(&cfg).unwrap())
+    }
+
+    /// Where the broadcast sends from — what a client learns from our first
+    /// datagram and answers to.
+    fn learn_our_address(client: &UdpSocket, w: &WsjtxUdp) -> SocketAddr {
+        w.heartbeat("test");
+        client.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let mut buf = [0u8; 512];
+        let (_, from) = client.recv_from(&mut buf).expect("our heartbeat");
+        from
+    }
+
+    fn halt(id: &str) -> Vec<u8> {
+        let mut p = Vec::new();
+        p.extend_from_slice(&0xadbc_cbdau32.to_be_bytes());
+        p.extend_from_slice(&3u32.to_be_bytes());
+        p.extend_from_slice(&8u32.to_be_bytes());
+        p.extend_from_slice(&(id.len() as u32).to_be_bytes());
+        p.extend_from_slice(id.as_bytes());
+        p.push(1);
+        p
+    }
+
+    /// Poll until something arrives or a second passes: loopback delivery is
+    /// fast but not synchronous with `send_to` returning.
+    fn poll_for(w: &WsjtxUdp) -> Vec<msg::Inbound> {
+        let deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            let got = w.poll();
+            if !got.is_empty() || Instant::now() > deadline {
+                return got;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn a_client_answering_our_address_is_heard() {
+        let (client, w) = pair("127.0.0.1");
+        let us = learn_our_address(&client, &w);
+        client.send_to(&halt("WSJT-X"), us).unwrap();
+        assert_eq!(
+            poll_for(&w),
+            vec![msg::Inbound::HaltTx { id: "WSJT-X".into(), auto_tx_only: true }]
+        );
+    }
+
+    #[test]
+    fn polling_an_empty_socket_returns_at_once() {
+        let (_client, w) = pair("127.0.0.1");
+        let t = Instant::now();
+        assert!(w.poll().is_empty());
+        assert!(t.elapsed() < Duration::from_millis(200), "poll blocked for {:?}", t.elapsed());
+    }
+
+    #[test]
+    fn noise_on_the_port_is_dropped_and_what_follows_still_read() {
+        let (client, w) = pair("127.0.0.1");
+        let us = learn_our_address(&client, &w);
+        client.send_to(b"not a datagram this protocol has", us).unwrap();
+        client.send_to(&halt("WSJT-X"), us).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let mut got = Vec::new();
+        while got.is_empty() && Instant::now() < deadline {
+            got.extend(w.poll());
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(got.len(), 1, "{got:?}");
+    }
+
+    /// Loopback is the whole of 127/8 on Linux, which is what lets a second
+    /// "host" exist in a test.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_datagram_from_another_host_is_not_ours_to_obey() {
+        let (client, w) = pair("127.0.0.1");
+        let us = learn_our_address(&client, &w);
+        let stranger = UdpSocket::bind("127.0.0.2:0").unwrap();
+        stranger.send_to(&halt("WSJT-X"), us).unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(w.poll().is_empty(), "a host other than the configured one was obeyed");
+        // The configured host still is.
+        client.send_to(&halt("WSJT-X"), us).unwrap();
+        assert_eq!(poll_for(&w).len(), 1);
     }
 }

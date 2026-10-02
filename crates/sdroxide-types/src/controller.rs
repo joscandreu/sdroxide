@@ -389,6 +389,17 @@ pub enum RadioEvent {
     ///
     /// Appended last, for the usual reason.
     Pi4Spots(Vec<crate::Pi4Spot>),
+    /// Every callsign the WSJT-X clients currently want coloured in the
+    /// decode list, whole — a client's Highlight Callsign message, or a band
+    /// change emptying the set.
+    ///
+    /// Appended last, for the usual reason.
+    WsjtxHighlights(Vec<crate::WsjtxHighlight>),
+    /// The ids of the WSJT-X clients heard from lately (`JTAlert`,
+    /// `GridTracker`), so the Servers tab can say who is listening.
+    ///
+    /// Appended last, for the usual reason.
+    WsjtxClients(Vec<String>),
 }
 
 /// Snapshot of the frontend's switchable sound devices (native clients).

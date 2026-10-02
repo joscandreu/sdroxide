@@ -2812,6 +2812,14 @@ struct Engine {
     /// When the last WSJT-X heartbeat went out (clients time a station out
     /// without one).
     wsjtx_beat: Instant,
+    /// The decodes broadcast on this band, oldest first: what a client's
+    /// Reply is matched against and what its Replay sends again. Emptied on a
+    /// band change, for the reason the decode list is.
+    wsjtx_recent: VecDeque<sdroxide_types::Decode>,
+    /// Callsigns the clients have asked to have coloured in the decode list.
+    wsjtx_highlights: Vec<sdroxide_types::WsjtxHighlight>,
+    /// The clients heard from, by their own id, and when each last spoke.
+    wsjtx_clients: std::collections::BTreeMap<String, Instant>,
     /// The band the last tick saw, so a crossing into another one can be told
     /// from the tuning about inside a band that goes on all session. See
     /// [`Engine::poll_band_change`].
@@ -4144,6 +4152,9 @@ fn engine_thread(
         n1mm: None,
         wsjtx_cfg: sdroxide_types::WsjtxConfig::default(),
         wsjtx_beat: Instant::now(),
+        wsjtx_recent: VecDeque::new(),
+        wsjtx_highlights: Vec::new(),
+        wsjtx_clients: std::collections::BTreeMap::new(),
         rigctld: None,
         rigctld_cfg: RigctldConfig::default(),
         rigctld_err: None,
@@ -4507,6 +4518,7 @@ fn engine_thread(
         engine.poll_rigctld();
         engine.poll_band_change();
         engine.wsjtx_heartbeat();
+        engine.poll_wsjtx();
         engine.poll_spots();
         engine.poll_winlink();
         engine.poll_kiss_server();
@@ -6261,6 +6273,12 @@ impl Engine {
         if let Some(w) = self.wsjtx.take() {
             w.close(); // tell clients to drop us before the socket goes
         }
+        // Whoever was talking to the old socket was answering its address,
+        // which has just gone.
+        if !self.wsjtx_clients.is_empty() {
+            self.wsjtx_clients.clear();
+            self.emit_wsjtx_clients();
+        }
         if !want {
             info!("WSJT-X UDP broadcast stopped");
             return;
@@ -6333,6 +6351,14 @@ impl Engine {
         if let Some(w) = &self.wsjtx {
             w.clear();
         }
+        // What a client can name from here on is what is heard on this band:
+        // a Reply to a row from the last one would call at an offset against
+        // a dial that has moved, exactly as a stale queue entry would.
+        self.wsjtx_recent.clear();
+        if !self.wsjtx_highlights.is_empty() {
+            self.wsjtx_highlights.clear();
+            let _ = self.event_tx.send(RadioEvent::WsjtxHighlights(Vec::new()));
+        }
     }
 
     /// Keep the broadcast alive: clients drop a station they stop hearing from.
@@ -6345,13 +6371,29 @@ impl Engine {
         }
     }
 
-    /// Broadcast a slot's decodes to the WSJT-X clients.
-    fn wsjtx_decodes(&self, decodes: &[sdroxide_types::Decode]) {
+    /// Broadcast a slot's decodes to the WSJT-X clients, and keep them for the
+    /// Reply that may come back naming one.
+    fn wsjtx_decodes(&mut self, decodes: &[sdroxide_types::Decode]) {
+        /// A few busy FT8 slots — far more than a client ever replies across.
+        const RECENT_MAX: usize = 400;
+        self.wsjtx_recent.extend(decodes.iter().cloned());
+        let excess = self.wsjtx_recent.len().saturating_sub(RECENT_MAX);
+        self.wsjtx_recent.drain(..excess);
+        self.wsjtx_send_decodes(decodes.iter(), true);
+    }
+
+    /// Send decodes as WSJT-X Decode messages. `new` is false for a Replay,
+    /// which clients may re-sort without alerting on.
+    fn wsjtx_send_decodes<'a>(
+        &self,
+        decodes: impl Iterator<Item = &'a sdroxide_types::Decode>,
+        new: bool,
+    ) {
         let Some(w) = &self.wsjtx else { return };
         let mode = self.digi.as_ref().map(|d| d.mode().label().to_string()).unwrap_or_default();
         for d in decodes {
             w.decode(&sdroxide_wsjtx::msg::DecodeInfo {
-                new: true,
+                new,
                 slot_utc: d.slot_utc,
                 snr_db: d.snr_db as i32,
                 dt: d.dt as f64,
@@ -6360,6 +6402,79 @@ impl Engine {
                 message: d.message.clone(),
             });
         }
+    }
+
+    /// Read what the WSJT-X clients sent back and act on what they may do.
+    ///
+    /// The rules are [`sdroxide_wsjtx::control::translate`]'s; the commands it
+    /// produces go through [`Engine::apply`] like a click on the operator's
+    /// own buttons, so the ham-band lockout, Hold TX and the watchdog govern a
+    /// Reply from JTAlert exactly as they govern REPLY on the decode list.
+    fn poll_wsjtx(&mut self) {
+        /// A client that has not sent its heartbeat in this long has gone
+        /// without saying so. WSJT-X's own clients beat every 15 s.
+        const CLIENT_TIMEOUT: Duration = Duration::from_secs(60);
+        let Some(w) = &self.wsjtx else { return };
+        let inbound = w.poll();
+        // Judged first, all against the decodes as they stand, and applied
+        // after: applying borrows the engine whole.
+        let actions: Vec<_> = {
+            let ctx = sdroxide_wsjtx::control::Context {
+                id: &self.wsjtx_cfg.id,
+                my_call: &self.digi_config.my_call,
+                accept_control: self.wsjtx_cfg.accept_control,
+                recent: self.wsjtx_recent.make_contiguous(),
+            };
+            inbound
+                .iter()
+                .flat_map(|msg| {
+                    let acts = sdroxide_wsjtx::control::translate(msg, &ctx);
+                    if acts.is_empty() {
+                        debug!(?msg, "WSJT-X UDP: client message not acted on");
+                    }
+                    acts
+                })
+                .collect()
+        };
+        let mut clients_changed = false;
+        for action in actions {
+            use sdroxide_wsjtx::control::Action;
+            match action {
+                Action::Cmd(cmd) => {
+                    info!(?cmd, "WSJT-X UDP: client command");
+                    self.apply(*cmd);
+                }
+                Action::Replay => {
+                    self.wsjtx_send_decodes(self.wsjtx_recent.iter(), false);
+                }
+                Action::Highlight(h) => {
+                    self.wsjtx_highlights.retain(|o| o.call != h.call);
+                    if h.bg.is_some() || h.fg.is_some() {
+                        self.wsjtx_highlights.push(h);
+                    }
+                    let _ = self
+                        .event_tx
+                        .send(RadioEvent::WsjtxHighlights(self.wsjtx_highlights.clone()));
+                }
+                Action::ClientSeen(id) => {
+                    clients_changed |= self.wsjtx_clients.insert(id, Instant::now()).is_none();
+                }
+                Action::ClientGone(id) => {
+                    clients_changed |= self.wsjtx_clients.remove(&id).is_some();
+                }
+            }
+        }
+        let before = self.wsjtx_clients.len();
+        self.wsjtx_clients.retain(|_, seen| seen.elapsed() < CLIENT_TIMEOUT);
+        clients_changed |= self.wsjtx_clients.len() != before;
+        if clients_changed {
+            self.emit_wsjtx_clients();
+        }
+    }
+
+    fn emit_wsjtx_clients(&self) {
+        let ids = self.wsjtx_clients.keys().cloned().collect();
+        let _ = self.event_tx.send(RadioEvent::WsjtxClients(ids));
     }
 
     /// Broadcast the station's state as WSJT-X reports it.

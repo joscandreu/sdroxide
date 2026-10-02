@@ -274,6 +274,11 @@ pub(crate) struct Latest {
     /// every change, and replayed on connect for the same reason as
     /// `memories`: a client that attaches later would otherwise offer nothing.
     pub profiles: Vec<String>,
+    /// What the WSJT-X clients have highlighted, and who they are. Replayed on
+    /// connect: a highlight is a standing condition, sent once when JTAlert
+    /// decides a station is wanted and not again.
+    pub wsjtx_highlights: Vec<sdroxide_types::WsjtxHighlight>,
+    pub wsjtx_clients: Vec<String>,
 }
 
 /// Everything the routes are served out of: the station's radios and the
@@ -1083,6 +1088,14 @@ fn handle_event(shared: &Shared, ev: RadioEvent) {
             // carries no grid square, so there is nowhere on the map to
             // place a reception.
             RadioEvent::Pi4Spots(s) => Some(ServerMsg::Pi4Spots(s)),
+            RadioEvent::WsjtxHighlights(h) => {
+                latest.wsjtx_highlights = h.clone();
+                Some(ServerMsg::WsjtxHighlights(h))
+            }
+            RadioEvent::WsjtxClients(c) => {
+                latest.wsjtx_clients = c.clone();
+                Some(ServerMsg::WsjtxClients(c))
+            }
             RadioEvent::Rds(d) => {
                 // Cached without the group log: that part is a delta, and
                 // replaying one batch of it to a client that joined later would

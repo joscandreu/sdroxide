@@ -190,6 +190,8 @@ async fn run_session(
         hd,
         relay,
         profiles,
+        wsjtx_highlights,
+        wsjtx_clients,
     ) = {
         let latest = shared.latest.lock().unwrap();
         (
@@ -216,6 +218,8 @@ async fn run_session(
             latest.hd.clone(),
             latest.relay.clone(),
             latest.profiles.clone(),
+            latest.wsjtx_highlights.clone(),
+            latest.wsjtx_clients.clone(),
         )
     };
     let ack = ServerMsg::HelloAck { proto: PROTO_VERSION, caps, state, rx_codec, tx_codec };
@@ -237,6 +241,8 @@ async fn run_session(
     let _ = socket.send(msg(&ServerMsg::MemoryFolders(mem_folders))).await;
     let _ = socket.send(msg(&ServerMsg::Scanner(scanner))).await;
     let _ = socket.send(msg(&ServerMsg::Profiles(profiles))).await;
+    let _ = socket.send(msg(&ServerMsg::WsjtxHighlights(wsjtx_highlights))).await;
+    let _ = socket.send(msg(&ServerMsg::WsjtxClients(wsjtx_clients))).await;
     // The operator config, which the engine announced once at startup. Without
     // this replay the client's callsign and grid come up empty and greyed out.
     if let Some(d) = digi {

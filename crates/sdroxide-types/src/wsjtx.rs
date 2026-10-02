@@ -5,8 +5,11 @@ use serde::{Deserialize, Serialize};
 /// This is sdroxide *being* WSJT-X for the logging ecosystem: GridTracker,
 /// JTAlert, N1MM+ and Log4OM all learn about decodes and contacts from the
 /// datagrams WSJT-X sends to UDP 2237. It complements [`crate::RigctldConfig`]
-/// and [`crate::TciServerConfig`], which offer control surfaces — this one is
-/// output only, and nothing on the socket can touch the radio.
+/// and [`crate::TciServerConfig`], which offer control surfaces.
+///
+/// The clients can talk back — Reply, Halt Tx, Free Text, Replay, Highlight
+/// Callsign — and a Reply keys the transmitter, so everything but Halt Tx is
+/// ignored unless [`WsjtxConfig::accept_control`] says otherwise.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WsjtxConfig {
@@ -29,6 +32,14 @@ pub struct WsjtxConfig {
     /// requires.
     #[serde(default)]
     pub n1mm: N1mmConfig,
+    /// Act on what the clients send back: answer a decode they Reply to, send
+    /// their Free Text, Replay the decodes, colour the callsigns they
+    /// highlight. Off by default — a Reply starts a transmission, and
+    /// switching the broadcast on was never a promise to let anything on the
+    /// port key the radio. Halt Tx is honoured whatever this says: it can only
+    /// stop a transmission. Appended, as the wire requires.
+    #[serde(default)]
+    pub accept_control: bool,
 }
 
 impl Default for WsjtxConfig {
@@ -39,6 +50,7 @@ impl Default for WsjtxConfig {
             port: 2237,
             id: "WSJT-X".into(),
             n1mm: N1mmConfig::default(),
+            accept_control: false,
         }
     }
 }
@@ -91,5 +103,72 @@ impl Default for N1mmConfig {
 impl N1mmConfig {
     pub fn addr(&self) -> String {
         format!("{}:{}", self.host, self.port)
+    }
+}
+
+/// A callsign a WSJT-X client asked to have coloured in the decode list
+/// (its Highlight Callsign message) — how JTAlert and GridTracker mark the
+/// stations they consider wanted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WsjtxHighlight {
+    /// Uppercased.
+    pub call: String,
+    /// Row background, as RGB. `None` leaves the row's own colour.
+    pub bg: Option<[u8; 3]>,
+    /// Callsign colour, as RGB. `None` leaves the row's own colour.
+    pub fg: Option<[u8; 3]>,
+    /// Colour only the newest decode from this station, not every one.
+    pub last_only: bool,
+}
+
+/// The colours to draw a decode row from `call` with, if a client has
+/// highlighted it. `newest` is whether this row is the newest one from that
+/// station, which is all a `last_only` highlight colours.
+pub fn wsjtx_highlight_for<'a>(
+    highlights: &'a [WsjtxHighlight],
+    call: &str,
+    newest: bool,
+) -> Option<&'a WsjtxHighlight> {
+    let call = call.trim_start_matches('<').trim_end_matches('>');
+    highlights.iter().find(|h| h.call.eq_ignore_ascii_case(call)).filter(|h| newest || !h.last_only)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hl(call: &str, last_only: bool) -> WsjtxHighlight {
+        WsjtxHighlight { call: call.into(), bg: Some([255, 0, 0]), fg: None, last_only }
+    }
+
+    #[test]
+    fn a_highlight_colours_every_row_from_the_station() {
+        let list = [hl("W9XYZ", false)];
+        assert!(wsjtx_highlight_for(&list, "W9XYZ", true).is_some());
+        assert!(wsjtx_highlight_for(&list, "w9xyz", false).is_some(), "case does not matter");
+        assert!(
+            wsjtx_highlight_for(&list, "<W9XYZ>", false).is_some(),
+            "a hashed call is the call"
+        );
+        assert!(wsjtx_highlight_for(&list, "K1ABC", true).is_none());
+    }
+
+    #[test]
+    fn last_only_colours_the_newest_row_alone() {
+        let list = [hl("W9XYZ", true)];
+        assert!(wsjtx_highlight_for(&list, "W9XYZ", true).is_some());
+        assert!(wsjtx_highlight_for(&list, "W9XYZ", false).is_none());
+    }
+
+    #[test]
+    fn an_empty_list_colours_nothing() {
+        assert!(wsjtx_highlight_for(&[], "W9XYZ", true).is_none());
+    }
+
+    #[test]
+    fn control_is_off_unless_asked_for() {
+        assert!(!WsjtxConfig::default().accept_control);
+        let old: WsjtxConfig = serde_json::from_str(r#"{"enabled":true}"#).unwrap();
+        assert!(!old.accept_control, "a wsjtx.json from before the setting keeps control off");
     }
 }

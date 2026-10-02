@@ -32,6 +32,9 @@ struct DecodeRow<'a> {
     cq: bool,
     novelty: sdroxide_types::Novelty,
     to_me: bool,
+    /// The colours a WSJT-X client (JTAlert, GridTracker) asked this station
+    /// to be drawn in, if any.
+    hl: Option<&'a sdroxide_types::WsjtxHighlight>,
 }
 
 /// Whether a spot's announced mode is the one this panel works.
@@ -410,6 +413,19 @@ impl SdroxideApp {
         // decodes for the per-row novelty lookups.
         self.log_index();
         let log_ix = &self.log_index_cache.as_ref().expect("just refreshed").1;
+        // A client's "last only" highlight colours a station's newest row and
+        // no other. The list runs newest turn first, so that is the first row
+        // carrying the call.
+        let highlights = &self.wsjtx_highlights;
+        let highlight_for = |call: &str, newest: bool| {
+            sdroxide_types::wsjtx_highlight_for(highlights, call, newest)
+        };
+        let mut seen_calls = std::collections::HashSet::new();
+        let newest: Vec<bool> = self
+            .digi_decodes
+            .iter()
+            .map(|d| d.from.as_deref().is_some_and(|f| seen_calls.insert(f.to_ascii_uppercase())))
+            .collect();
         // Filter (CQ-only / new-only) and precompute distance for sorting and
         // display. Entries stay newest-turn-first; same-slot decodes are
         // contiguous in the list. A "CQ DX" from a station we're local to is not
@@ -442,7 +458,8 @@ impl SdroxideApp {
                     })
                     .flatten();
                 let entity = d.from.as_deref().and_then(sdroxide_types::resolve_callsign);
-                Some(DecodeRow { idx: i, d, entity, dist_km, cq, novelty, to_me })
+                let hl = d.from.as_deref().and_then(|f| highlight_for(f, newest[i]));
+                Some(DecodeRow { idx: i, d, entity, dist_km, cq, novelty, to_me, hl })
             })
             .collect();
         // Whether a row still has the width for the one-line layout. Its fixed
@@ -536,7 +553,10 @@ impl SdroxideApp {
                     ui.separator();
                 }
                 for k in gi..end {
-                    let DecodeRow { idx: i, d, entity, dist_km, cq, novelty, to_me } = items[k];
+                    let DecodeRow { idx: i, d, entity, dist_km, cq, novelty, to_me, hl } = items[k];
+                    let rgb = |c: [u8; 3]| Color32::from_rgb(c[0], c[1], c[2]);
+                    let hl_bg = hl.and_then(|h| h.bg).map(rgb);
+                    let hl_fg = hl.and_then(|h| h.fg).map(rgb);
                     // Free text names no sender, and a hashed callsign nobody
                     // has heard yet resolves to none either — say which it is
                     // rather than showing a bare "?".
@@ -621,6 +641,8 @@ impl SdroxideApp {
                     let call_lbl =
                         egui::Label::new(RichText::new(&who).size(15.0).strong().color(if to_me {
                             crate::theme::YELLOW()
+                        } else if let Some(fg) = hl_fg {
+                            fg
                         } else if d.from.is_none() || dupe {
                             crate::theme::gray(105)
                         } else if cq {
@@ -710,6 +732,12 @@ impl SdroxideApp {
                     let inner = egui::Frame::new()
                         .fill(if to_me {
                             crate::theme::TOME_BG()
+                        } else if let Some(bg) = hl_bg {
+                            // The client's colour, as it would draw the row in
+                            // WSJT-X's own band activity window. A station
+                            // calling us keeps the gold: that row is owed an
+                            // answer whatever a logger thinks of it.
+                            bg
                         } else if cq {
                             crate::theme::CQ_BG()
                         } else {

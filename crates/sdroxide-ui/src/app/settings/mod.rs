@@ -3324,7 +3324,13 @@ impl SdroxideApp {
                 ui.add_space(12.0);
                 ui.separator();
                 ui.add_space(8.0);
-                settings_wsjtx_tab(ui, io.wsjtx_edit, self.wsjtx_seeded, io.wsjtx_apply);
+                settings_wsjtx_tab(
+                    ui,
+                    io.wsjtx_edit,
+                    self.wsjtx_seeded,
+                    &self.wsjtx_clients,
+                    io.wsjtx_apply,
+                );
                 ui.add_space(12.0);
                 ui.separator();
                 ui.add_space(8.0);

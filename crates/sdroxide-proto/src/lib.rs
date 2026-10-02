@@ -1492,7 +1492,13 @@ use sdroxide_types::{
 /// `Command::SetDigiConfig` and `DigiStatus` whole, so a v169 peer reads the
 /// extra bytes as the start of the next field and fails to decode every
 /// digital status — the same break as v162's appended CW settings.
-pub const PROTO_VERSION: u16 = 170;
+///
+/// v171: inbound WSJT-X UDP control. `WsjtxConfig` gains `accept_control` on
+/// its tail, and `ServerMsg` gains `WsjtxHighlights` (the callsigns a client
+/// asked to have coloured) and `WsjtxClients` (who is listening), appended so
+/// no existing discriminant moves. `WsjtxConfig` rides the station config
+/// whole, so a v170 peer reads the extra byte as the start of the next field.
+pub const PROTO_VERSION: u16 = 171;
 const VERSION_BYTE: u8 = 0x12;
 
 #[derive(Debug, thiserror::Error)]
@@ -1951,6 +1957,12 @@ pub enum ServerMsg {
     ///
     /// Appended last, for the usual reason.
     Pi4Spots(Vec<sdroxide_types::Pi4Spot>),
+    /// `RadioEvent::WsjtxHighlights`: the callsigns the WSJT-X clients want
+    /// coloured in the decode list, whole. Replayed on connect.
+    WsjtxHighlights(Vec<sdroxide_types::WsjtxHighlight>),
+    /// `RadioEvent::WsjtxClients`: the WSJT-X clients heard from lately.
+    /// Replayed on connect.
+    WsjtxClients(Vec<String>),
 }
 
 /// One radio in a station's roster, as a client sees it.
@@ -2025,6 +2037,25 @@ mod tests {
 
         let m = ServerMsg::Profiles(vec!["Contest".into(), "DX".into()]);
         let back: ServerMsg = decode(&encode(&m).unwrap()).unwrap();
+        assert_eq!(back, m);
+
+        // Inbound WSJT-X control: appended variants, and a config that grew a
+        // field on its tail.
+        for m in [
+            ServerMsg::WsjtxHighlights(vec![sdroxide_types::WsjtxHighlight {
+                call: "W9XYZ".into(),
+                bg: Some([255, 0, 0]),
+                fg: None,
+                last_only: true,
+            }]),
+            ServerMsg::WsjtxClients(vec!["JTAlert".into(), "GridTracker".into()]),
+        ] {
+            let back: ServerMsg = decode(&encode(&m).unwrap()).unwrap();
+            assert_eq!(back, m);
+        }
+        let cfg = sdroxide_types::WsjtxConfig { accept_control: true, ..Default::default() };
+        let m = ClientMsg::Command(Command::SetWsjtxConfig(cfg));
+        let back: ClientMsg = decode(&encode(&m).unwrap()).unwrap();
         assert_eq!(back, m);
 
         // The station-roster edits, and the announcement that answers them.

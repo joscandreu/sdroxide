@@ -1400,6 +1400,8 @@ impl SdroxideApp {
                     }
                     self.wspr_spots.truncate(crate::app::panels::wspr::WSPR_SPOT_ROWS);
                 }
+                RadioEvent::WsjtxHighlights(h) => self.wsjtx_highlights = h,
+                RadioEvent::WsjtxClients(c) => self.wsjtx_clients = c,
                 RadioEvent::Pi4Spots(s) => {
                     // Newest first. No de-duplication set, unlike WSPR's:
                     // there is no PI4 equivalent of a WSPRnet download to

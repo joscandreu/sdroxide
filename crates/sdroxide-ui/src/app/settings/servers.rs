@@ -1,8 +1,9 @@
 //! The Servers tab: the three interfaces this app offers to other software.
 //!
 //! Hamlib rigctld and the TCI server are control surfaces third-party clients
-//! connect to; the WSJT-X UDP broadcast is one-way, feeding decodes, status
-//! and logged QSOs to GridTracker, JTAlert, N1MM+ and Log4OM. All three are
+//! connect to; the WSJT-X UDP broadcast feeds decodes, status and logged QSOs
+//! to GridTracker, JTAlert, N1MM+ and Log4OM, and — only when the operator
+//! allows it — takes their Reply, Free Text and highlights back. All three are
 //! bound by the engine, which is also what persists their configuration and
 //! reports back whether the bind succeeded.
 //!
@@ -27,6 +28,7 @@ pub(in crate::app) fn settings_wsjtx_tab(
     ui: &mut egui::Ui,
     cfg: &mut sdroxide_types::WsjtxConfig,
     seeded: bool,
+    clients: &[String],
     apply: &mut bool,
 ) {
     ui.label(RichText::new("WSJT-X UDP broadcast").size(14.0).strong().color(crate::theme::CYAN()));
@@ -38,8 +40,9 @@ pub(in crate::app) fn settings_wsjtx_tab(
     ui.label(
         RichText::new(
             "Sends decodes, station status and logged QSOs the way WSJT-X does, so GridTracker, \
-             JTAlert, N1MM+ and Log4OM work with sdroxide unchanged. Output only — nothing on \
-             this socket can touch the radio.",
+             JTAlert, N1MM+ and Log4OM work with sdroxide unchanged. A client's Halt Tx is \
+             always obeyed; nothing else it sends touches the radio unless control is accepted \
+             below.",
         )
         .weak(),
     );
@@ -74,6 +77,21 @@ pub(in crate::app) fn settings_wsjtx_tab(
                 );
             ui.end_row();
         });
+        ui.add_space(6.0);
+        crate::chrome::checkbox(ui, &mut cfg.accept_control, "Accept control from clients")
+            .on_hover_text(
+                "Act on what the clients send back: answer a decode they Reply to (this \
+                 TRANSMITS), send their Free Text, Replay the decodes, and colour the callsigns \
+                 they highlight. Only datagrams from the host above and addressed to the name \
+                 above are read. Halt Tx is obeyed whether or not this is on.",
+            );
+        ui.add_space(4.0);
+        let heard = if clients.is_empty() {
+            "Clients: none heard yet".to_string()
+        } else {
+            format!("Clients: {}", clients.join(", "))
+        };
+        ui.label(RichText::new(heard).weak());
     });
 
     // ── N1MM+, the other dialect ──

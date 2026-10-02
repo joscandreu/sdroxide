@@ -12291,6 +12291,11 @@ deliberately silent: a file of last year's contacts is not a contact being made.
 - **Port** — 2237, the port every client defaults to.
 - **Identify as** — the name clients see. It defaults to `WSJT-X` because some
   loggers accept nothing else.
+- **Accept control from clients** — off by default. See *Clients talking back*
+  below.
+- **Clients** — the programs heard from lately, by the name each one announces
+  itself with (`JTAlert`, `GridTracker`). Empty means nothing has spoken to
+  sdroxide on this socket yet; it does not mean nothing is listening.
 
 Changing band tells the clients to empty their decode windows, exactly as
 WSJT-X does on its own band change — otherwise a logger goes on showing the band
@@ -12298,9 +12303,44 @@ you have left, which is the one list sdroxide's own window has just been taken
 out of. Tuning about within a band sends nothing, and WSPR band hopping is
 exempt.
 
-This one is **output only**: nothing is read from the socket, so no program on
-it can tune or key the radio. Programs that want to *drive* sdroxide use rigctld
-or the TCI server above.
+**Clients talking back.** The same programs send a handful of messages of their
+own, to the address sdroxide's datagrams come from. These are read:
+
+- **Halt Tx** — stop transmitting: at once, or (the client's "auto-TX only"
+  form) at the end of the current over. **Always obeyed** while the broadcast is
+  on, whatever the switch below says: it can only take the transmitter off the
+  air, and a logger that can see you keying should be able to stop it.
+- **Reply** — what a double-click on a decode in GridTracker or JTAlert sends.
+  sdroxide answers that station exactly as **REPLY** on its own decode list does
+  ([3.2.3](#323-working-stations)): straight away if they are calling CQ or
+  calling you, otherwise waiting for their next CQ rather than barging into
+  their exchange. The decode is found by the time, text and audio offset it was
+  broadcast with; a Reply naming anything sdroxide did not send is ignored.
+  **This transmits.**
+- **Free Text** — sent in the next transmit slot, as if typed into the free-text
+  field: upper case, cut to FT8's 13 characters. A client that only *sets* the
+  text without asking for it to be sent changes nothing, since sdroxide has no
+  separate place to hold it.
+- **Replay** — every decode heard on this band is broadcast again.
+- **Highlight Callsign** — how JTAlert and GridTracker mark a station they
+  consider wanted. The station's rows in the FT8/FT4/FT2 decode list take the
+  client's background and callsign colours (all its rows, or the newest only, as
+  the client asks); a station calling you keeps its gold. Highlights belong to
+  the band they were made on and go when you change band.
+
+Everything but Halt Tx is ignored unless **Accept control from clients** is on.
+Switching the broadcast on was a decision to *tell* loggers what you are doing,
+not to let anything on the port key your transmitter. With it on, the commands
+go through the same path as your own buttons, so the ham-band lockout, Hold TX
+frequency and the transmit watchdog govern them exactly as they govern a click.
+
+Only datagrams from the host in **Send to** are read (any host, for a multicast
+group), and only those addressed to the name in **Identify as** — a client
+driving two WSJT-X instances on one port tells them apart by that name, and a
+message for the other one is not acted on. The other inbound messages WSJT-X
+defines — Location, Configure, Switch Configuration, and a client's Clear — are
+recognised and ignored. Programs that want to tune sdroxide or change its mode
+use rigctld or the TCI server above.
 
 **N1MM+ contactinfo** sits on the same page, with its own switch and its own
 port, because a logger that speaks one of these dialects is deaf to the other
@@ -14674,7 +14714,7 @@ and not the station's.
 | `winlink/` | directory | The Winlink mailbox: `inbox/`, `outbox/`, `sent/` and `archive/`, one `.b2f` file per message holding it exactly as it rides the wire ([§11](#11-winlink-radio-email)). The account settings live in `net.json`, password included, in plaintext. |
 | `tciserver.json` | JSON | Built-in TCI server: enabled, bind address, port, advertised device name, whether clients may transmit, and the client limit. |
 | `rigctld.json` | JSON | Built-in Hamlib rigctld server: enabled, bind address, port, reported rig name, whether clients may transmit, and the client limit. |
-| `wsjtx.json` | JSON | WSJT-X UDP broadcast: enabled, destination host and port, and the name clients see. |
+| `wsjtx.json` | JSON | WSJT-X UDP broadcast: enabled, destination host and port, the name clients see, and whether clients may control the station (`accept_control`). |
 | `scanner.json` | JSON | The scanner: memories or a range, the range and channel step, the level that counts as busy, the dwell, how it resumes, and which memories to skip. |
 | `renderer-fallback.txt` | text | Written only when a panic came from the graphics driver: the next start renders through OpenGL and says so. Delete it to go back to the default renderer ([14](#14-troubleshooting)). |
 | `skimmer.json` | JSON | Skimmers: which of CW / PSK / RTTY run, and each one's spot squelch in dB. Restored at startup; a narrowband (audio-mode) radio still forces them off without disturbing what you picked. |

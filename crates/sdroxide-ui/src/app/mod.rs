@@ -864,6 +864,11 @@ pub struct SdroxideApp {
     /// UI-owned editable copy, seeded from the engine like the configs above.
     wsjtx_edit: sdroxide_types::WsjtxConfig,
     wsjtx_seeded: bool,
+    /// Callsigns the WSJT-X clients want coloured in the decode list, from
+    /// `RadioEvent::WsjtxHighlights`.
+    wsjtx_highlights: Vec<sdroxide_types::WsjtxHighlight>,
+    /// The WSJT-X clients heard from lately, from `RadioEvent::WsjtxClients`.
+    wsjtx_clients: Vec<String>,
     /// Live status from `RadioEvent::RigctldStatus`. Same shape as the TCI
     /// server's, so the two share one status type.
     rigctld_status: Option<TciServerStatus>,
@@ -1553,6 +1558,8 @@ impl SdroxideApp {
             rigctld_edit: sdroxide_types::RigctldConfig::default(),
             rigctld_seeded: false,
             wsjtx_edit: sdroxide_types::WsjtxConfig::default(),
+            wsjtx_highlights: Vec::new(),
+            wsjtx_clients: Vec::new(),
             wsjtx_seeded: false,
             rigctld_status: None,
             tci_srv_edit: sdroxide_types::TciServerConfig::default(),

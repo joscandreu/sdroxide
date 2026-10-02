@@ -184,6 +184,10 @@ message format, a panel and a logbook:
   wants an accurate clock — its timing search is only about half a second wide.
 - All decoding and encoding run server-side in the native engine, so native and
   browser clients behave identically.
+- The **WSJT-X UDP** broadcast feeds GridTracker, JTAlert and Log4OM, and —
+  once you allow it — takes their **Reply**, **Free Text**, **Replay** and
+  **Highlight Callsign** back, so a click in JTAlert answers a station here.
+  Their **Halt Tx** is always obeyed.
 
 ## WSPR
 
