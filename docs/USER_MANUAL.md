@@ -1907,7 +1907,7 @@ characters of the text.
 - One press sends the whole message in one piece, exactly as **SEND ON RETURN**
   does for a typed line — which is the point of them on a transceiver that keys
   itself from text: one hand-off to the rig's keyer instead of one per word.
-- **F1–F9** press the first nine, so long as nothing on screen has the keyboard
+- **F2–F10** press the first nine, so long as nothing on screen has the keyboard
   — no caret in the transmit box, no field being typed into anywhere else. That
   exclusion is deliberate: an operator part-way through a callsign has a key down
   in a text field, and a function key firing a message from under them would put
@@ -1924,6 +1924,9 @@ characters of the text.
   with the rest of the digital-mode configuration, so they survive a restart,
   they reach a remote client with everything else, and Settings → General
   **EXPORT** carries them to another machine.
+- The keyboard modes — PSK, RTTY, Olivia, THOR — have the same **MSG** row and
+  editor, on a list of their own, so a CW abbreviation and a PSK sentence each
+  stay where they belong ([3.3](#33-psk31-and-rtty)).
 
 It is off by default, because sending as you type is how a CW operator sends:
 the first letter of a callsign is on the air while the rest is still being
@@ -1977,6 +1980,12 @@ key** action in Settings → Controls ([6.4.1](#641-keyboard)), so you can put i
 on any key you like. A space bar's travel is long for keying, and a key with a
 shorter throw is easier to send a decent fist on.
 
+**A MIDI key.** The same action can be bound to a MIDI note — the key-down
+note of a keyer or paddle interface — in Settings → Controls
+([6.4.3](#643-midi-controller)). The note keys while it is on, whatever button
+mode the binding has, and its first press switches **KEY** on by itself. Bind
+the key note, not **PTT**: PTT in CW transmits a steady carrier.
+
 - The first press keys the transmitter; there is no need to press **TX**. Between
   elements the transmitter holds the frequency the way **TX** does, and releases
   itself once the key has been up for as long as **IDLE** says.
@@ -2016,6 +2025,19 @@ along with the setting that changes it.
 > the route the **CW keying** setting picks: text handed to the rig's own keyer
 > with the rig in CW, or the keyed tone as audio (MCW) with the rig held on a
 > sideband ([§6.2.2](#622-cat-radios-serial-control--usb-audio)).
+
+**Learning Morse (the trainer).** The **TRAINER** chip in the CW panel opens a
+learning tool, not a sending one: it plays Morse through
+this computer's speakers only and **never keys the radio**, so it works on a
+receive-only set and in SWL mode. **TRANSLATE** converts text to Morse and back
+with the same ITU alphabet the decoder and keyer use — letters, digits,
+punctuation and the common prosigns. **PRACTICE** plays a message at your own
+pace, with the tone, the character speed and **Farnsworth** spacing: the letters
+go out at full speed and the gaps are stretched, so a beginner hears the letter
+as a whole before they can send it that fast. **LEARN** is the Koch drill — it
+starts with two characters, plays each three times, and a run of ten correct
+answers adds the next; the score and how far the set has unlocked are remembered
+between sessions.
 
 ### 2.15 Band conditions
 
@@ -2118,10 +2140,14 @@ working it. Either tab carries a dot while its own work is running, and the
 subscription, anything you pasted into the TLE tab
 ([6.10](#610-tle-satellites-and-their-frequencies)), and the curated set — with
 a search box and, once your grid locator is set, live elevation and the next
-pass for each. Pick one and its published links appear: transponders,
+pass for each. Pass times are worked out in UTC and shown in UTC with your
+own local time beside them (`13:08 UTC (14:08 local)`). Pick one and its
+published links appear: transponders,
 repeaters, beacons, each with its passbands and mode, inverting transponders
 marked `inv`. **TUNE** just sets the dial and mode to the link, nothing more.
-**LOCK ON** is the mode itself.
+**LOCK ON** is the mode itself. An SSTV link — the ISS lists both its 70 cm
+(437.550 MHz) and 2 m (145.800 MHz) SSTV downlinks — tunes and locks in
+**SSTV FM**, so the picture is decoded with the Doppler corrected.
 
 **What a lock does.** The engine — not the screen — propagates the orbit with
 SGP4 a few times a second and:
@@ -3363,6 +3389,11 @@ Click **SETUP** in the QSO area to open the **FT8 / FT4 / FT2 Setup** window:
   opposite the one they were last heard transmitting in, whichever that is; the
   readout beside your transmit offset says which period is actually in use.
 - **Auto-sequence** — advance the QSO automatically (recommended on).
+- **Decode depth** (FT8) — how hard the decoder digs for weak signals hidden
+  under stronger ones. The quick single pass is always shown first, so a reply
+  is never held up; **Normal** and **Deep** then add a signal-subtraction pass
+  whose extra decodes arrive up to a second or so later. **Fast** skips it,
+  **Deep** (the default) finds the most.
 - **TX watchdog / Give up after** — how long unattended transmitting may
   continue with no progress, and how many unanswered calls to one station are
   worth making. Both 0 to disable.
@@ -3866,6 +3897,11 @@ panel is a live **messaging area** instead of a QSO sequencer.
   watch the transmission catch up when you pause.
 - **CALL CQ** loads a CQ macro and starts sending it; **CLEAR** empties the
   buffer and stops; pressing **TX** again unkeys.
+- **MSG** opens the message editor: up to ten buttons of your own text — working
+  conditions, the weather, a standard reply — each sending its whole line in one
+  press, with **F2–F10** for the first nine. It is the same control the CW panel
+  carries, on a list of its own, and it is saved with the station's
+  configuration ([2.14](#214-cw-decoding-and-keyboard-sending)).
 - **SEND ON RETURN** changes that to a line at a time: nothing leaves the box
   until you press **Return**, and then the whole line goes out and the over
   starts on its own. Type at your own pace, read it back, correct it, and commit
@@ -4746,6 +4782,11 @@ Everything is in the `STATUS` pane; WSPR has no separate setup dialog.
   transmission. On by default: two hundred hertz shared by everyone only works
   if nobody parks in the middle of it.
 
+**TRANSMIT**, **POWER** and the band-hop settings belong to the radio they are
+set on. With several radios open, each beacons — or doesn't — on its own say:
+switching one on leaves the others as they were, and a radio added later starts
+with its beacon off.
+
 Your **callsign and grid come from the General tab of Settings** — the same
 identity the rest of the program reports under. The panel says which it is
 transmitting as, and says so in yellow if either is still blank.
@@ -5246,7 +5287,8 @@ your nearest coast station broadcasts in) and **4209.5 kHz** (tropical). What
 they tune is 1.7 kHz *below* the channel, because the quoted frequency is the
 assigned one — the centre of the two tones — and a receiver in upper sideband
 has to sit below it to put them at 1615 and 1785 Hz. That arithmetic is done
-for you, and the readout still says where the signal is.
+for you, and the readout still says where the signal is. A dial a few hundred
+hertz off is fine too: the decoder follows the tones up to ±350 Hz away.
 
 **What you see.** Two panes:
 
@@ -6095,8 +6137,16 @@ meteor trail appears it catches part of one. The decoder scans the whole
 period for those captures; there is no slot-aligned decode the way FT8 has,
 and a whole period may pass with nothing.
 
-**Receive only.** Transmit is not wired in this build. What the panel does is
-copy the pings that arrive.
+**Transmitting.** FSK441 is worked by sending the message over and over: you
+hold transmit and the message repeats for the length of the over, so a meteor's
+brief trail catches whatever part of it is passing. The **TX** row under the
+decode list is a single line — type the message (`W1ABC W9XYZ FN42`, or one of
+the shorthand words `R26`/`R27`/`RRR`/`73`) and press **TX**; **CALL CQ** fills
+the box with a CQ and starts it. The message loops until you unkey, with a space
+sent between repeats so one pass' last word does not run into the next one's
+first. There is no automatic sequencing and no station being called: a
+meteor-scatter contact is arranged by ear and by the shorthand, which is what
+the mode has always been.
 
 ## 4. Skimmers
 
@@ -8008,6 +8058,14 @@ reaches nothing at all. `Rig keyer (CAT)` — the default — therefore hands th
 panel's text to the radio and lets the radio's own keyer send it, which is the
 only route that puts CW on the air from a rig that is *in* CW. There is no PTT
 around it: the rig switches to transmit for the length of the message itself.
+
+That route needs the control link, so it is only taken when there is one. With
+no serial port set (or, for rigctld and flrig, no address) — a CAT profile used
+for a VOX rig, say — `Rig keyer (CAT)` falls back to `Sound card (MCW)` while
+the setting itself stays as it is: the CW panel's key, a paddle, typed text and
+the message buttons all go out as a tone through the sound card, at the CW
+transmit level, and VOX keys the rig. Set a port and the rig's keyer is used
+again.
 
 What that needs on the radio:
 
@@ -10834,7 +10892,9 @@ where the library is absent.
   is on. Takes effect on **Apply**: a LimeSuite stream is bound to its channel
   when it is created.
 - **Sample rate** — 1 to 40 Msps. The board's real limits are read from it when
-  it opens; this list is the useful subset.
+  it opens; this list is the useful subset. A **LimeSDR Mini** also offers 100,
+  250, 500 and 750 ksps: its USB link underruns on transmit at 1 Msps, so pick
+  one of those if your transmissions break up.
 - **Receive gain** — one combined figure, 0–73 dB, which LimeSuite distributes
   across the LNA, the TIA and the PGA itself. It takes whole decibels, so a
   slider left between two of them is a radio at the lower one, and the panel
@@ -12321,7 +12381,10 @@ own, to the address sdroxide's datagrams come from. These are read:
   field: upper case, cut to FT8's 13 characters. A client that only *sets* the
   text without asking for it to be sent changes nothing, since sdroxide has no
   separate place to hold it.
-- **Replay** — every decode heard on this band is broadcast again.
+- **Replay** — every decode heard on this band is broadcast again. At an FT8
+  **Decode depth** of Normal or Deep, a slot's decodes arrive in two batches
+  (the quick pass, then the extras signal subtraction finds); both are kept, so
+  a Reply can name a station from either and a Replay sends them all.
 - **Highlight Callsign** — how JTAlert and GridTracker mark a station they
   consider wanted. The station's rows in the FT8/FT4/FT2 decode list take the
   client's background and callsign colours (all its rows, or the newest only, as
@@ -14198,6 +14261,14 @@ where you have but it is unconfirmed, and a dim green dot once a QSL has come
 back. A key in the bottom-right corner gives the counts. It follows the same band
 filter as this window, so switching to `20m` here repaints the globe as "what is
 missing on twenty".
+
+**The grid tracker** — the **GRID** button (System box) opens the worked squares on their
+own map: each 4-character Maidenhead square in the log, on any band, is filled on the flat world map,
+**amber** where worked and **green** where a QSL has come back, with your own locator marked
+on top. Drag to pan and wheel to zoom; the square under the pointer is named. The **HEARD**
+layer shades, in cyan, the squares on the live decode list rather than the log — what is on
+the air right now — so the map shows activity as it happens. A square that is both heard and
+worked reads as worked.
 
 ### 10.5 FreeDV Reporter (qso.freedv.org)
 
@@ -16145,7 +16216,7 @@ using. Bind them under **Speech** on the Controls tab:
 | JT65 / JT9 | The classic WSJT weak-signal modes in a 60-second slot: JT65A (65-FSK, Reed–Solomon) and JT9 (9-FSK, 16 Hz wide), with the short 72-bit JT message. Receive only. See [3.22](#322-jt65-and-jt9). |
 | FST4 | The slow weak-signal mode for EME, troposcatter and LF/MF, at a chosen 15/30/60/120/300-second period, with FT8's 77-bit message. Receive only. See [3.23](#323-fst4). |
 | Q65 | WSJT-X's modern weak-signal mode for EME and scatter paths: ten sub-modes (period and tone spacing), FT8's 77-bit message and a CRC. Receive only. See [3.24](#324-q65). |
-| FSK441 | The original meteor-scatter mode on 6 m and 2 m: 4-FSK at 441 baud carrying free text and the `R26`/`R27`/`RRR`/`73` single-tone shorthand, in a 15/30-second period. The decoder hunts the period for meteor-trail pings. Receive only. See [3.25](#325-fsk441). |
+| FSK441 | The original meteor-scatter mode on 6 m and 2 m: 4-FSK at 441 baud carrying free text and the `R26`/`R27`/`RRR`/`73` single-tone shorthand, in a 15/30-second period. The decoder hunts the period for meteor-trail pings; transmit repeats the message for the length of the over. See [3.25](#325-fsk441). |
 | PSK | PSK31 keyboard mode (BPSK31 / varicode). |
 | RTTY | RTTY keyboard mode (Baudot; selectable shift and baud), on a sideband. |
 | RTTY-FM | The same modem on an FM carrier, the way a club bulletin is still sent on VHF. |

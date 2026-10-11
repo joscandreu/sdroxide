@@ -210,6 +210,32 @@ pub const RTTY_CENTER_HZ: f32 = 2210.0;
 /// mode's audio offset, there is nothing here for an operator to choose.
 pub const NAVTEX_TONE_HZ: f32 = 1700.0;
 
+/// How hard the FT8 decoder works for weak signals, and what it costs.
+///
+/// FT8's recall comes from signal subtraction, and the most thorough pass —
+/// WSJT-X's checkpointed multi-pass (mfsk-core's `.sic_early()`, a recall
+/// superset of the flat `.sic_rounds(n)`) — is **sequential by construction**,
+/// so it can neither be spread across cores nor made cheap. It was measured at
+/// ~1.2 s on a busy slot against FT8's 0.5 s transmit offset, so an operator who
+/// wants the reply to go out on time should be able to trade a few weak decodes
+/// for it. That trade is this setting.
+///
+/// Measured on mfsk-core's `qso3_busy.wav`, `.osd(true)`, 16 cores:
+/// - [`Fast`](Self::Fast) — one pass, no subtraction: ~30 ms, ~16 stations.
+/// - [`Normal`](Self::Normal) — flat multi-pass SIC: ~0.4 s, ~19–20.
+/// - [`Deep`](Self::Deep) — the checkpointed pass: ~1.2 s, ~22.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Ft8Depth {
+    /// One pass, no subtraction. Fastest, least sensitive.
+    Fast,
+    /// Flat multi-pass SIC: a little quicker than [`Deep`](Self::Deep), a
+    /// little less thorough.
+    Normal,
+    /// The checkpointed multi-pass. The most decodes.
+    #[default]
+    Deep,
+}
+
 /// A "special operating activity": a contest whose exchange is not the
 /// everyday grid-and-report, so the slotted modes have to send and read
 /// something else (issue #223).
@@ -532,6 +558,11 @@ pub struct DigiStatus {
     /// peer that matches the protocol version but not this build.
     #[serde(default)]
     pub acars: Option<AcarsStatus>,
+    /// Why a key-up was refused or is armed with nothing to send — an empty
+    /// message box, most often. `None` when there is nothing to say. A message
+    /// rather than a flag so each mode can name its own reason.
+    #[serde(default)]
+    pub tx_refused: Option<String>,
 }
 
 /// The running detail of the contact in progress: when it started and what has
@@ -1034,6 +1065,7 @@ impl DigiStatus {
             tx_even: config.tx_even,
             transmitting: false,
             tx_watchdog: false,
+            tx_refused: None,
             transcript: Vec::new(),
             config,
             text_rx: String::new(),
@@ -1325,8 +1357,13 @@ impl HellVariant {
     }
 }
 
-/// One of the operator's CW message buttons — what the chip says, and what it
-/// sends (issue #374).
+/// One of the operator's message buttons — what the chip says, and what it
+/// sends (issues #374, #463).
+///
+/// Shared by the CW panel (through [`DigiConfig::cw_macros`]) and the keyboard
+/// modes (through [`DigiConfig::text_macros`]): the same label-and-text shape,
+/// drawn by the same control, kept in two lists because the two kinds of
+/// message differ.
 ///
 /// The label is kept apart from the text because a chip has to be readable at a
 /// glance and the text it sends is a sentence: a button showing
@@ -2142,6 +2179,19 @@ pub struct DigiConfig {
     /// is a setting here. See [`crate::Fsk441Period`].
     #[serde(default)]
     pub fsk441_period: crate::Fsk441Period,
+    /// The same message buttons for the keyboard modes — PSK, RTTY, Olivia,
+    /// Thor: the working conditions or the weather an operator sends over and
+    /// over, typed once and kept across sessions (issue #463). A list of its
+    /// own rather than shared with the CW row above, because a CW abbreviation
+    /// and a PSK sentence are not the same message; identical in shape and
+    /// behaviour otherwise.
+    #[serde(default)]
+    pub text_macros: Vec<CwMacro>,
+    /// FT8: how hard the decoder works for weak signals — see [`Ft8Depth`].
+    /// The plain single-pass result is always emitted first whatever this says,
+    /// so it governs only the extra, subtracting batch.
+    #[serde(default)]
+    pub ft8_depth: Ft8Depth,
 }
 
 fn cw_default_tx_idle_s() -> f32 {
@@ -2167,6 +2217,56 @@ fn wspr_default_hop_bands() -> u16 {
     [Band::M80, Band::M40, Band::M30, Band::M20, Band::M17, Band::M15, Band::M12, Band::M10]
         .iter()
         .fold(0u16, |m, b| m | (1 << b.wire_index()))
+}
+
+/// The WSPR beacon settings that belong to one radio rather than the station.
+///
+/// The rest of [`DigiConfig`] is the operator's — callsign, grid, macros — and
+/// is shared by every radio. These say what *this* transmitter does: whether it
+/// beacons, at what power, and over which bands. Shared, setting radio 1's
+/// duty to 33 % started radio 2 beaconing too (issue #615), so each radio keeps
+/// its own copy, laid over the shared file when the config is loaded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WsprRadio {
+    /// [`DigiConfig::wspr_tx_percent`].
+    #[serde(default)]
+    pub tx_percent: u8,
+    /// [`DigiConfig::wspr_power_dbm`].
+    #[serde(default = "wspr_default_power")]
+    pub power_dbm: i16,
+    /// [`DigiConfig::wspr_hop`].
+    #[serde(default)]
+    pub hop: bool,
+    /// [`DigiConfig::wspr_hop_bands`].
+    #[serde(default = "wspr_default_hop_bands")]
+    pub hop_bands: u16,
+}
+
+/// Beacon off, as a fresh [`DigiConfig`] has it.
+impl Default for WsprRadio {
+    fn default() -> Self {
+        WsprRadio::of(&DigiConfig::default())
+    }
+}
+
+impl WsprRadio {
+    /// This radio's settings, as `cfg` holds them.
+    pub fn of(cfg: &DigiConfig) -> Self {
+        WsprRadio {
+            tx_percent: cfg.wspr_tx_percent,
+            power_dbm: cfg.wspr_power_dbm,
+            hop: cfg.wspr_hop,
+            hop_bands: cfg.wspr_hop_bands,
+        }
+    }
+
+    /// Lay these over `cfg`, leaving everything that is not WSPR's alone.
+    pub fn apply_to(self, cfg: &mut DigiConfig) {
+        cfg.wspr_tx_percent = self.tx_percent;
+        cfg.wspr_power_dbm = self.power_dbm;
+        cfg.wspr_hop = self.hop;
+        cfg.wspr_hop_bands = self.hop_bands;
+    }
 }
 
 /// Default for [`DigiConfig::sstv_banner_left`] — the operator's own callsign,
@@ -2238,6 +2338,7 @@ impl Default for DigiConfig {
             cw_wpm: cw_default_wpm(),
             cw_farnsworth_wpm: 0.0,
             cw_macros: Vec::new(),
+            text_macros: Vec::new(),
             cw_speed_lock: false,
             cw_engine: crate::CwEngine::default(),
             send_on_enter: false,
@@ -2333,6 +2434,7 @@ impl Default for DigiConfig {
             fst4_period: crate::Fst4Period::P60,
             q65_mode: crate::Q65Mode::A30,
             fsk441_period: crate::Fsk441Period::P30,
+            ft8_depth: Ft8Depth::default(),
         }
     }
 }

@@ -24,10 +24,12 @@ pub(in crate::app) mod awards;
 pub(in crate::app) mod bands;
 pub(in crate::app) mod drm;
 pub(in crate::app) mod frame;
+pub(in crate::app) mod grid_tracker;
 pub(in crate::app) mod hd;
 pub(in crate::app) mod hfdl;
 pub(in crate::app) mod ism;
 pub(in crate::app) mod logbook;
+pub(in crate::app) mod morse;
 pub(in crate::app) mod net;
 pub(in crate::app) mod panels;
 pub(crate) mod persist;
@@ -65,8 +67,8 @@ use self::panels::fsq::fsq_load_contacts;
 use self::panels::rf_paint::RfPaintUi;
 use self::panels::sstv::SstvUi;
 use self::persist::{
-    load_alerts_settings, load_broadcast_stations, load_qso_log, load_speech_settings,
-    load_ui_settings,
+    load_alerts_settings, load_broadcast_stations, load_morse_progress, load_qso_log,
+    load_speech_settings, load_ui_settings,
 };
 use self::settings::servers::TciServerStatus;
 use self::settings::{SatEditState, SettingsTab, TestOutcome};
@@ -576,6 +578,9 @@ pub struct SdroxideApp {
     /// Screen state, not the operator's: the buttons themselves live in
     /// `DigiConfig`.
     cw_macro_edit: bool,
+    /// The keyboard-mode message editor (`DigiConfig::text_macros`), the same
+    /// window on its own list.
+    text_macro_edit: bool,
     /// Whether the CW panel's keyboard-as-straight-key mode is engaged (issue
     /// #322). Screen state: the keyer's engagement lives in the controller,
     /// and this is the toggle's face and where the key is read.
@@ -797,6 +802,8 @@ pub struct SdroxideApp {
     flags: crate::flags::Flags,
     /// Logbook overlay open state, and the in-progress new/edit entry (if any).
     show_logbook: bool,
+    /// The Morse trainer window and its persisted progress.
+    morse: morse::MorseState,
     /// The Winlink mail window. Holds its own view state; the mailbox itself
     /// lives engine-side and is read a page at a time.
     pub(in crate::app) mail: winlink::MailUi,
@@ -915,6 +922,9 @@ pub struct SdroxideApp {
     pending_uploads: Vec<(u64, String, Vec<UploadTarget>)>,
     /// Awards dashboard open state + band filter ("" = all bands).
     show_awards: bool,
+    /// Grid tracker window open state, and its pan/zoom + heard-layer toggle.
+    show_grid: bool,
+    grid_tracker: crate::app::grid_tracker::GridTracker,
     awards_band: String,
     /// Cached award tally, keyed by (log length, band filter).
     awards_cache: Option<(usize, String, sdroxide_types::Awards)>,
@@ -1500,6 +1510,7 @@ impl SdroxideApp {
             aprs_lon_buf: String::new(),
             digi_cfg_seeded: false,
             cw_macro_edit: false,
+            text_macro_edit: false,
             cw_straight: false,
             cw_key_down: false,
             digi_tx_hz_edit: String::new(),
@@ -1521,6 +1532,7 @@ impl SdroxideApp {
             digi_free_text: String::new(),
             flags: Default::default(),
             show_logbook: false,
+            morse: morse::MorseState::new(load_morse_progress(storage)),
             mail: winlink::MailUi::default(),
             log_edit: None,
             spots: Vec::new(),
@@ -1578,6 +1590,8 @@ impl SdroxideApp {
             callsign_cache: Default::default(),
             pending_uploads: Vec::new(),
             show_awards: false,
+            show_grid: false,
+            grid_tracker: crate::app::grid_tracker::GridTracker::default(),
             awards_band: String::new(),
             awards_cache: None,
             awards_heat: None,

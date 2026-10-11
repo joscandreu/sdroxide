@@ -230,7 +230,9 @@ impl eframe::App for SdroxideApp {
             // F1 toggles the manual — handled here (not in
             // `keyboard_shortcuts`) so it works even while a text field has
             // focus.
-            if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
+            // Consumed, so nothing later in the frame (the message buttons'
+            // function keys) sees the same press.
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F1)) {
                 self.help.open = !self.help.open;
             }
             // An open manual takes the scrolling keys before the bindings run,
@@ -930,6 +932,7 @@ impl eframe::App for SdroxideApp {
         self.ism_window(&ctx, &mut cmds);
         self.adsb_setup_window(&ctx, &mut cmds);
         self.cw_macro_window(&ctx, &mut cmds);
+        self.text_macro_window(&ctx, &mut cmds);
         self.ais_setup_window(&ctx, &mut cmds);
         self.vdl2_setup_window(&ctx, &mut cmds);
         self.rds_window(&ctx);
@@ -944,8 +947,10 @@ impl eframe::App for SdroxideApp {
         self.spots_window(&ctx, &mut cmds);
         self.public_sdrs_window(&ctx, &mut cmds);
         self.awards_window(&ctx);
+        self.grid_tracker_window(&ctx);
         self.bands_window(&ctx);
         self.sat_window(&ctx, &mut cmds);
+        self.morse_window(&ctx);
         self.help.ui(&ctx);
         // Last, so it lands on top of everything else that opened this frame.
         self.oob_tx_window(&ctx);
@@ -1126,6 +1131,11 @@ impl eframe::App for SdroxideApp {
             eframe::set_value(storage, "ui_settings", &self.ui_settings);
             // Control-input bindings: authoritative on native is input.json.
             eframe::set_value(storage, "input", &self.input.cfg);
+            // The Morse trainer's progress, so it carries to the browser build.
+            // The shared copy, which any tab may have advanced.
+            let morse = super::persist::shared_morse_progress()
+                .unwrap_or_else(|| self.morse.progress.clone());
+            eframe::set_value(storage, "morse_progress", &morse);
         }
     }
 }

@@ -1493,12 +1493,36 @@ use sdroxide_types::{
 /// extra bytes as the start of the next field and fails to decode every
 /// digital status — the same break as v162's appended CW settings.
 ///
-/// v171: inbound WSJT-X UDP control. `WsjtxConfig` gains `accept_control` on
+/// v171: FSK441's transmit half. `DigiStatus` gains `tx_refused`
+/// (`Option<String>`) on its tail, the reason a key-up was refused — an empty
+/// message box, most often — so a panel can say why rather than looking armed
+/// and doing nothing. `DigiStatus` rides whole, so a v170 peer reads the extra
+/// bytes as the start of the next field and fails to decode every digital
+/// status. No new wire type: FSK441's transmit runs through the ordinary digi
+/// engine seam (`DigiTxText`/`DigiTxActive`).
+///
+/// v172: editable message buttons for the keyboard modes (PSK / RTTY / Olivia
+/// / Thor — issue #463). `DigiConfig` gains `text_macros` (`Vec<CwMacro>`) on
+/// its tail: the same label-and-text buttons the CW panel has, on a list of
+/// their own. `DigiConfig` rides `Command::SetDigiConfig` and `DigiStatus`
+/// whole, so a v171 peer reads the extra bytes as the start of the next field
+/// and fails to decode every digital status — the same break as v170's appended
+/// FSK441 period.
+///
+/// v173: selectable FT8 decode depth. `DigiConfig` gains `ft8_depth`
+/// (`Ft8Depth`) on its tail — `Fast` / `Normal` / `Deep`, how hard the decoder
+/// works for weak signals (no subtraction / flat multi-pass SIC / the
+/// checkpointed pass). `DigiConfig` rides `Command::SetDigiConfig` and
+/// `DigiStatus` whole, so a v172 peer reads the extra byte as the start of the
+/// next field and fails to decode every config — the same break as v172's
+/// appended message buttons.
+///
+/// v174: inbound WSJT-X UDP control. `WsjtxConfig` gains `accept_control` on
 /// its tail, and `ServerMsg` gains `WsjtxHighlights` (the callsigns a client
 /// asked to have coloured) and `WsjtxClients` (who is listening), appended so
 /// no existing discriminant moves. `WsjtxConfig` rides the station config
-/// whole, so a v170 peer reads the extra byte as the start of the next field.
-pub const PROTO_VERSION: u16 = 171;
+/// whole, so a v173 peer reads the extra byte as the start of the next field.
+pub const PROTO_VERSION: u16 = 174;
 const VERSION_BYTE: u8 = 0x12;
 
 #[derive(Debug, thiserror::Error)]

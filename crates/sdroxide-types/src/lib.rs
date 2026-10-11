@@ -37,6 +37,7 @@ mod limerfe;
 mod memory;
 mod meters;
 mod mode;
+mod morse_trainer;
 mod netcfg;
 mod pi4;
 mod pictures;
@@ -123,16 +124,16 @@ pub use controller::{AudioDevices, PeerRadio, RadioController, RadioEvent};
 pub use digi::{
     ACARS_MESSAGE_MAX, AcarsMessage, AcarsStatus, CONTEST_SERIAL_MAX, ClockHealth, ContestMode,
     CwMacro, CwStatus, Decode, DecodeSort, DigiConfig, DigiStatus, DxpedMode, FOX_MAX_SLOTS,
-    FOX_ZONE_MAX_HZ, FoxCaller, FsqHeard, FsqMsg, HOUND_ZONE_MAX_HZ, HellVariant,
+    FOX_ZONE_MAX_HZ, FoxCaller, FsqHeard, FsqMsg, Ft8Depth, HOUND_ZONE_MAX_HZ, HellVariant,
     NAVTEX_MESSAGE_MAX, NAVTEX_TONE_HZ, NavtexMessage, NavtexStatus, PACKET_HEARD_MAX,
     PACKET_TERM_LINE_MAX, PACKET_TERM_MAX, PacketBaud, PacketHeard, PacketLink, PacketLinkOwner,
     PacketStatus, PacketTermKind, PacketTermLine, QsoLive, QsoRecord, QsoStep, QueuedCall,
     RTTY_CENTER_HZ, RadeStatus, SstvStyle, TX_AUDIO_LEVEL_MIN, TX_AUDIO_LEVEL_MIN_DB, ThorMode,
-    TranscriptLine, adif_band, adif_records, adif_to_qso_log, adif_to_qso_log_counting_swl,
-    clock_health, cq_is_for_us, digi_decode_to_adif_record, digi_decodes_to_adif,
-    digi_decodes_to_csv, eu_vhf_rs, fmt_report, next_contest_serial, qso_log_to_adif,
-    qso_log_to_text, qso_to_adif_record, tx_level_db, tx_level_from_db, utc_ymd_hms, worked_before,
-    ymd_hms_to_unix,
+    TranscriptLine, WsprRadio, adif_band, adif_records, adif_to_qso_log,
+    adif_to_qso_log_counting_swl, clock_health, cq_is_for_us, digi_decode_to_adif_record,
+    digi_decodes_to_adif, digi_decodes_to_csv, eu_vhf_rs, fmt_report, next_contest_serial,
+    qso_log_to_adif, qso_log_to_text, qso_to_adif_record, tx_level_db, tx_level_from_db,
+    utc_ymd_hms, worked_before, ymd_hms_to_unix,
 };
 pub use drm::{
     DrmChannel, DrmCodec, DrmConstellation, DrmRobustness, DrmService, DrmStatus, DrmSync, DrmTime,
@@ -145,7 +146,7 @@ pub use fsk441::Fsk441Period;
 pub use fst4::Fst4Period;
 pub use geo::{
     bearing_deg, distance_km, great_circle_points, grid_bearing, grid_distance_km, grid_to_latlon,
-    latlon_to_grid,
+    grid4, latlon_to_grid,
 };
 pub use hd::{HdAudioService, HdRadioStatus};
 pub use hfdl::{
@@ -180,6 +181,7 @@ pub use limerfe::{
 pub use memory::{BandStackEntry, MemoryChannel, MemoryFolder, MemorySort, RttyMemory};
 pub use meters::{Meters, OVERLOAD_FRACTION, PsMeter, TxMeters, TxTelemetry};
 pub use mode::{AgcMode, Mode, NrEngine, NrLevel, NrStrength, SlotTiming};
+pub use morse_trainer::{ADVANCE_RUN, Answer, KOCH_ORDER, MorseProgress, START_UNLOCKED};
 pub use netcfg::{
     ClusterConfig, Credentials, FeedConfig, FreeDvReporterConfig, LookupProvider, NetworkConfig,
     PskConfig, RbnConfig, WsprNetConfig,
