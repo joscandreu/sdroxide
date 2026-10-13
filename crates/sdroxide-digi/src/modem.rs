@@ -1121,7 +1121,8 @@ mod eu_vhf {
 /// True when two decodes are the same transmission seen by two passes: same
 /// text from the same place in the passband. The tolerance is a few Hz, so two
 /// stations sending identical text at different offsets stay distinct.
-fn same_signal(a: &Decode, b: &Decode) -> bool {
+/// The same message at (nearly) the same audio offset.
+pub(crate) fn same_signal(a: &Decode, b: &Decode) -> bool {
     a.message == b.message && (a.audio_hz - b.audio_hz).abs() < 5.0
 }
 
