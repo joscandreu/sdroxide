@@ -694,12 +694,12 @@ fn drive_trim_table(ui: &mut egui::Ui, cfg: &mut sdroxide_types::RadioConfig) {
     });
 }
 
-pub(in crate::app) fn enum_combo<T: PartialEq + Copy>(
+pub(in crate::app) fn enum_combo<T: PartialEq + Copy, L: Into<egui::WidgetText>>(
     ui: &mut egui::Ui,
     id: &str,
     cur: &mut T,
     all: &[T],
-    label: impl Fn(T) -> &'static str,
+    label: impl Fn(T) -> L,
 ) {
     ComboBox::from_id_salt(id).selected_text(label(*cur)).show_styled(ui, |ui| {
         for &opt in all {

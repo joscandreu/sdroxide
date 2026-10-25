@@ -186,6 +186,11 @@ impl eframe::App for SdroxideApp {
             crate::theme::apply_visuals(&ctx);
             ctx.request_repaint();
         }
+        if self.applied_language != self.ui_settings.language {
+            self.applied_language = self.ui_settings.language;
+            crate::i18n::set_language(self.applied_language);
+            ctx.request_repaint();
+        }
         // The panadapter and skimmer font sizes need no visuals rewrite —
         // everything they size is laid out per frame — so they are simply
         // re-stored each frame.

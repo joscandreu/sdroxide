@@ -27,6 +27,7 @@ mod fuzzy;
 mod hell;
 mod help;
 mod hfdl_map;
+mod i18n;
 mod input;
 /// Which layout the window wears — desktop strip, tablet menus, or the compact
 /// phone strip — and the metrics that follow from it.

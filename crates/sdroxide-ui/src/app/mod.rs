@@ -294,6 +294,11 @@ pub struct SdroxideApp {
     /// factor, for the same reason — and so the zoom is left alone in between,
     /// where it belongs to egui's own ctrl+plus / ctrl+minus.
     applied_ui_font: sdroxide_types::FontSize,
+    /// The interface language last loaded, for the same reason: the picker in
+    /// the UI tab takes effect on the next frame. Per tab like the look, so a
+    /// second tab holding the setting from before the change does not switch
+    /// the whole window back.
+    applied_language: sdroxide_types::UiLanguage,
     /// Spoken announcements: the state machine that decides what to say, and
     /// the synthesizer that says it. Always present — switched off, it holds a
     /// null sink and costs a comparison per event.
@@ -1345,6 +1350,7 @@ impl SdroxideApp {
         crate::theme::set_bandplan_colors(&ui_settings.bandplan_colors);
         crate::theme::set_map_cities(ui_settings.map_cities);
         crate::theme::set_ui_zoom(ui_settings.ui_zoom);
+        crate::i18n::set_language(ui_settings.language);
         crate::theme::apply(egui_ctx);
         // What this renderer will carry. Gathered here because it is the one
         // place that holds the render state and the controller at once, and
@@ -1434,6 +1440,7 @@ impl SdroxideApp {
             ui_settings,
             applied_look: (ui_settings.theme, ui_settings.button_style, ui_settings.window_style),
             applied_ui_font: ui_settings.menu_font_size,
+            applied_language: ui_settings.language,
             speech: speech::SpeechRuntime::new(load_speech_settings(storage)),
             speech_voices: Vec::new(),
             alerts: alerts::AlertRuntime::station(load_alerts_settings(storage)),

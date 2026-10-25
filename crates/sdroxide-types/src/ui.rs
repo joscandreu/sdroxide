@@ -514,6 +514,83 @@ pub struct Solar3dWindow {
     pub pos_px: Option<[f32; 2]>,
 }
 
+/// The language the interface is drawn in: a BCP 47 tag such as `es` or
+/// `pt-BR`, or none to follow the operating system's.
+///
+/// A tag rather than an enum of the languages there are, because the list is
+/// whatever translations the client carries, and this crate knows none of
+/// them. A tag the client has no translation for is not an error: it falls
+/// back to the nearest it has, and to English last, the same as a system
+/// language it has never heard of. Held inline so [`UiSettings`] stays `Copy`.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub struct UiLanguage {
+    tag: [u8; UiLanguage::MAX_LEN],
+    len: u8,
+}
+
+impl UiLanguage {
+    /// The longest tag held. Language, script and region come to eleven
+    /// (`zh-Hant-TW`); the rest is room for a variant.
+    pub const MAX_LEN: usize = 23;
+
+    /// Follow the operating system's language — the default.
+    pub const SYSTEM: UiLanguage = UiLanguage { tag: [0; Self::MAX_LEN], len: 0 };
+
+    /// A language picked by tag. `None` for an empty tag, one too long to
+    /// hold, or one with a character no language tag has.
+    pub fn from_tag(tag: &str) -> Option<UiLanguage> {
+        let tag = tag.trim();
+        if tag.is_empty()
+            || tag.len() > Self::MAX_LEN
+            || !tag.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        {
+            return None;
+        }
+        let mut out = Self::SYSTEM;
+        out.tag[..tag.len()].copy_from_slice(tag.as_bytes());
+        out.len = tag.len() as u8;
+        Some(out)
+    }
+
+    /// The picked tag, or `None` for the system's language.
+    pub fn tag(&self) -> Option<&str> {
+        // Only ever filled from a `&str` of ASCII, so this cannot fail.
+        (self.len > 0).then(|| std::str::from_utf8(&self.tag[..self.len as usize]).unwrap_or(""))
+    }
+
+    pub fn is_system(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl std::fmt::Debug for UiLanguage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.tag() {
+            Some(tag) => write!(f, "UiLanguage({tag})"),
+            None => f.write_str("UiLanguage(system)"),
+        }
+    }
+}
+
+/// Written as the bare tag, and as an empty string for the system's language,
+/// so `config.toml` reads `language = "es"`.
+impl Serialize for UiLanguage {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.tag().unwrap_or(""))
+    }
+}
+
+/// Anything that is not a tag it can hold — hand-edited nonsense, or a longer
+/// tag from some later build — reads as the system's language rather than
+/// failing the whole `[ui]` table, which would lose the theme and the layout
+/// along with it.
+impl<'de> Deserialize<'de> for UiLanguage {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let tag = String::deserialize(d)?;
+        Ok(UiLanguage::from_tag(&tag).unwrap_or(UiLanguage::SYSTEM))
+    }
+}
+
 /// User display preferences. All have defaults so a missing `[ui]` table loads.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -601,6 +678,9 @@ pub struct UiSettings {
     pub bandplan_colors: [[u8; 3]; BandplanKind::COUNT],
     /// Which layout the window wears, or `Auto` to pick from the viewport.
     pub layout: LayoutMode,
+    /// The language the interface is drawn in — see [`UiLanguage`]. This
+    /// screen's preference, like the theme: a remote client picks its own.
+    pub language: UiLanguage,
     /// Colour theme for the UI chrome.
     pub theme: UiTheme,
     /// The shape buttons wear.
@@ -805,6 +885,7 @@ impl Default for UiSettings {
             spot_colors: default_spot_colors(),
             bandplan_colors: default_bandplan_colors(),
             layout: LayoutMode::Auto,
+            language: UiLanguage::SYSTEM,
             theme: UiTheme::Default,
             button_style: ChromeStyle::Angled,
             window_style: ChromeStyle::Angled,
@@ -1014,5 +1095,26 @@ mod serde_tests {
         // order: it is written out, not derived.
         assert!(LayoutMode::ALL.contains(&LayoutMode::Auto));
         assert_eq!(LayoutMode::ALL.len(), 5);
+    }
+
+    /// The language is written as the bare tag, the system's as an empty
+    /// string, and anything that is not a tag reads back as the system's
+    /// rather than costing the rest of `[ui]`.
+    #[test]
+    fn the_language_round_trips_as_a_bare_tag() {
+        let es = UiLanguage::from_tag("es").unwrap();
+        assert_eq!(serde_json::to_string(&es).unwrap(), "\"es\"");
+        assert_eq!(serde_json::to_string(&UiLanguage::SYSTEM).unwrap(), "\"\"");
+        let back: UiLanguage = serde_json::from_str("\"pt-BR\"").unwrap();
+        assert_eq!(back.tag(), Some("pt-BR"));
+        let none: UiLanguage = serde_json::from_str("\"\"").unwrap();
+        assert!(none.is_system());
+        let junk: UiLanguage = serde_json::from_str("\"<script>\"").unwrap();
+        assert!(junk.is_system());
+        let long: UiLanguage = serde_json::from_str(&format!("\"{}\"", "a".repeat(40))).unwrap();
+        assert!(long.is_system());
+        // A config written before the field existed loads with the system's.
+        let ui: UiSettings = serde_json::from_str("{}").unwrap();
+        assert!(ui.language.is_system());
     }
 }

@@ -58,6 +58,18 @@ bytemuck = { version = "1", features = ["derive"] }
 # native target block below adds the synthesizer on top.
 sdroxide-speech = { path = "../sdroxide-speech", default-features = false }
 
+# Translations. Fluent message files under `i18n/`, embedded in the binary
+# (`debug-embed` too, so a debug build and the browser build — which has no
+# disk to read them from — carry the same text a release does). `fl!` checks
+# every message id and argument against the English file at compile time, so a
+# typo is a build error rather than a raw id on screen.
+i18n-embed = { version = "0.16.0", features = ["fluent-system"] }
+i18n-embed-fl = "0.10.1"
+rust-embed = { version = "8.12.0", features = ["debug-embed"] }
+# The operating system's language list — or the browser's, with `js` — for an
+# operator who has not picked one.
+sys-locale = { version = "0.3.2", features = ["js"] }
+
 [features]
 # WebSocket RemoteController for the browser (and native remote) client.
 remote = ["dep:ewebsock", "dep:sdroxide-proto"]
@@ -112,3 +124,6 @@ naga = { version = "30.0.1", features = ["wgsl-in"] }
 # written by an older version exactly as the app would. Already in the tree via
 # eframe, so it adds no build time either.
 ron = "0.12"
+# Parses the message files strictly in the translation tests. The version
+# i18n-embed already pulls in, so it adds no build time.
+fluent-syntax = "0.12"
