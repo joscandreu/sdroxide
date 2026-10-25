@@ -5,7 +5,7 @@
 //! listening on above them, because an empty list has two very different causes
 //! and only one of them is "there is nothing here".
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, RichText};
 use sdroxide_types::{Command, IsmFamily, IsmReport, IsmSettings, Mode, Vfo};
 
@@ -112,8 +112,7 @@ impl SdroxideApp {
         ui.horizontal_wrapped(|ui| {
             for f in IsmFamily::ALL {
                 let usable = wideband && f.implemented();
-                let chip =
-                    crate::chrome::chip_enabled(ui, usable, cfg.family_enabled(f), f.label());
+                let chip = crate::chrome::chip_enabled(ui, usable, cfg.family_enabled(f), &f.tr());
                 if chip.clicked() {
                     let on = cfg.family_enabled(f);
                     cfg.set_family(f, !on);
@@ -272,7 +271,7 @@ impl SdroxideApp {
         // Which of sdroxide's own decoders have stood down, so a Bresser row
         // changing its protocol name is explained rather than mysterious.
         if !rt.superseded.is_empty() {
-            let names: Vec<&str> = rt.superseded.iter().map(|p| p.label()).collect();
+            let names: Vec<String> = rt.superseded.iter().map(|p| p.tr()).collect();
             ui.label(
                 RichText::new(tr!("ism-handled-rtl-433", names = names.join(", ")))
                     .size(10.0)
@@ -580,7 +579,7 @@ fn ism_row(ui: &mut egui::Ui, r: &IsmReport, now: i64, narrow: bool) -> egui::Re
     }
     let mut hover = tr!(
         "ism-id-mhz-db-heard-first",
-        protocol = r.protocol.label(),
+        protocol = r.protocol.tr(),
         device = r.device,
         e6 = format!("{:.4}", r.freq_hz / 1e6),
         snr_db = r.snr_db,

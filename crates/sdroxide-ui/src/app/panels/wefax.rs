@@ -695,7 +695,7 @@ impl SdroxideApp {
                         step = -1;
                     }
                     ui.label(
-                        RichText::new(format!("{} of {n}", i + 1))
+                        RichText::new(tr!("wefax-n-of-total", n = i + 1, total = n))
                             .color(crate::theme::CYAN_DIM())
                             .size(10.0),
                     );

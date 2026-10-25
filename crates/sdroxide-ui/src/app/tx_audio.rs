@@ -18,7 +18,7 @@
 //! meters; METERS runs it for the meters alone, which is how levels are set —
 //! there is no monitoring delay to talk against and nothing to feed back.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, RichText, Sense, Slider, Stroke,
     StrokeKind, Vec2, pos2, vec2,
@@ -550,10 +550,7 @@ fn stage_list(ui: &mut egui::Ui, v: &mut TxVoiceState, page: &mut Page) {
                 v.set_stage_enabled(stage, on);
             }
             let sel = *page == Page::of(stage);
-            if ui
-                .add_sized(vec2(92.0, 20.0), egui::Button::selectable(sel, stage.label()))
-                .clicked()
-            {
+            if ui.add_sized(vec2(92.0, 20.0), egui::Button::selectable(sel, stage.tr())).clicked() {
                 *page = Page::of(stage);
             }
             if ui
@@ -1321,12 +1318,12 @@ fn meter_strip(ui: &mut egui::Ui, v: &TxVoiceState, m: TxVoiceMeters) {
                 if on { format!("{g:5.1}") } else { tr!("txaudio-off").to_string() }
             };
             ui.label(
-                RichText::new(format!(
-                    "GR  gate {}  de-ess {}  comp {}  lim {}",
-                    gr(v.gate.enabled, m.gate_gr_db),
-                    gr(v.deess.enabled, m.deess_gr_db),
-                    gr(v.comp.enabled, m.comp_gr_db),
-                    gr(v.output.limiter, m.limiter_gr_db),
+                RichText::new(tr!(
+                    "txaudio-gr-gate-de-ess-comp",
+                    gate_gr_db = gr(v.gate.enabled, m.gate_gr_db),
+                    deess_gr_db = gr(v.deess.enabled, m.deess_gr_db),
+                    comp_gr_db = gr(v.comp.enabled, m.comp_gr_db),
+                    limiter_gr_db = gr(v.output.limiter, m.limiter_gr_db)
                 ))
                 .monospace()
                 .size(10.5),

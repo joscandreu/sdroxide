@@ -4,7 +4,7 @@
 //! the CAT / Audio interface, since every other backend carries its audio
 //! in-band.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, Color32, ComboBox, RichText};
 use sdroxide_types::{Command, Region, RemoteAccess, SWR_LIMIT_MAX, SWR_LIMIT_MIN, swr_tune_limit};
 
@@ -19,11 +19,11 @@ use crate::chrome::StyledCombo;
 /// means nothing until you know it is the Americas, and the number is what
 /// every band-plan document and contest rule actually says.
 pub(in crate::app) fn region_combo(ui: &mut egui::Ui, region: &mut Region) {
-    ComboBox::from_id_salt("iaru-region").width(360.0).selected_text(region.label()).show_styled(
+    ComboBox::from_id_salt("iaru-region").width(360.0).selected_text(region.tr()).show_styled(
         ui,
         |ui| {
             for r in Region::ALL {
-                if ui.selectable_label(*region == r, r.label()).clicked() {
+                if ui.selectable_label(*region == r, r.tr()).clicked() {
                     *region = r;
                 }
             }
@@ -480,10 +480,10 @@ impl SdroxideApp {
             let mut selected = devs.routing;
             ComboBox::from_id_salt("u-routing")
                 .width(300.0)
-                .selected_text(selected.label())
+                .selected_text(selected.tr())
                 .show_styled(ui, |ui| {
                     for r in sdroxide_types::AudioRouting::ALL {
-                        ui.selectable_value(&mut selected, r, r.label());
+                        ui.selectable_value(&mut selected, r, r.tr());
                     }
                 })
                 .response

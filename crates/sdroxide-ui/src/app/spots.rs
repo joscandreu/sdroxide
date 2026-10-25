@@ -367,7 +367,10 @@ impl SdroxideApp {
                     // would look like the search had lost the rest.
                     let (text, colour) = match rows.len() {
                         0 => (tr!("spots-no-match").to_string(), crate::theme::ALERT()),
-                        n => (format!("{n} of {}", visible.len()), crate::theme::YELLOW()),
+                        n => (
+                            tr!("spots-n-of-total", n = n, total = visible.len()),
+                            crate::theme::YELLOW(),
+                        ),
                     };
                     ui.label(RichText::new(text).color(colour).size(10.0));
                 }

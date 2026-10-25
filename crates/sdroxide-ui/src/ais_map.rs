@@ -48,7 +48,7 @@
 //! minutes, so a shorter one would blank most of a harbour between two
 //! perfectly good reports.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{
     Align2, Color32, FontId, Margin, Pos2, Rect, RichText, Sense, Stroke, Ui, pos2, vec2,
 };
@@ -476,7 +476,7 @@ pub fn show(
         if !v.name.is_empty() {
             tip.push_str(&format!("  {}", v.mmsi));
         }
-        tip.push_str(&format!("\n{}", v.kind.label()));
+        tip.push_str(&format!("\n{}", v.kind.tr()));
         if let Some(t) = v.type_label() {
             tip.push_str(&format!(" — {t}"));
         }

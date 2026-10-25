@@ -11,7 +11,7 @@
 //! browser's 3D view — so this tab configures the station's satellites from
 //! wherever it happens to be open, rather than a set of its own.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, RichText};
 
 use crate::time::now_unix;
@@ -114,7 +114,7 @@ fn settings_tle_subscriptions(ui: &mut egui::Ui, io: &mut SettingsIo) {
                     let dead = o == sdroxide_types::OrbitRings::Curated && no_curated;
                     let resp = ui
                         .add_enabled_ui(!dead, |ui| {
-                            crate::chrome::chip(ui, sub.orbits == o, o.label())
+                            crate::chrome::chip(ui, sub.orbits == o, o.tr())
                         })
                         .inner;
                     let hint = if dead {

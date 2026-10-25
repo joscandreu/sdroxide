@@ -6,7 +6,7 @@
 //! working the station would be worth against the log — because the list is
 //! rebuilt from scratch every frame.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, Color32, RichText};
 use sdroxide_types::{Command, Decode, DecodeSort, Mode};
 
@@ -135,9 +135,9 @@ impl SdroxideApp {
                 let active = sort_by == m;
                 // Active mode shows its direction; re-pressing it flips direction.
                 let lbl = if active && m != DecodeSort::None {
-                    format!("{} {}", m.label(), if sort_desc { "↓" } else { "↑" })
+                    format!("{} {}", m.tr(), if sort_desc { "↓" } else { "↑" })
                 } else {
-                    m.label().to_string()
+                    m.tr().to_string()
                 };
                 if crate::chrome::chip(ui, active, lbl).clicked() {
                     if active && m != DecodeSort::None {
@@ -1163,7 +1163,7 @@ impl SdroxideApp {
                         let done = s.step == sdroxide_types::QsoStep::Confirming;
                         let step_col =
                             if done { crate::theme::GREEN() } else { crate::theme::CYAN() };
-                        ui.label(RichText::new(s.step.label()).size(13.0).strong().color(step_col));
+                        ui.label(RichText::new(s.step.tr()).size(13.0).strong().color(step_col));
                         if done {
                             ui.label(
                                 RichText::new(tr!("decodes-qso-complete"))
@@ -1185,7 +1185,7 @@ impl SdroxideApp {
                             && matches!(s.mode, Mode::Ft8 | Mode::Ft2)
                         {
                             ui.label(
-                                RichText::new(s.config.dxped_mode.label().to_uppercase())
+                                RichText::new(s.config.dxped_mode.tr().to_uppercase())
                                     .size(11.0)
                                     .strong()
                                     .color(crate::theme::PINK()),

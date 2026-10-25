@@ -10,7 +10,7 @@
 //! because on a remote client the mail lives on the machine with the radio and
 //! may have attachments in it.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui;
 
 use crate::app::panels::widgets::row_cell;
@@ -238,9 +238,9 @@ impl crate::app::SdroxideApp {
             for folder in MailFolder::ALL {
                 let count = self.mail.status.counts[folder as usize];
                 let label = if count > 0 {
-                    format!("{} {count}", folder.label())
+                    format!("{} {count}", folder.tr())
                 } else {
-                    folder.label().to_string()
+                    folder.tr().to_string()
                 };
                 if bar.tab(ui, self.mail.folder == folder, label).clicked() {
                     self.mail.select_folder(folder);
@@ -305,7 +305,7 @@ impl crate::app::SdroxideApp {
             return;
         };
         if listing.entries.is_empty() {
-            ui.label(tr!("winlink-empty", to_lowercase = self.mail.folder.label().to_lowercase()));
+            ui.label(tr!("winlink-empty", to_lowercase = self.mail.folder.tr().to_lowercase()));
             return;
         }
 
@@ -560,9 +560,9 @@ impl crate::app::SdroxideApp {
             msg.subject.clone()
         });
         ui.label(tr!("winlink-from-2", msg = msg.from, date = msg.date));
-        ui.label(format!("to {}", msg.to.join(", ")));
+        ui.label(tr!("winlink-to-list", to = msg.to.join(", ")));
         if !msg.cc.is_empty() {
-            ui.label(format!("cc {}", msg.cc.join(", ")));
+            ui.label(tr!("winlink-cc-list", cc = msg.cc.join(", ")));
         }
 
         if !msg.attachments.is_empty() {

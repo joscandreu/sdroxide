@@ -12,7 +12,7 @@
 //! be allowed to apply defaults over the real thing.
 
 use crate::chrome::StyledCombo;
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, Color32, ComboBox, RichText};
 
 /// Live status of the built-in TCI server, from `RadioEvent::TciServerStatus`.
@@ -328,7 +328,7 @@ pub(in crate::app) fn settings_rotator_tab(
                 "rotator-protocol",
                 &mut cfg.protocol,
                 &sdroxide_types::RotatorProtocol::ALL,
-                sdroxide_types::RotatorProtocol::label,
+                sdroxide_types::RotatorProtocol::tr,
             );
             // A port still on the old program's default follows to the new one's.
             if cfg.protocol != was && cfg.port == was.default_port() {

@@ -5,7 +5,7 @@
 //! discovery buttons (HPSDR scan, RTL-SDR rescan, TCI connection test) only
 //! set a flag — the blocking work happens after the window closure.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, Color32, ComboBox, DragValue, RichText, Slider};
 use sdroxide_types::{Command, Direction};
 
@@ -164,7 +164,7 @@ pub(in crate::app) fn settings_cat_tab(
         let family_before = cfg.cat.family;
 
         ui.label(tr!("settings-radio-sound-format"));
-        enum_combo(ui, "sfmt", &mut cfg.cat.format, &SoundFormat::ALL, SoundFormat::label);
+        enum_combo(ui, "sfmt", &mut cfg.cat.format, &SoundFormat::ALL, SoundFormat::tr);
         ui.end_row();
 
         // Only meaningful for I/Q: demod audio is a real signal, with no
@@ -240,7 +240,7 @@ pub(in crate::app) fn settings_cat_tab(
         }
 
         ui.label(tr!("settings-radio-cat-family"));
-        enum_combo(ui, "fam", &mut cfg.cat.family, &CatFamily::ALL, CatFamily::label);
+        enum_combo(ui, "fam", &mut cfg.cat.family, &CatFamily::ALL, CatFamily::tr);
         ui.end_row();
 
         // A QMX's I/Q is a superhet's, not a direct-conversion receiver's: the
@@ -414,7 +414,7 @@ pub(in crate::app) fn settings_cat_tab(
             ui.end_row();
 
             ui.label(tr!("settings-radio-parity"));
-            enum_combo(ui, "parity", &mut cfg.cat.serial.parity, &Parity::ALL, Parity::label);
+            enum_combo(ui, "parity", &mut cfg.cat.serial.parity, &Parity::ALL, Parity::tr);
             ui.end_row();
 
             ui.label(tr!("settings-radio-stop-bits"));
@@ -422,10 +422,10 @@ pub(in crate::app) fn settings_cat_tab(
             ui.end_row();
 
             ui.label(tr!("settings-radio-force-rts"));
-            enum_combo(ui, "rts", &mut cfg.cat.serial.force_rts, &LineState::ALL, LineState::label);
+            enum_combo(ui, "rts", &mut cfg.cat.serial.force_rts, &LineState::ALL, LineState::tr);
             ui.end_row();
             ui.label(tr!("settings-radio-force-dtr"));
-            enum_combo(ui, "dtr", &mut cfg.cat.serial.force_dtr, &LineState::ALL, LineState::label);
+            enum_combo(ui, "dtr", &mut cfg.cat.serial.force_dtr, &LineState::ALL, LineState::tr);
             ui.end_row();
         }
 
@@ -438,17 +438,17 @@ pub(in crate::app) fn settings_cat_tab(
         ui.end_row();
 
         ui.label(tr!("settings-radio-mode-control"));
-        enum_combo(ui, "modectl", &mut cfg.cat.mode_control, &ModeControl::ALL, ModeControl::label);
+        enum_combo(ui, "modectl", &mut cfg.cat.mode_control, &ModeControl::ALL, ModeControl::tr);
         ui.end_row();
 
         ui.label(tr!("settings-radio-digimode-mode"))
             .on_hover_text(tr!("settings-radio-what-put-radio-mode-sdroxide"));
-        enum_combo(ui, "digimode", &mut cfg.cat.digi_mode, &DigiMode::ALL, DigiMode::label);
+        enum_combo(ui, "digimode", &mut cfg.cat.digi_mode, &DigiMode::ALL, DigiMode::tr);
         ui.end_row();
 
         ui.label(tr!("settings-radio-cw-keying"))
             .on_hover_text(tr!("settings-radio-how-cw-panel-s-keyer"));
-        enum_combo(ui, "cwkey", &mut cfg.cat.cw_keying, &CwKeying::ALL, CwKeying::label);
+        enum_combo(ui, "cwkey", &mut cfg.cat.cw_keying, &CwKeying::ALL, CwKeying::tr);
         ui.end_row();
 
         ui.label(tr!("settings-radio-poll-rate"))
@@ -459,13 +459,7 @@ pub(in crate::app) fn settings_cat_tab(
         if cfg.cat.family == CatFamily::Kenwood {
             ui.label(tr!("settings-radio-send-command"))
                 .on_hover_text(tr!("settings-radio-which-transceiver-generation-keys-rig"));
-            enum_combo(
-                ui,
-                "kwsend",
-                &mut cfg.cat.kenwood_send,
-                &KenwoodSend::ALL,
-                KenwoodSend::label,
-            );
+            enum_combo(ui, "kwsend", &mut cfg.cat.kenwood_send, &KenwoodSend::ALL, KenwoodSend::tr);
             ui.end_row();
         }
 
@@ -484,7 +478,7 @@ pub(in crate::app) fn settings_cat_tab(
                 "eladtxin",
                 &mut cfg.cat.elad_tx_input,
                 &EladTxInput::ALL,
-                EladTxInput::label,
+                EladTxInput::tr,
             );
             ui.end_row();
 
@@ -553,7 +547,7 @@ pub(in crate::app) fn settings_cat_tab(
                 "trusdx_audio",
                 &mut cfg.cat.trusdx_audio,
                 &TrUsdxAudio::ALL,
-                TrUsdxAudio::label,
+                TrUsdxAudio::tr,
             );
             ui.end_row();
         }
@@ -562,7 +556,7 @@ pub(in crate::app) fn settings_cat_tab(
             ui.label(tr!("settings-radio-radio-model"))
                 .on_hover_text(tr!("settings-radio-which-icom-two-things-ci"));
             let before = cfg.cat.icom_model;
-            enum_combo(ui, "icommodel", &mut cfg.cat.icom_model, &IcomModel::ALL, IcomModel::label);
+            enum_combo(ui, "icommodel", &mut cfg.cat.icom_model, &IcomModel::ALL, IcomModel::tr);
             // Only on a change, so an operator who has deliberately re-addressed
             // their radio does not have it overwritten every time this dialog
             // is drawn.
@@ -607,10 +601,10 @@ pub(in crate::app) fn settings_cat_tab(
                 ui.label(tr!("settings-radio-scope-span"))
                     .on_hover_text(tr!("settings-radio-how-wide-sweep-radio-keeps"));
                 ComboBox::from_id_salt("cat_scope_span")
-                    .selected_text(cfg.cat.scope_span.label())
+                    .selected_text(cfg.cat.scope_span.tr())
                     .show_styled(ui, |ui| {
                         for sp in IcomScopeSpan::ALL {
-                            if ui.selectable_label(cfg.cat.scope_span == sp, sp.label()).clicked() {
+                            if ui.selectable_label(cfg.cat.scope_span == sp, sp.tr()).clicked() {
                                 cfg.cat.scope_span = sp;
                             }
                         }
@@ -938,10 +932,10 @@ pub(in crate::app) fn settings_hpsdr_tab(
             .on_hover_text(tr!("settings-radio-accessory-board-hermes-lite-2"));
         ComboBox::from_id_salt("hpsdr_filter")
             .width(220.0)
-            .selected_text(cfg.hpsdr.filter_board.label())
+            .selected_text(cfg.hpsdr.filter_board.tr())
             .show_styled(ui, |ui| {
                 for b in sdroxide_types::HpsdrFilterBoard::ALL {
-                    if ui.selectable_label(cfg.hpsdr.filter_board == b, b.label()).clicked() {
+                    if ui.selectable_label(cfg.hpsdr.filter_board == b, b.tr()).clicked() {
                         cfg.hpsdr.filter_board = b;
                     }
                 }
@@ -952,10 +946,10 @@ pub(in crate::app) fn settings_hpsdr_tab(
             .on_hover_text(tr!("settings-radio-where-n2adr-hl2ioboard-takes-receive"));
         ComboBox::from_id_salt("hpsdr_io_rx")
             .width(220.0)
-            .selected_text(cfg.hpsdr.io_rx_input.label())
+            .selected_text(cfg.hpsdr.io_rx_input.tr())
             .show_styled(ui, |ui| {
                 for m in sdroxide_types::HpsdrIoRxInput::ALL {
-                    if ui.selectable_label(cfg.hpsdr.io_rx_input == m, m.label()).clicked() {
+                    if ui.selectable_label(cfg.hpsdr.io_rx_input == m, m.tr()).clicked() {
                         cfg.hpsdr.io_rx_input = m;
                     }
                 }
@@ -1288,7 +1282,7 @@ pub(in crate::app) fn settings_rtlsdr_tab(
         ui.label(tr!("settings-radio-agc"))
             .on_hover_text(tr!("settings-radio-manual-setting-measurement-weak-signal"));
         let mut agc = cfg.rtlsdr.agc;
-        enum_combo(ui, "rtlsdr_agc", &mut agc, &RtlSdrAgc::ALL, RtlSdrAgc::label);
+        enum_combo(ui, "rtlsdr_agc", &mut agc, &RtlSdrAgc::ALL, RtlSdrAgc::tr);
         if agc != cfg.rtlsdr.agc {
             cfg.rtlsdr.agc = agc;
             cmds.push(Command::SetGain {
@@ -1338,7 +1332,7 @@ pub(in crate::app) fn settings_rtlsdr_tab(
         ui.label(tr!("settings-radio-hf-reception"))
             .on_hover_text(tr!("settings-radio-tuner-itself-starts-24-mhz"));
         let mut hf = cfg.rtlsdr.hf_mode;
-        enum_combo(ui, "rtlsdr_hf", &mut hf, &RtlSdrHfMode::ALL, RtlSdrHfMode::label);
+        enum_combo(ui, "rtlsdr_hf", &mut hf, &RtlSdrHfMode::ALL, RtlSdrHfMode::tr);
         if hf != cfg.rtlsdr.hf_mode {
             cfg.rtlsdr.hf_mode = hf;
             cmds.push(Command::SetGain {
@@ -1454,7 +1448,7 @@ pub(in crate::app) fn settings_rtltcp_tab(
         ui.label(tr!("settings-radio-agc"))
             .on_hover_text(tr!("settings-radio-runs-server-s-dongle-manual"));
         let mut agc = cfg.rtltcp.agc;
-        enum_combo(ui, "rtltcp_agc", &mut agc, &RtlSdrAgc::ALL, RtlSdrAgc::label);
+        enum_combo(ui, "rtltcp_agc", &mut agc, &RtlSdrAgc::ALL, RtlSdrAgc::tr);
         if agc != cfg.rtltcp.agc {
             cfg.rtltcp.agc = agc;
             cmds.push(Command::SetGain {
@@ -1504,7 +1498,7 @@ pub(in crate::app) fn settings_rtltcp_tab(
         ui.label(tr!("settings-radio-hf-reception"))
             .on_hover_text(tr!("settings-radio-tuner-starts-24-mhz-below"));
         let mut hf = cfg.rtltcp.hf_mode;
-        enum_combo(ui, "rtltcp_hf", &mut hf, &RtlSdrHfMode::ALL, RtlSdrHfMode::label);
+        enum_combo(ui, "rtltcp_hf", &mut hf, &RtlSdrHfMode::ALL, RtlSdrHfMode::tr);
         if hf != cfg.rtltcp.hf_mode {
             cfg.rtltcp.hf_mode = hf;
             cmds.push(Command::SetGain {
@@ -1766,7 +1760,7 @@ pub(in crate::app) fn settings_spyserver_tab(
             &format!("{salt}_fmt"),
             &mut fmt,
             &SpyServerFormat::ALL,
-            SpyServerFormat::label,
+            SpyServerFormat::tr,
         );
         cfg.iq_format = fmt;
         ui.end_row();
@@ -2240,15 +2234,16 @@ pub(in crate::app) fn settings_icomnet_tab(
 
         ui.label(tr!("settings-radio-receive"))
             .on_hover_text(tr!("settings-radio-af-radio-demodulates-sdroxide-shows"));
-        ComboBox::from_id_salt("icomnet_rx_source")
-            .selected_text(net.rx_source.label())
-            .show_styled(ui, |ui| {
+        ComboBox::from_id_salt("icomnet_rx_source").selected_text(net.rx_source.tr()).show_styled(
+            ui,
+            |ui| {
                 for s in IcomRxSource::ALL {
-                    if ui.selectable_label(net.rx_source == s, s.label()).clicked() {
+                    if ui.selectable_label(net.rx_source == s, s.tr()).clicked() {
                         net.rx_source = s;
                     }
                 }
-            });
+            },
+        );
         ui.end_row();
 
         radio_antenna_row(ui, caps, antenna_rx, "icomnet_antenna", cmds);
@@ -2314,11 +2309,11 @@ pub(in crate::app) fn settings_icomnet_tab(
 
         ui.label(tr!("settings-radio-cw-keying"))
             .on_hover_text(tr!("settings-radio-how-cw-panel-s-keyer-2"));
-        ComboBox::from_id_salt("icomnet_cw").selected_text(net.cw_keying.label()).show_styled(
+        ComboBox::from_id_salt("icomnet_cw").selected_text(net.cw_keying.tr()).show_styled(
             ui,
             |ui| {
                 for k in CwKeying::ALL {
-                    if ui.selectable_label(net.cw_keying == k, k.label()).clicked() {
+                    if ui.selectable_label(net.cw_keying == k, k.tr()).clicked() {
                         net.cw_keying = k;
                     }
                 }
@@ -2344,10 +2339,10 @@ pub(in crate::app) fn settings_icomnet_tab(
             ui.label(tr!("settings-radio-scope-span"))
                 .on_hover_text(tr!("settings-radio-how-wide-sweep-only-wide"));
             ComboBox::from_id_salt("icomnet_scope_span")
-                .selected_text(net.scope_span.label())
+                .selected_text(net.scope_span.tr())
                 .show_styled(ui, |ui| {
                     for sp in IcomScopeSpan::ALL {
-                        if ui.selectable_label(net.scope_span == sp, sp.label()).clicked() {
+                        if ui.selectable_label(net.scope_span == sp, sp.tr()).clicked() {
                             net.scope_span = sp;
                         }
                     }
@@ -2559,7 +2554,7 @@ pub(in crate::app) fn settings_pluto_tab(
         ui.label(tr!("settings-radio-agc"))
             .on_hover_text(tr!("settings-radio-ad9361-has-four-modes-not"));
         let mut agc = cfg.pluto.agc;
-        enum_combo(ui, "pluto_agc", &mut agc, &PlutoAgc::ALL, PlutoAgc::label);
+        enum_combo(ui, "pluto_agc", &mut agc, &PlutoAgc::ALL, PlutoAgc::tr);
         if agc != cfg.pluto.agc {
             cfg.pluto.agc = agc;
             cmds.push(Command::SetGain {
@@ -2644,14 +2639,14 @@ pub(in crate::app) fn settings_pluto_tab(
         ui.label(tr!("settings-radio-duplex"))
             .on_hover_text(tr!("settings-radio-whether-ad9361-runs-both-directions"));
         let mut duplex = cfg.pluto.duplex;
-        enum_combo(ui, "pluto_duplex", &mut duplex, &PlutoDuplex::ALL, PlutoDuplex::label);
+        enum_combo(ui, "pluto_duplex", &mut duplex, &PlutoDuplex::ALL, PlutoDuplex::tr);
         cfg.pluto.duplex = duplex;
         ui.end_row();
 
         ui.label(tr!("settings-radio-ptt-pins"))
             .on_hover_text(tr!("settings-radio-pluto-s-four-gpo-test"));
         let mut ptt = cfg.pluto.ptt_gpo;
-        enum_combo(ui, "pluto_ptt", &mut ptt, &PlutoPtt::ALL, PlutoPtt::label);
+        enum_combo(ui, "pluto_ptt", &mut ptt, &PlutoPtt::ALL, PlutoPtt::tr);
         cfg.pluto.ptt_gpo = ptt;
         ui.end_row();
 
@@ -3011,7 +3006,7 @@ pub(in crate::app) fn settings_soapy_devices(
     }
     if !native.is_empty() {
         ui.add_space(4.0);
-        let names = native.iter().map(|b| b.label()).collect::<Vec<_>>().join(", ");
+        let names = native.iter().map(|b| b.tr()).collect::<Vec<_>>().join(", ");
         ui.label(
             RichText::new(tr!("settings-radio-soapy-native", names = names.to_string()))
                 .color(crate::theme::CYAN()),
@@ -3949,13 +3944,7 @@ pub(in crate::app) fn settings_elad_tab(
 
         ui.label(tr!("settings-radio-transmit-input"))
             .on_hover_text(tr!("settings-radio-where-radio-takes-transmit-audio-2"));
-        enum_combo(
-            ui,
-            "elad_txin",
-            &mut cfg.cat.elad_tx_input,
-            &EladTxInput::ALL,
-            EladTxInput::label,
-        );
+        enum_combo(ui, "elad_txin", &mut cfg.cat.elad_tx_input, &EladTxInput::ALL, EladTxInput::tr);
         ui.end_row();
 
         ui.label(tr!("settings-radio-antenna"))
@@ -3982,7 +3971,7 @@ pub(in crate::app) fn settings_elad_tab(
             "elad_modectl",
             &mut cfg.cat.mode_control,
             &ModeControl::ALL,
-            ModeControl::label,
+            ModeControl::tr,
         );
         ui.end_row();
 
@@ -4428,7 +4417,7 @@ pub(in crate::app) fn settings_airspy_tab(
         ui.label(tr!("settings-radio-gain-curve"));
         ui.horizontal(|ui| {
             for c in AirspyGain::ALL {
-                if ui.selectable_label(cfg.airspy.gain_curve == c, c.label()).clicked()
+                if ui.selectable_label(cfg.airspy.gain_curve == c, c.tr()).clicked()
                     && cfg.airspy.gain_curve != c
                 {
                     cfg.airspy.gain_curve = c;
@@ -4689,7 +4678,7 @@ pub(in crate::app) fn settings_hydrasdr_tab(
         ui.label(tr!("settings-radio-gain-curve"));
         ui.horizontal(|ui| {
             for c in HydraSdrGain::ALL {
-                if ui.selectable_label(cfg.hydrasdr.gain_curve == c, c.label()).clicked()
+                if ui.selectable_label(cfg.hydrasdr.gain_curve == c, c.tr()).clicked()
                     && cfg.hydrasdr.gain_curve != c
                 {
                     cfg.hydrasdr.gain_curve = c;
@@ -5576,7 +5565,7 @@ pub(in crate::app) fn settings_sdrplay_tab(
 
         ui.label(tr!("settings-radio-agc")).on_hover_text(tr!("settings-radio-rsp-s-own-if-gain"));
         let mut agc = cfg.sdrplay.agc;
-        enum_combo(ui, "sdrplay_agc", &mut agc, &SdrPlayAgc::ALL, SdrPlayAgc::label);
+        enum_combo(ui, "sdrplay_agc", &mut agc, &SdrPlayAgc::ALL, SdrPlayAgc::tr);
         if agc != cfg.sdrplay.agc {
             cfg.sdrplay.agc = agc;
             cmds.push(Command::SetGain {
@@ -5719,7 +5708,7 @@ pub(in crate::app) fn settings_sdrplay_tab(
                 "sdrplay_duo_tuner",
                 &mut tuner,
                 &SdrPlayDuoTuner::ALL,
-                SdrPlayDuoTuner::label,
+                SdrPlayDuoTuner::tr,
             );
             if tuner != cfg.sdrplay.duo_tuner {
                 cfg.sdrplay.duo_tuner = tuner;
@@ -5889,7 +5878,7 @@ pub(in crate::app) fn settings_sdrplay_tab(
                         "sdrplay_duo_role",
                         &mut role,
                         &SdrPlayDuoRole::ALL,
-                        SdrPlayDuoRole::label,
+                        SdrPlayDuoRole::tr,
                     );
                     cfg.sdrplay.duo.role = role;
                     ui.end_row();
@@ -5908,10 +5897,10 @@ pub(in crate::app) fn settings_sdrplay_tab(
                 |ui| {
                     ui.label(tr!("settings-radio-what-do"));
                     ComboBox::from_id_salt("sdrplay_div_mode")
-                        .selected_text(div.mode.label())
+                        .selected_text(div.mode.tr())
                         .show_styled(ui, |ui| {
                             for m in DiversityMode::ALL {
-                                if ui.selectable_label(div.mode == m, m.label()).clicked() {
+                                if ui.selectable_label(div.mode == m, m.tr()).clicked() {
                                     div.mode = m;
                                     push_gain(
                                         cmds,
@@ -6350,10 +6339,10 @@ pub(in crate::app) fn settings_lime_tab(
         egui::Grid::new("lime-aux-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
             ui.label(tr!("settings-radio-used"));
             egui::ComboBox::from_id_salt("lime-aux-role")
-                .selected_text(cfg.lime.aux.role.label())
+                .selected_text(cfg.lime.aux.role.tr())
                 .show_styled(ui, |ui| {
                     for r in LimeAuxRole::ALL {
-                        ui.selectable_value(&mut cfg.lime.aux.role, r, r.label());
+                        ui.selectable_value(&mut cfg.lime.aux.role, r, r.tr());
                     }
                 });
             ui.end_row();
@@ -6425,10 +6414,10 @@ pub(in crate::app) fn settings_lime_tab(
             if cfg.lime.aux.role == LimeAuxRole::Diversity {
                 ui.label(tr!("settings-radio-what-do"));
                 egui::ComboBox::from_id_salt("lime-div-mode")
-                    .selected_text(cfg.lime.aux.mode.label())
+                    .selected_text(cfg.lime.aux.mode.tr())
                     .show_styled(ui, |ui| {
                         for m in DiversityMode::ALL {
-                            if ui.selectable_label(cfg.lime.aux.mode == m, m.label()).clicked() {
+                            if ui.selectable_label(cfg.lime.aux.mode == m, m.tr()).clicked() {
                                 cfg.lime.aux.mode = m;
                                 push_gain(
                                     cmds,
@@ -6673,10 +6662,10 @@ pub(in crate::app) fn settings_lime_tab(
     egui::Grid::new("lime-rfe-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
         ui.label(tr!("settings-radio-connected"));
         egui::ComboBox::from_id_salt("lime-rfe-link")
-            .selected_text(cfg.lime.rfe.link.label())
+            .selected_text(cfg.lime.rfe.link.tr())
             .show_styled(ui, |ui| {
                 for l in RfeLink::ALL {
-                    ui.selectable_value(&mut cfg.lime.rfe.link, l, l.label());
+                    ui.selectable_value(&mut cfg.lime.rfe.link, l, l.tr());
                 }
             });
         ui.end_row();
@@ -6737,10 +6726,10 @@ pub(in crate::app) fn settings_lime_tab(
                 .on_hover_text(tr!("settings-radio-switch-filters-match-operating-frequency"));
                 if !cfg.lime.rfe.follow_band {
                     egui::ComboBox::from_id_salt("lime-rfe-chan")
-                        .selected_text(cfg.lime.rfe.channel.label())
+                        .selected_text(cfg.lime.rfe.channel.tr())
                         .show_styled(ui, |ui| {
                             for c in RfeChannel::ALL {
-                                ui.selectable_value(&mut cfg.lime.rfe.channel, c, c.label());
+                                ui.selectable_value(&mut cfg.lime.rfe.channel, c, c.tr());
                             }
                         });
                 }
@@ -6749,10 +6738,10 @@ pub(in crate::app) fn settings_lime_tab(
 
             ui.label(tr!("settings-radio-relays"));
             egui::ComboBox::from_id_salt("lime-rfe-mode")
-                .selected_text(cfg.lime.rfe.mode.label())
+                .selected_text(cfg.lime.rfe.mode.tr())
                 .show_styled(ui, |ui| {
                     for m in RfeModeControl::ALL {
-                        ui.selectable_value(&mut cfg.lime.rfe.mode, m, m.label());
+                        ui.selectable_value(&mut cfg.lime.rfe.mode, m, m.tr());
                     }
                 });
             ui.end_row();

@@ -12,7 +12,7 @@
 //! keystroke without a round trip, and only the finished picture goes back to
 //! the engine as an ordinary `SstvTx` / `RifpTx`.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -1522,19 +1522,19 @@ impl SdroxideApp {
                             ui.add_space(4.0);
                             let from = m.sender.as_deref().unwrap_or("unidentified");
                             ui.label(
-                                RichText::new(format!(
-                                    "{from} · {} · {}×{} {}-bit · {} / {} · {} octets in {} chunks \
-                                     ({} first pass) · session {}",
-                                    m.filename,
-                                    m.width,
-                                    m.height,
-                                    m.bits_per_pixel,
-                                    m.media_type,
-                                    m.content_encoding,
-                                    m.encoded_size,
-                                    m.chunk_count,
-                                    m.chunks_first_pass,
-                                    m.session,
+                                RichText::new(tr!(
+                                    "sstv-bit-octets-chunks-first-pass",
+                                    from = from,
+                                    filename = m.filename,
+                                    width = m.width,
+                                    height = m.height,
+                                    bits_per_pixel = m.bits_per_pixel,
+                                    media_type = m.media_type,
+                                    content_encoding = m.content_encoding,
+                                    encoded_size = m.encoded_size,
+                                    chunk_count = m.chunk_count,
+                                    chunks_first_pass = m.chunks_first_pass,
+                                    session = m.session
                                 ))
                                 .size(10.5)
                                 .weak(),
@@ -1830,12 +1830,12 @@ impl SdroxideApp {
                 for p in RifpProfile::ALL {
                     let active = self.digi_cfg_edit.rifp_profile == p;
                     if crate::chrome::chip(ui, active, p.label())
-                        .on_hover_text(format!(
-                            "{} — {:.0} baud CPFSK, ±{:.0} Hz, {:.0} kHz occupied bandwidth",
-                            p.name(),
-                            p.symbol_rate(),
-                            p.deviation_hz(),
-                            p.bandwidth_hz() / 1000.0,
+                        .on_hover_text(tr!(
+                            "sstv-baud-cpfsk-hz-khz-occupied",
+                            value = p.name(),
+                            symbol_rate = format!("{:.0}", p.symbol_rate()),
+                            deviation_hz = format!("{:.0}", p.deviation_hz()),
+                            bandwidth_hz = format!("{:.0}", p.bandwidth_hz() / 1000.0)
                         ))
                         .clicked()
                         && !active
@@ -1914,7 +1914,7 @@ impl SdroxideApp {
                         Some((mt, ce)) => format!("{mt} / {ce}"),
                         None => tr!("sstv-try-every-encoding-send-smallest"),
                     };
-                    if crate::chrome::chip(ui, active, e.label()).on_hover_text(hover).clicked()
+                    if crate::chrome::chip(ui, active, e.tr()).on_hover_text(hover).clicked()
                         && !active
                     {
                         self.digi_cfg_edit.rifp_encoding = e;
@@ -2005,7 +2005,7 @@ impl SdroxideApp {
                 ui.label(
                     RichText::new(tr!(
                         "sstv-rifp-sent-as",
-                        encoding = enc.label(),
+                        encoding = enc.tr(),
                         octets = st.tx_bytes
                     ))
                     .size(10.0)

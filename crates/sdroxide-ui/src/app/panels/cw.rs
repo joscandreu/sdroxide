@@ -12,7 +12,7 @@
 //! the same frequency — a station is answered where it was heard — so there is
 //! nothing to keep in step.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, Color32, RichText};
 use sdroxide_types::{Command, CwEngine, KeyChord};
 
@@ -665,7 +665,7 @@ impl SdroxideApp {
         if crate::chrome::chip(
             ui,
             engine == CwEngine::Timing,
-            RichText::new(engine.label()).size(10.5),
+            RichText::new(engine.tr()).size(10.5),
         )
         .on_hover_text(tr!(
             "cw-click-decoder-neural-one-copies",

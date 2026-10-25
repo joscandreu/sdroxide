@@ -4,7 +4,7 @@
 //! panels share, reachable from any of them. The identity half is the same
 //! store the Settings dialog's General tab edits.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, RichText};
 use sdroxide_types::Command;
 
@@ -680,7 +680,7 @@ impl SdroxideApp {
                         ui.horizontal(|ui| {
                             for m in sdroxide_types::ContestMode::ALL {
                                 changed |= ui
-                                    .selectable_value(&mut cfg.contest, m, m.label())
+                                    .selectable_value(&mut cfg.contest, m, m.tr())
                                     .on_hover_text(match m {
                                         sdroxide_types::ContestMode::None => {
                                             tr!("setup-everyday-exchange-grid-report-rr73")
@@ -731,7 +731,7 @@ impl SdroxideApp {
                         ui.horizontal(|ui| {
                             for m in sdroxide_types::DxpedMode::ALL {
                                 changed |= ui
-                                    .selectable_value(&mut cfg.dxped_mode, m, m.label())
+                                    .selectable_value(&mut cfg.dxped_mode, m, m.tr())
                                     .on_hover_text(match m {
                                         sdroxide_types::DxpedMode::Normal => {
                                             tr!("setup-ordinary-ft8-operation")

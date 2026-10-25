@@ -25,7 +25,7 @@
 //! is somebody else's for the moment. Being told which is far better than a
 //! connection that fails for no visible reason.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, RichText};
 use sdroxide_types::{Command, PublicSdrEntry, PublicSdrNetwork};
 
@@ -582,7 +582,7 @@ impl SdroxideApp {
         let iface = self
             .radio_cfg
             .as_ref()
-            .map_or_else(|| "its interface".to_string(), |c| c.backend.label().to_string());
+            .map_or_else(|| tr!("publicsdr-its-interface"), |c| c.backend.tr());
         tr!(
             "publicsdr-replace-taking-receiver-points-same",
             this = this,

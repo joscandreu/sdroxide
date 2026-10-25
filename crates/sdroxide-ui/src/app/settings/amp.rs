@@ -1,7 +1,7 @@
 //! The Hardrock amplifier: which one, on which port, and what it should do on
 //! its own. The live panel is the AMP window; this tab only sets the link up.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, ComboBox, RichText};
 use sdroxide_types::{AMP_BAUD_RATES, AmpConfig, AmpModel, AmpStatus};
 
@@ -31,7 +31,7 @@ pub(in crate::app) fn settings_amp_tab(
     ui.add_space(4.0);
     egui::Grid::new("amp-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
         ui.label(tr!("settings-amp-model"));
-        super::enum_combo(ui, "amp-model", &mut cfg.model, &AmpModel::ALL, AmpModel::label);
+        super::enum_combo(ui, "amp-model", &mut cfg.model, &AmpModel::ALL, AmpModel::tr);
         ui.end_row();
         if !cfg.model.tested() {
             ui.label("");
@@ -86,7 +86,7 @@ pub(in crate::app) fn settings_amp_tab(
     let (text, col) = if !status.configured {
         (tr!("settings-amp-off"), theme::TEXT())
     } else if status.connected {
-        (tr!("settings-amp-connected-to", model = status.model.label()), theme::GREEN())
+        (tr!("settings-amp-connected-to", model = status.model.tr()), theme::GREEN())
     } else if let Some(e) = &status.error {
         (e.clone(), theme::ALERT())
     } else {

@@ -9,7 +9,7 @@
 //! what has already been received rather than waiting for the station to send it
 //! again. See [`sdroxide_types::RdsStandard`].
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, Color32, RichText};
 use sdroxide_types::{RdsData, RdsGroupLog, RdsStandard, pty_name, rt_plus_class};
 
@@ -115,13 +115,13 @@ impl SdroxideApp {
             // codes are already here, so this re-labels everything at once.
             egui::ComboBox::from_id_salt("rds-standard")
                 .selected_text(if chosen == RdsStandard::Auto {
-                    tr!("rds-auto", standard = standard.label())
+                    tr!("rds-auto", standard = standard.tr())
                 } else {
-                    chosen.label().to_string()
+                    chosen.tr().to_string()
                 })
                 .show_styled(ui, |ui| {
                     for s in RdsStandard::ALL {
-                        ui.selectable_value(&mut self.view.rds_standard, s, s.label());
+                        ui.selectable_value(&mut self.view.rds_standard, s, s.tr());
                     }
                 })
                 .response

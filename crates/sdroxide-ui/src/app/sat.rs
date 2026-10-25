@@ -617,7 +617,7 @@ fn fmt_mhz(hz: f64) -> String {
 fn in_words(s: i64) -> String {
     let s = s.max(0);
     if s < 60 {
-        format!("in {s} s")
+        tr!("sat-in-seconds", s = s)
     } else if s < 3600 {
         tr!("sat-min", value = s / 60)
     } else {

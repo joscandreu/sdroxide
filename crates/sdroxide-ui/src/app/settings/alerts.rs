@@ -5,7 +5,7 @@
 //! *decode matters*, which is unmissable by design — the whole point is to
 //! reach the operator when they are not looking at sdroxide.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, Color32, RichText};
 
 use crate::app::alerts::AlertStatus;
@@ -78,7 +78,7 @@ pub(in crate::app) fn alerts_settings(
                     let tone = rule.reply.plays_tone();
                     // Wrapped: a checkbox and two combos are wider than a phone.
                     ui.horizontal_wrapped(|ui| {
-                        crate::chrome::checkbox(ui, &mut rule.enabled, event.label());
+                        crate::chrome::checkbox(ui, &mut rule.enabled, event.tr());
                         // The sound only matters when the reply makes one; a
                         // voice-only rule greys it rather than hiding it, so the
                         // row keeps its shape.
@@ -88,7 +88,7 @@ pub(in crate::app) fn alerts_settings(
                                 &format!("alert-{}", event.as_str()),
                                 &mut rule.sound,
                                 &AlertSound::ALL,
-                                AlertSound::label,
+                                AlertSound::tr,
                             );
                         });
                         enum_combo(
@@ -96,7 +96,7 @@ pub(in crate::app) fn alerts_settings(
                             &format!("alert-reply-{}", event.as_str()),
                             &mut rule.reply,
                             &AlertReply::ALL,
-                            AlertReply::label,
+                            AlertReply::tr,
                         );
                     });
                     ui.add_space(2.0);

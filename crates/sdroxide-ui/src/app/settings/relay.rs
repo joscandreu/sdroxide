@@ -16,7 +16,7 @@
 //! 3. that a transceiver keyed at its own microphone is seen late, and what to
 //!    do about it.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, Color32, ComboBox, RichText};
 use sdroxide_types::{
     FailSafe, RelayChannel, RelayConfig, RelayDevice, RelayFamily, RelayLink, RelayRole,
@@ -57,10 +57,9 @@ pub(in crate::app) fn settings_relay_tab(
     // ── the link ────────────────────────────────────────────────────────────
     egui::Grid::new("relay-link-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
         ui.label(tr!("settings-relay-hardware"));
-        ComboBox::from_id_salt("relay-link")
-            .width(260.0)
-            .selected_text(cfg.link.label())
-            .show_styled(ui, |ui| {
+        ComboBox::from_id_salt("relay-link").width(260.0).selected_text(cfg.link.tr()).show_styled(
+            ui,
+            |ui| {
                 for l in [
                     RelayLink::Off,
                     RelayLink::Serial,
@@ -70,11 +69,12 @@ pub(in crate::app) fn settings_relay_tab(
                     RelayLink::Gpio,
                     RelayLink::Command,
                 ] {
-                    if ui.selectable_label(cfg.link == l, l.label()).clicked() {
+                    if ui.selectable_label(cfg.link == l, l.tr()).clicked() {
                         cfg.link = l;
                     }
                 }
-            });
+            },
+        );
         ui.end_row();
 
         if cfg.link == RelayLink::Serial {
@@ -261,7 +261,7 @@ pub(in crate::app) fn settings_relay_tab(
             );
             ComboBox::from_id_salt(("relay-role", i))
                 .width(180.0)
-                .selected_text(ch.role.label())
+                .selected_text(ch.role.tr())
                 .show_styled(ui, |ui| {
                     for r in [
                         RelayRole::SdrAntenna,
@@ -273,7 +273,7 @@ pub(in crate::app) fn settings_relay_tab(
                         if r == RelayRole::BandDecoder && !band_decoder_ok && ch.role != r {
                             continue;
                         }
-                        if ui.selectable_label(ch.role == r, r.label()).clicked() {
+                        if ui.selectable_label(ch.role == r, r.tr()).clicked() {
                             ch.role = r;
                             let (lead, hold) = r.default_timing();
                             ch.lead_ms = lead;
@@ -355,10 +355,10 @@ pub(in crate::app) fn settings_relay_tab(
         ui.label(tr!("settings-relay-if-will-not-answer"));
         ComboBox::from_id_salt("relay-failsafe")
             .width(260.0)
-            .selected_text(cfg.fail_safe.label())
+            .selected_text(cfg.fail_safe.tr())
             .show_styled(ui, |ui| {
                 for f in [FailSafe::RefuseTx, FailSafe::WarnOnly] {
-                    if ui.selectable_label(cfg.fail_safe == f, f.label()).clicked() {
+                    if ui.selectable_label(cfg.fail_safe == f, f.tr()).clicked() {
                         cfg.fail_safe = f;
                     }
                 }
@@ -387,10 +387,10 @@ pub(in crate::app) fn settings_relay_tab(
             ui.label(tr!("settings-relay-line"));
             ComboBox::from_id_salt("relay-sense-line")
                 .width(260.0)
-                .selected_text(cfg.sense.line.label())
+                .selected_text(cfg.sense.line.tr())
                 .show_styled(ui, |ui| {
                     for l in [SenseLine::Off, SenseLine::Cts, SenseLine::Dsr, SenseLine::Dcd] {
-                        if ui.selectable_label(cfg.sense.line == l, l.label()).clicked() {
+                        if ui.selectable_label(cfg.sense.line == l, l.tr()).clicked() {
                             cfg.sense.line = l;
                         }
                     }

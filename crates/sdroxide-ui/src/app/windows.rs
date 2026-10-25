@@ -5,7 +5,7 @@
 //! backend, the keyer slots from the audio engine — so all either does is
 //! draw the list and push the [`Command`] a click means.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, Color32, RichText};
 use sdroxide_types::{
     BURST_MS_RANGE, CTCSS_TONES, Command, DCS_CODES, MAX_OFFSET_HZ, MemoryChannel, MemoryFolder,
@@ -382,8 +382,7 @@ fn memory_repeater_rows(ui: &mut egui::Ui, e: &mut MemoryEdit) {
     ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new(tr!("windows-shift")).weak().size(11.0));
         for s in Shift::ALL {
-            if crate::chrome::chip(ui, r.shift == s, RichText::new(s.label()).size(11.0)).clicked()
-            {
+            if crate::chrome::chip(ui, r.shift == s, RichText::new(s.tr()).size(11.0)).clicked() {
                 r.shift = s;
             }
         }
@@ -404,7 +403,7 @@ fn memory_repeater_rows(ui: &mut egui::Ui, e: &mut MemoryEdit) {
     ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new(tr!("windows-tone")).weak().size(11.0));
         for m in ToneMode::ALL {
-            if crate::chrome::chip(ui, r.tone == m, RichText::new(m.label()).size(11.0)).clicked() {
+            if crate::chrome::chip(ui, r.tone == m, RichText::new(m.tr()).size(11.0)).clicked() {
                 r.tone = m;
             }
         }
@@ -670,7 +669,7 @@ impl SdroxideApp {
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new(tr!("windows-sort")).weak().size(11.0));
             for s in MemorySort::ALL {
-                if crate::chrome::chip(ui, sort == s, RichText::new(s.label()).size(11.0))
+                if crate::chrome::chip(ui, sort == s, RichText::new(s.tr()).size(11.0))
                     .on_hover_text(match s {
                         MemorySort::Stored => tr!("windows-order-they-were-stored"),
                         MemorySort::Name => tr!("windows-name-ignoring-case"),

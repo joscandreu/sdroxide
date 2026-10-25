@@ -5,7 +5,7 @@
 //! saving as you type: a half-typed host or password would otherwise be tried
 //! with the next picture.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, Color32, ComboBox, RichText};
 use sdroxide_types::{
     Command, FtpSecurity, PictureUploadConfig, PictureUploadStatus, TlsVerify, UploadFormat,
@@ -60,10 +60,10 @@ impl crate::app::SdroxideApp {
                 ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-picup-security")));
                 let before = edit.security;
                 ComboBox::from_id_salt("picup_security")
-                    .selected_text(edit.security.label())
+                    .selected_text(edit.security.tr())
                     .show_styled(ui, |ui| {
                         for s in FtpSecurity::ALL {
-                            ui.selectable_value(&mut edit.security, s, s.label());
+                            ui.selectable_value(&mut edit.security, s, s.tr());
                         }
                     });
                 // Follow the change of convention, but only from the port
@@ -79,10 +79,10 @@ impl crate::app::SdroxideApp {
                 ui.horizontal(|ui| {
                     ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-picup-certificate")));
                     ComboBox::from_id_salt("picup_verify")
-                        .selected_text(edit.verify.label())
+                        .selected_text(edit.verify.tr())
                         .show_styled(ui, |ui| {
                             for v in TlsVerify::ALL {
-                                ui.selectable_value(&mut edit.verify, v, v.label());
+                                ui.selectable_value(&mut edit.verify, v, v.tr());
                             }
                         });
                 });
@@ -154,13 +154,14 @@ impl crate::app::SdroxideApp {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-picup-file-names")));
-                ComboBox::from_id_salt("picup_naming")
-                    .selected_text(edit.naming.label())
-                    .show_styled(ui, |ui| {
+                ComboBox::from_id_salt("picup_naming").selected_text(edit.naming.tr()).show_styled(
+                    ui,
+                    |ui| {
                         for n in UploadNaming::ALL {
-                            ui.selectable_value(&mut edit.naming, n, n.label());
+                            ui.selectable_value(&mut edit.naming, n, n.tr());
                         }
-                    });
+                    },
+                );
                 if edit.naming == UploadNaming::Sequence {
                     ui.label("keep");
                     ui.add(egui::DragValue::new(&mut edit.keep_images).range(1..=999));

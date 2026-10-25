@@ -1,7 +1,7 @@
 //! The Scanner window: what to scan, how loud a signal has to be to stop it,
 //! and what to do once it has stopped.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, RichText};
 use sdroxide_types::{
     Command, Mode, SCAN_STEPS_HZ, SQUELCH_OPEN_DB, ScanKind, ScanResume, ScannerConfig,
@@ -45,7 +45,7 @@ impl SdroxideApp {
         // What to scan.
         ui.horizontal(|ui| {
             for kind in ScanKind::ALL {
-                if crate::chrome::chip(ui, cfg.kind == kind, kind.label())
+                if crate::chrome::chip(ui, cfg.kind == kind, kind.tr())
                     .on_hover_text(match kind {
                         ScanKind::Memories => tr!("scanner-work-through-stored-memory-channels"),
                         ScanKind::Range => tr!("scanner-work-through-slice-band-channel"),
@@ -355,7 +355,7 @@ impl SdroxideApp {
             ui.label(tr!("scanner-resumes"));
             ui.horizontal(|ui| {
                 for r in ScanResume::ALL {
-                    if crate::chrome::chip(ui, cfg.resume == r, r.label())
+                    if crate::chrome::chip(ui, cfg.resume == r, r.tr())
                         .on_hover_text(match r {
                             ScanResume::Carrier => tr!("scanner-carry-once-signal-drops"),
                             ScanResume::Timed => tr!("scanner-carry-after-fixed-time-regardless"),

@@ -21,7 +21,7 @@
 //! between "there are no ships" and "set the front end's frequency correction",
 //! and nothing else in the program can tell an operator which.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, RichText};
 use sdroxide_types::{AisKind, AisStatus, AisVessel, Command};
 
@@ -339,7 +339,7 @@ impl SdroxideApp {
                             .color(if v.is_alarm() { theme::HAZARD() } else { theme::YELLOW() }),
                     );
                     ui.label(RichText::new(v.mmsi.to_string()).monospace().size(10.5).weak());
-                    ui.label(RichText::new(v.kind.label()).size(10.5).color(theme::CYAN_DIM()));
+                    ui.label(RichText::new(v.kind.tr()).size(10.5).color(theme::CYAN_DIM()));
                     if v.virtual_aid {
                         ui.label(
                             RichText::new(tr!("ais-virtual-nothing-there"))
@@ -421,7 +421,14 @@ impl SdroxideApp {
                 if let (Some((hlat, hlon)), Some((lat, lon))) = (home, v.lat.zip(v.lon)) {
                     let km = sdroxide_types::distance_km((hlat, hlon), (lat, lon));
                     let bear = sdroxide_types::bearing_deg((hlat, hlon), (lat, lon));
-                    rows.push((tr!("ais-row-range"), format!("{km:.1} km at {bear:.0}°")));
+                    rows.push((
+                        tr!("ais-row-range"),
+                        tr!(
+                            "ais-range-bearing",
+                            km = format!("{km:.1}"),
+                            bearing = format!("{bear:.0}")
+                        ),
+                    ));
                 }
                 if let Some((lat, lon)) = v.lat.zip(v.lon) {
                     rows.push((
@@ -810,8 +817,8 @@ fn ais_row(
     // it — which is what makes the name as clickable as the empty space.
     let hit = ui.interact(rect, ui.id().with(("ais-row", i)), egui::Sense::click());
     hit.on_hover_text(match v.type_label() {
-        Some(t) => format!("{} — {} — {t}", v.mmsi, v.kind.label()),
-        None => format!("{} — {}", v.mmsi, v.kind.label()),
+        Some(t) => format!("{} — {} — {t}", v.mmsi, v.kind.tr()),
+        None => format!("{} — {}", v.mmsi, v.kind.tr()),
     })
     .clicked()
 }

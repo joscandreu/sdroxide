@@ -6,7 +6,7 @@
 //! heartbeats and CQs carry one — so heard stations are looked up over HTTP,
 //! one at a time, to give the map something to place them by.
 
-use crate::i18n::tr;
+use crate::i18n::{Tr, tr};
 use eframe::egui::{self, Color32, RichText};
 use sdroxide_types::{Command, Decode};
 
@@ -206,18 +206,15 @@ impl SdroxideApp {
                 // marked one: it is still one speed, and the mark has to
                 // survive the whole row being lit.
                 let tx = js8.speed == speed;
-                let face = if multi && tx {
-                    format!("▸{}", speed.label())
-                } else {
-                    speed.label().to_string()
-                };
+                let face =
+                    if multi && tx { format!("▸{}", speed.tr()) } else { speed.tr().to_string() };
                 if crate::chrome::chip(ui, multi || tx, face)
                     .on_hover_text(if multi && tx {
-                        tr!("js8-every-speed-being-decoded-marks", speed = speed.label())
+                        tr!("js8-every-speed-being-decoded-marks", speed = speed.tr())
                     } else if multi {
-                        tr!("js8-every-speed-being-decoded-click", speed = speed.label())
+                        tr!("js8-every-speed-being-decoded-click", speed = speed.tr())
                     } else {
-                        tr!("js8-transmit-decode", speed = speed.label())
+                        tr!("js8-transmit-decode", speed = speed.tr())
                     })
                     .clicked()
                     && !tx
@@ -904,7 +901,7 @@ impl SdroxideApp {
                                             .monospace()
                                             .color(crate::theme::PINK()),
                                     )
-                                    .on_hover_text(tr!("js8-decoded", speed = m.speed.label()));
+                                    .on_hover_text(tr!("js8-decoded", speed = m.speed.tr()));
                                 }
                                 if to_me {
                                     ui.label(RichText::new("★").color(crate::theme::YELLOW()));

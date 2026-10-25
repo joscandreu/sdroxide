@@ -345,7 +345,14 @@ impl SdroxideApp {
                 if let (Some((hlat, hlon)), Some((lat, lon))) = (home, a.lat.zip(a.lon)) {
                     let km = sdroxide_types::distance_km((hlat, hlon), (lat, lon));
                     let bear = sdroxide_types::bearing_deg((hlat, hlon), (lat, lon));
-                    rows.push((tr!("adsb-row-range"), format!("{km:.0} km at {bear:.0}°")));
+                    rows.push((
+                        tr!("adsb-row-range"),
+                        tr!(
+                            "adsb-range-bearing",
+                            km = format!("{km:.0}"),
+                            bearing = format!("{bear:.0}")
+                        ),
+                    ));
                 }
                 if let Some((lat, lon)) = a.lat.zip(a.lon) {
                     rows.push((tr!("adsb-row-position"), format!("{lat:.4}, {lon:.4}")));

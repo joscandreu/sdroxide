@@ -1809,12 +1809,20 @@ fn lc_network(p: &egui::Painter, rect: Rect, s: f32, n: AtuNetwork, model: AmpMo
             if n.l_step == 0 {
                 tr!("amp-no-inductance-needed").to_string()
             } else {
-                format!("~{:.2} µH · step {}", sc.inductance_uh(n.l_step), n.l_step)
+                tr!(
+                    "amp-h-step",
+                    l_step = format!("{:.2}", sc.inductance_uh(n.l_step)),
+                    l_step2 = n.l_step
+                )
             },
             if n.c_step == 0 {
                 tr!("amp-no-capacitance-needed").to_string()
             } else {
-                format!("~{:.0} pF · step {}", sc.capacitance_pf(n.c_step), n.c_step)
+                tr!(
+                    "amp-pf-step",
+                    c_step = format!("{:.0}", sc.capacitance_pf(n.c_step)),
+                    c_step2 = n.c_step
+                )
             },
         ),
         None => (format!("L {}", n.l_step), format!("C {}", n.c_step)),
