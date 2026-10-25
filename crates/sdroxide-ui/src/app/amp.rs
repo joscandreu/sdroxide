@@ -858,7 +858,7 @@ const FIT_SETTLE: u8 = 3;
 /// A section caption, as [`chrome::menu_caption`] draws it but scaled with
 /// the panel: unscaled, it stayed tiny in a large pop-out (AJ3G, 18 Oct).
 fn caption(ui: &mut egui::Ui, s: f32, text: &str) {
-    ui.label(RichText::new(text.to_uppercase()).color(theme::CYAN_DIM()).size(9.5 * s).strong());
+    ui.label(RichText::new(text).color(theme::CYAN_DIM()).size(9.5 * s).strong());
 }
 
 /// Smallest and largest scale the panel is drawn at.
@@ -1092,7 +1092,7 @@ fn amp_panel_inner(
     // ── the tuner ──────────────────────────────────────────────────────────
     if let Some(atu) = st.atu.as_ref() {
         ui.add_space(8.0 * s);
-        caption(ui, s, "Tuner");
+        caption(ui, s, "TUNER");
         let net = atu.network;
         let bypassed = !atu.active || net.is_none_or(|n| n.bypassed);
         let h = (nominal * 0.21).max(110.0 * s);
@@ -1382,7 +1382,7 @@ fn readings_row(
 /// transmitting. The number is the peak hold, as on an SSB wattmeter; the bar
 /// under it is live, with the held peak as a tick on it.
 fn performance_row(ui: &mut egui::Ui, s: f32, perf: &Perf, limits: &AmpLimits, now: f64) {
-    let row = ui.horizontal(|ui| caption(ui, s, "Performance")).response.rect;
+    let row = ui.horizontal(|ui| caption(ui, s, "PERFORMANCE")).response.rect;
     // Centred over the middle box, EFFICIENCY.
     ui.painter().text(
         Pos2::new(ui.max_rect().center().x, row.center().y),

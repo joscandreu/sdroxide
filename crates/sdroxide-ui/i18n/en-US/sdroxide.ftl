@@ -2002,3 +2002,443 @@ settings-radio-lime-second-chain = The board's other receive chain, on the { $so
 settings-radio-tx-blocked = Transmit is blocked: { $reason }
 settings-radio-rfe-rx-fallback = Receiving on { $port }, these fall back to the unfiltered wideband path: { $bands }.
 settings-radio-rfe-tx-fallback = Transmitting on { $port }, these fall back to the wideband path — no band amplifier and no filtering: { $bands }.
+
+## Top bar and control strip (src/app/top_bar.rs)
+
+topbar-how-far-one-press-moves = How far one press moves the dial. Tap to take the next step: 10 Hz, 100 Hz, 500 Hz, 1, 2.5, 5, 9, 10 and 25 kHz. Turn the row off in Settings › UI.
+topbar-volume-gain-agc-squelch-noise = Volume, gain, AGC, squelch, the noise controls, and the RDS readout on FM broadcast
+topbar-receiver = RECEIVER
+topbar-vfo-b-split-rit-xit = VFO A/B, split, and the RIT/XIT offsets
+topbar-tuning = TUNING
+topbar-diversity-filter-which-way-combines = The diversity filter: which way it combines the two aerials, how fast it adapts, and holding it where it is
+topbar-diversity = DIVERSITY
+topbar-second-receiver-s-frequency-mode = The second receiver's frequency, mode, filter and level
+topbar-sub-receiver = SUB RECEIVER
+topbar-transceiver-s-own-aerial-socket = The transceiver's own aerial socket, and its power switch
+topbar-radio = RADIO
+topbar-tune-voice-keyer-drive-mic = Tune, the voice keyer, and the drive and mic levels
+topbar-transmit = TRANSMIT
+topbar-tune = {" "}TUNE{" "}
+topbar-panadapter-two-layers-their-speeds = The panadapter — its two layers, their speeds and detail, peak hold — plus waterfall contrast, FFT size and the skimmers
+topbar-display = DISPLAY
+topbar-logbook-spots-awards-memories-scanner = Logbook, spots, awards, memories, the scanner, settings and the manual
+topbar-system = SYSTEM
+topbar-linked = Linked
+topbar-not-linked = Not linked
+topbar-bar-trace = bar / trace
+topbar-needle-bar-trace = needle / bar / trace
+topbar-swap-vfos = Swap VFOs
+topbar-copy-b = Copy A to B
+topbar-second-receiver-right-ear-tunes = Second receiver, in the right ear. It tunes independently of A/B — its controls appear in the SUB module, and its passband on the waterfall.
+topbar-band-plan = , from the band plan
+topbar-repeater-shift-following-band-plan = Repeater shift: following the band plan, which has no shift for this frequency — simplex
+topbar-repeater-shift-transmit-above-below = Repeater shift: transmit above or below the dial, to work a repeater. Simplex now
+topbar-repeater-shift = REPEATER SHIFT
+topbar-auto = AUTO
+topbar-take-shift-band-plan-dial = Take the shift from the band plan as the dial moves. It only speaks inside a repeater output sub-band — everywhere else it leaves the radio simplex, so the calling channels stay simplex.
+topbar-offset = Offset
+topbar-repeater-tone-ctcss-dcs-goes = Repeater tone: the CTCSS/DCS that goes out under the voice, the 1750 Hz burst, and the receive tone squelch
+topbar-transmit-tone = TRANSMIT TONE
+topbar-set-here-sent-nfm-sub = set here, sent on NFM — sub-audible signalling is an FM channel's
+topbar-normal = NORMAL
+topbar-invert = INVERT
+topbar-bit-order-dcs-encoded-here = the bit order DCS is encoded with here is transcribed from the standard and has never been checked against a repeater — if it will not open, try CTCSS
+topbar-t-1750-hz-burst = 1750 HZ BURST
+topbar-every-over = EVERY OVER
+topbar-open-burst-every-time-transmitter = Open with the burst every time the transmitter keys
+topbar-send = SEND
+topbar-send-burst-now-keying-transmitter = Send the burst now — keying the transmitter for its length if it is not already keyed
+topbar-nfm-only-burst-fm-repeater = NFM only: the burst is an FM repeater's door-opener
+topbar-receive-tone-squelch = RECEIVE TONE SQUELCH
+topbar-require-receive-what-station-transmits = Require on receive what this station transmits
+topbar-hide-docked-band-selector-click = Hide the docked band selector — click again to bring it back
+topbar-show-docked-band-selector = Show the docked band selector
+topbar-dock = DOCK
+topbar-keep-band-mode-selector-open = Keep the band and mode selector open beside the waterfall instead of closing this popup every time
+topbar-band-mode = BAND & MODE
+topbar-hide-band-chip-brings-back = Hide — the band chip brings it back
+topbar-undock = UNDOCK
+topbar-return-selector-top-bar-popup = Return the selector to the top-bar popup
+topbar-dec-off = DEC off
+topbar-vol = Vol
+topbar-counted-steps-not-decibels-what =
+
+
+    Counted in steps, not decibels: what one step is worth is the receiver's own business, and on an SDRplay it depends on the band as well. Right is still more gain.
+topbar-gain = Gain
+topbar-plutosdr-s-own-agc-setting =
+
+
+    The PlutoSDR's own AGC is setting this gain, so moving the slider does nothing. Set Settings → Radio → AGC to Manual to control it here.
+topbar-agc-hang-time-click-cycle = AGC hang time — click to cycle: Off / Slow / Med / Fast
+topbar-radio-s-own-agc-click = The radio's own AGC — click to cycle: Slow / Med / Fast. It cannot be switched off from here.
+topbar-man = Man
+topbar-manual-audio-gain-used-while = Manual audio gain, used while the AGC is off. Seeded from the level the AGC was holding when it was switched off.
+topbar-radio-s-own-squelch-sent = The radio's own squelch, sent over the control link. This is the gate the audio actually passes through — the software one would only close further on what the rig already let by.
+topbar-max-gain = max gain
+topbar-manual-gain = manual gain
+topbar-noise-reduction = noise reduction
+topbar-impulse-noise-blanker = Impulse noise blanker
+topbar-auto-notch-cancel-constant-tone = Auto-notch: cancel constant tone elements (heterodynes)
+topbar-noise-reduction-off-click-switch = Noise reduction, off — click to switch it on, or pick an engine in the rows below
+topbar-binaural-audio-not-while-sub = Binaural audio — not while the sub receiver has the right ear
+topbar-binaural-audio-passband-spread-across = Binaural audio: the passband is spread across the two ears, so signals at different pitches come from different directions and the one you tune floats across. Click to go back to mono
+topbar-binaural-cw-spread-passband-across = Binaural CW: spread the passband across the two ears, so that signals at different pitches come from different directions — a pile-up becomes several places instead of one crowded note, and tuning a station floats it across. Best on headphones
+topbar-binaural-audio-spread-passband-across = Binaural audio: spread the passband across the two ears. On voice the noise spreads over the whole image while the station stays in the middle of it, which is easier to listen to for an hour — at the cost of the voice itself being spread out. Best on headphones
+topbar-mute = MUTE
+topbar-record-audio-raw-i-q = Record the audio, the raw I/Q, or both
+topbar-wfm-stereo-forced-off-click = WFM stereo forced off — click for automatic stereo
+topbar-wfm-stereo-pilot-locked-click = WFM stereo: pilot locked. Click to force mono
+topbar-wfm-stereo-automatic-no-pilot = WFM stereo: automatic, no pilot on this station
+topbar-rds-data-arriving-click-see = RDS data is arriving — click to see it
+topbar-rds-no-data-station-click = RDS — no data on this station. Click anyway for the decoder's diagnostics
+topbar-drm-decoding-click-details = DRM is decoding — click for the details
+topbar-drm-click-decoder-s-state = DRM — click for the decoder's state
+topbar-hd-radio-decoding-click-details = HD Radio is decoding — click for the details
+topbar-hd-radio-click-decoder-s = HD Radio — click for the decoder's state
+topbar-presets = PRESETS
+topbar-width-per-sideband = WIDTH PER SIDEBAND
+topbar-width = WIDTH
+topbar-passband-width-hertz-type-drag = Passband width in hertz — type it, or drag. Click into the field to enter an exact figure.
+topbar-edges = EDGES
+topbar-low-edge-hz-carrier = Low edge, in Hz from the carrier
+topbar-high-edge-hz-carrier = High edge, in Hz from the carrier
+topbar-noise-reduction-voice-off-click = Noise reduction (voice), off — click to pick an engine
+topbar-record-audio = RECORD AUDIO
+topbar-mp3 = ● MP3
+topbar-what-you-hear-mp3-receiver = What you hear, as an MP3: the receiver in one channel and your own transmit in the other. This is the recording of a QSO.
+topbar-mono = MONO
+topbar-mixed-one-channel-click-two = Mixed to one channel — click for two
+topbar-two-channels-rx-left-tx = Two channels: RX left, TX right — click for one mixed channel
+topbar-quick-clip = QUICK CLIP
+topbar-stop-after = STOP AFTER
+topbar-no-stop = no stop
+topbar-auto-record = AUTO-RECORD
+topbar-set-squelch-auto-record-needs = Set a squelch — auto-record needs one to know silence
+topbar-auto-record-needs-sdr-front = Auto-record needs an SDR front end with a software squelch
+topbar-stop-following-squelch = Stop following the squelch
+topbar-waiting-signal = waiting for a signal
+topbar-record-spectrum = RECORD SPECTRUM
+topbar-i-q-wav = ● I/Q WAV
+topbar-i-q-wav-2 = I/Q WAV
+topbar-raw-spectrum-receiver-delivering-stereo = The raw spectrum the receiver is delivering, as a stereo 32-bit float WAV (RF64 past 4 GB) that SDR#, SDRuno, HDSDR and SDRangel open — and that sdroxide itself plays back with --file. Large: 8 bytes a sample.
+topbar-radio-hands-over-demodulated-audio = This radio hands over demodulated audio, so there is no I/Q to record.
+topbar-what-capture-costs-sample-rate = What a capture costs at this sample rate
+topbar-engine = ENGINE
+topbar-no-noise-reduction-decoders-never = No noise reduction — the decoders never saw it anyway
+topbar-strength = STRENGTH
+topbar-tone = TONE
+topbar-ctcss-dcs-no-sub-audible = CTCSS / DCS — no sub-audible tone on this signal
+topbar-tone-squelch = TONE SQUELCH
+topbar-carrier-squelch-open-any-signal = Carrier squelch: open on any signal
+topbar-require-tone-currently-being-received = Require the tone currently being received
+topbar-ctcss = CTCSS
+topbar-any-dcs = ANY DCS
+topbar-open-any-dcs-coded-signal = Open on any DCS-coded signal. Which of the 104 codes it carries cannot be read reliably here, so there is nothing finer to choose
+topbar-which-socket-back-radio-receiving =
+    Which socket on the back the radio is receiving on — its own ANT command, the same setting as the ANT button on the front panel. Click to step to the next one.
+
+    The choice is remembered per band, and put back the next time the dial crosses into that band.
+topbar-radio-s-separate-receiving-antenna =
+    The radio's separate receiving antenna, switched into the receive path or out of it — its own RX ANT setting. The aerial on the main socket stays on transmit either way.
+
+    The radio remembers this per band itself, so sdroxide reads it back after every band change rather than putting back what it last saw: clicking here is the only thing that moves it.
+topbar-radio-s-own-power-switch =
+    The radio's own power switch, over the control link, and the one true on/off in the program — not sdroxide's LINK switch, which closes sdroxide's end and leaves the radio running.
+
+    For ON to reach anything the radio's control end has to stay awake while it is off: Network Control over the LAN, or a CI-V port still fed from the mains on a set switched off at the front.
+topbar-switch-radio = Switch the radio on
+topbar-switch-radio-off-audio-meters = Switch the radio off. The audio and the meters stop with it.
+topbar-what-second-aerial-click-swap =
+    What the second aerial is for — click to swap.
+
+    CANCEL subtracts it from the first, in the gain, phase and delay that make a local noise source line up on both: the DSP form of a noise-cancelling phaser. COMBINE adds the two in the phase that reinforces, weighted by how well each hears — diversity reception, which fills in fades.
+topbar-hold = HOLD
+topbar-stop-filter-moving-reach-moment = Stop the filter moving. Reach for this the moment a null appears: a filter left adapting will re-aim itself at whatever becomes loudest, which on a quiet band is the station you are listening to.
+topbar-restart = RESTART
+topbar-zero-filter-find-null-again = Zero the filter and find the null again.
+topbar-adapt = Adapt
+topbar-how-fast-filter-chases-slow = How fast the filter chases: slow and steady at the left, converging inside a fraction of a second and visibly hunting at the right. Start fast to find the null, then HOLD it.
+topbar-where-sub-receiver-listens-shift = Where the sub receiver listens. Shift-click the waterfall, or drag inside the sub's passband, to move it.
+topbar-dial = ←DIAL
+topbar-move-sub-receiver-main-dial = Move the sub receiver to the main dial
+topbar-dial-2 = DIAL←
+topbar-move-main-dial-sub-receiver = Move the main dial to the sub receiver
+topbar-filter = Filter
+topbar-sub-receiver-passband-edges-hz = Sub receiver passband edges, in Hz
+topbar-sub-receiver-level-plays-right = Sub receiver level (it plays in the right ear)
+topbar-ptt = {" "}PTT{" "}
+topbar-voice-keyer-record-transmit-stored = Voice keyer: record and transmit stored messages
+topbar-drive = Drive
+topbar-tune-2 = Tune
+topbar-tx-audio-processing-microphone-click = TX Audio is processing the microphone — click to open it
+topbar-click-open-tx-audio-gate = Click to open TX Audio: gate, EQ, compressor and limiter for the microphone
+topbar-mic = Mic
+topbar-cessb = CESSB
+topbar-microphone-gain = Microphone gain
+topbar-deviation-how-far-mode-s =
+    Deviation: how far this mode's burst swings a radio that modulates it itself. An FM transmitter turns audio level into frequency swing and has no ALC to catch it, so full scale into a data input set for voice over-deviates — which sounds completely normal to a listener and decodes for nobody.
+
+    Kept per mode, so a deviation set for 1200 baud packet never lands on FT8.
+topbar-transmit-audio-how-hard-mode =
+    Transmit audio: how hard this mode drives the modulator of a radio that modulates what we send it — a CAT rig on its sound card, a FLEX, an Icom on its network port. Bring it down until the rig's ALC is barely moving and set the power at the radio; ALC riding on a constant-envelope digital mode is what splatters.
+
+    Drive is not this control: on these radios Drive reaches the rig's power register and never touches its audio.
+
+    Kept per mode — FT8, RTTY, PSK and MCW each keep their own.
+topbar-tx-audio = TX audio
+topbar-cw-psk-rtty-skimmers-decode = CW / PSK / RTTY skimmers — decode signals across the band and mark them on the waterfall
+topbar-skimmers = SKIMMERS
+topbar-run-skimmer = Run this skimmer
+topbar-minimum-snr-decoded-signal-needs = Minimum SNR a decoded signal needs to be spotted
+topbar-needs-wideband-iq-source = needs a wideband IQ source
+topbar-cw-decoder = CW DECODER
+topbar-how-many-signals-model-reads = How many signals the model reads at once. The rest keep their marker but carry no text.
+topbar-spots = SPOTS
+topbar-save-skimmer-s-spot-list = Save the skimmer's spot list to a file
+topbar-show-hide-full-band-waterfall = Show/hide the full-band waterfall strip above the panadapter — everything this receiver can see at once
+topbar-spectrum-waterfall-either-layer-both = Spectrum and waterfall — either layer, both, or neither. Lit while both are shown.
+topbar-spectrum = SPECTRUM
+topbar-show-spectrum = SHOW SPECTRUM
+topbar-draw-spectrum-line-across-top = Draw the spectrum line across the top of the panadapter. Switched off, the waterfall takes the whole height.
+topbar-peak-hold = PEAK HOLD
+topbar-trace-highest-level-each-column = Trace the highest level each column has reached over the live line, decaying back down — what the band did while you were looking elsewhere
+topbar-draw-spectrum-receding-surface-instead = Draw the spectrum as a receding surface instead of a flat line: the newest spectrum across the front, the ones before it flowing away from you. The last couple of seconds of the band as a landscape — a carrier that comes and goes is a ridge rather than a line that twitches. The grid and the peak hold belong to the flat line and are not drawn on it.
+topbar-how-quickly-spectrum-line-follows = How quickly the spectrum line follows the band. Slower averages more frames into each other: a steadier line, and a weak carrier that stands still long enough to read. The waterfall is not touched by it — those rows get every frame either way.
+topbar-waterfall = WATERFALL
+topbar-show-waterfall = SHOW WATERFALL
+topbar-draw-scrolling-waterfall-below-spectrum = Draw the scrolling waterfall below the spectrum. Switched off, the spectrum line takes the whole height.
+topbar-how-fast-waterfall-scrolls-lines = How fast the waterfall scrolls, in lines a second: Slow 5, Medium 28, Fast 56, Faster 112, Fastest 224. The engine clocks these itself, so the two fastest are real detail rather than the same line drawn twice — as far as the receiver can feed them: a line can never show more than one transform, and a narrow front end makes only a few dozen a second. They cost history, since the waterfall keeps a fixed number of lines — 73 seconds at Medium, 9 at Fastest.
+topbar-decode-labels = DECODE LABELS
+topbar-mark-every-decoded-station-waterfall = Mark every decoded station on the waterfall with its callsign, at the frequency it was heard on — FT8, FT4 and the other slotted modes. A good opening puts thirty of them across the span twice a minute, over the traces you are reading; switch them off and the waterfall is just the band. The decode list beside it still has every callsign.
+topbar-switch-3d-set = Switch 3D on to set this
+topbar-how-3d-spectrum-drawn-only = How the 3D spectrum is drawn. Only the shape differs — both renderings show the same spectra, and both hide what is behind them, so a strong signal in front stands over the band it is covering.
+topbar-lines = LINES
+topbar-one-trace-per-remembered-spectrum = One trace per remembered spectrum, in the flat line's own colour, each hiding the ones behind it. The shape without the levels, and the reading to pick when the shape is what you are after — it costs a little more than the solid one rather than less, because it draws the same surface and then strokes every crest on top of it.
+topbar-solid = SOLID
+topbar-filled-surface-coloured-waterfall-s = A filled surface coloured by the waterfall's palette, so the level is in the colour as well as in the height and the two halves of the panadapter agree about what a strong signal looks like. Change the palette in Settings › Display.
+topbar-how-fast-3d-spectrum-flows = How fast the 3D spectrum flows away from you, in rows a second: Slow 6, Medium 12, Fast 24, Faster 48. The surface is a fixed number of rows deep, so this is also how much time it holds. Slower is a longer memory and a surface that crawls; faster is a shorter one that moves. The waterfall keeps its own scroll rate, below.
+topbar-how-many-columns-panadapter-waterfall = How many columns the panadapter and its waterfall are drawn with. Auto reads this machine's renderer and the size of the panadapter and picks the most it can carry — a 4K screen wants 4096. Every column is a byte in every frame, so a client connected to a remote station pays for the detail on its link: 4096 columns at 60 fps is about a quarter of a megabyte a second, twice the standard width.
+topbar-read-machine-screen-take-most = Read this machine and this screen, take the most they can carry, and follow them if they change
+topbar-width-force-right-now-whatever = The width in force right now, whatever the row above asks for
+topbar-keep-floor-ceiling-set-best = Keep the floor/ceiling set for best waterfall contrast — eased back into place on a band change, after a pan or zoom, and when the levels drift. Switch it on to fit at once; switch it off to keep the levels where you set them.
+topbar-keep-tuned-frequency-middle-panadapter = Keep the tuned frequency in the middle of the panadapter: the window slides under the dial instead of the picture jumping a whole span when you tune off the edge. Switch it on to centre at once; switch it off to pan and zoom wherever you like.
+topbar-spectrum-floor-ceiling-fft-size = Spectrum floor / ceiling and FFT size
+topbar-level-drawn-bottom-spectrum-darkest = The level drawn at the bottom of the spectrum and as the darkest waterfall colour. Bring it up until the noise floor just darkens. Setting it switches FIT off.
+topbar-ceil = ceil{" "}
+topbar-level-drawn-top-bring-down = The level drawn at the top. Bring it down until the strongest signal you care about reaches full colour. Setting it switches FIT off.
+topbar-fft-size = FFT SIZE
+topbar-flip = FLIP
+topbar-scroll-waterfall-upwards-newest-row = Scroll the waterfall upwards — newest row at the bottom (V)
+topbar-logbook-all-qsos-digital-manual = Logbook — all QSOs (digital + manual)
+topbar-live-spots-dx-cluster-pota = Live spots — DX cluster, POTA, SOTA, PSK Reporter
+topbar-award-tracking-dxcc-was-waz = Award tracking — DXCC / WAS / WAZ / grids
+topbar-band-conditions-published-forecast-beside = Band conditions — the published forecast beside what has actually been heard on each band
+topbar-satellite-qo-100-beacon-calibration = Satellite — the QO-100 beacon calibration is running
+topbar-satellite-doppler-tracking-qo-100 = Satellite — Doppler tracking, and the QO-100 beacon calibration
+topbar-ism-band-devices-decoding-now = ISM-band devices — decoding now, whether or not this window is open. Switch it off with DECODING inside the window.
+topbar-ism-band-devices-weather-sensors = ISM-band devices — weather sensors, meters and home automation heard around you
+topbar-public-sdrs-internet-browse-kiwisdr = Public SDRs on the internet — browse the KiwiSDR and SpyServer directories and open one as a radio
+topbar-winlink-radio-email = Winlink radio email
+topbar-memory-channels = Memory channels
+topbar-scanner-stopped-signal = Scanner — stopped on a signal
+topbar-scanner-running = Scanner — running
+topbar-scan-memory-channels-frequency-range = Scan memory channels or a frequency range
+topbar-hfdl-ground-network-decode-log = HFDL ground network — the decode log and aircraft map, below the waterfall. Switch the decoder on with LISTEN inside the panel.
+topbar-hfdl-ground-network-decoding-now = HFDL ground network — decoding now. Open the panel.
+topbar-hfdl-ground-network-aircraft-shortwave = HFDL ground network — the aircraft shortwave data link, one listening channel at a time
+topbar-grid-tracker-worked-maidenhead-squares = Grid tracker — worked Maidenhead squares on a map, with what is heard
+topbar-amplifier-set-up-hardrock-under = Amplifier — set up a Hardrock under Settings → Amplifier
+topbar-settings-device-gains-antennas-audio = Settings — device gains, antennas, audio devices
+topbar-user-manual-f1 = User manual (F1)
+topbar-range-was-typed-settings-radio = That range was typed in Settings ▸ Radio ▸ RX range, not reported by the radio. Widen it, or empty the box to use whatever the device says about itself.
+topbar-what-device-reports-about-itself = That is what the device reports about itself. If the radio does cover this band, state its real range in Settings ▸ Radio ▸ RX range.
+topbar-band = BAND
+topbar-mode = MODE
+topbar-digital = DIGITAL
+
+## Top bar: the System box's window chips.
+
+topbar-chip-log = LOG
+topbar-chip-spots = SPOTS
+topbar-chip-awards = AWARDS
+topbar-chip-bands = BANDS
+topbar-chip-sat = SAT
+topbar-chip-ism = ISM
+topbar-chip-public-sdr = PUBLIC SDR
+topbar-chip-mail = MAIL
+topbar-chip-mem = MEM
+topbar-chip-scan = SCAN
+topbar-chip-hfdl = HFDL
+topbar-chip-grid = GRID
+topbar-chip-amp = AMP
+topbar-chip-settings = ⚙ SETTINGS
+topbar-chip-help = ? HELP
+
+## Top bar: the mode-defaults chip.
+
+topbar-changed-agc = AGC
+topbar-changed-squelch = squelch
+topbar-changed-auto-notch = auto-notch
+topbar-changed-stereo = stereo
+topbar-changed-binaural = binaural
+# $mode is a mode name (USB, CW…); $changed lists what differs from its defaults.
+topbar-mode-defaults =
+    Back to { $mode }'s defaults. Changed from them: { $changed }.
+
+    Click to put them back. { $mode }'s own values return, and what you set here is forgotten.
+
+## Settings window, Radio tab: longer messages with values
+
+settings-radio-no-such-baud = the radio has no { $baud } baud setting — { $default } will be used instead
+settings-radio-icom-scope-hint =
+    Streams the radio's own scope sweep over the CI-V link and draws it as the panadapter — the only picture of the band a demod-audio rig can give, since the audio it sends is what already came through its filter.
+
+    Needs the radio set up for it: CI-V USB Baud Rate to 115200 and CI-V USB Port to "Unlink from {"["}REMOTE]" (both under SET > Connectors > CI-V), and the baud rate above set to match — below { $min_baud } the sweeps do not fit down the link and the scope stays off.
+
+    The sweeps share the radio's internal USB bus with its own sound card. If received audio starts to drop out with the scope on, this box is the first thing to try turning off.
+settings-radio-rx-tx-words = { $rx } / TX { $tx }
+settings-radio-soapy-native = Hardware above is supported directly by sdroxide: { $names }. Selecting that interface above gives you its own settings — gain stages, filters and notches SoapySDR cannot express — and needs no SoapySDR module.
+settings-radio-rx888-width-hint = How much of the digitised spectrum the panadapter shows at once. The whole DSP chain runs at this width, so wider costs proportionally more CPU — 1/2 is the entire band in the waterfall, and a serious amount of arithmetic. Above the VHF crossover ({ $crossover } MHz) the panadapter is not looking at the antenna but at the tuner's IF, which is 8 MHz wide and parked at { $if_centre } MHz — so anything wider than { $widest } cannot be centred on it, and the extra width is dead spectrum beside the signal rather than more of it.
+settings-radio-sdrplay-serial-missing = Serial { $serial } is not among the receivers the SDRplay service reports. Pick one of the listed receivers, or replug this one and press Rescan.
+settings-radio-hdr-filter-hint =
+    The analog filter in front of the HDR path — a different control from the receiver's own bandwidth. Each setting is built at a fixed set of centres and can do nothing elsewhere; this one is built at { $centres }. Applies immediately.
+
+    The path itself does not work yet — see the switch above — so this chooses a filter for a mode that is currently silent.
+settings-radio-rspduo-only = Only an RSPduo has a second tuner, and the receiver selected here is an { $model }, so this will do nothing.
+settings-radio-lime-tx-gain-low = Transmit gain is { $db } dB, at the bottom of its range — a few microwatts out of the board, which will read as nothing on a power meter whatever is downstream of it. That is the default so that an armed transmitter cannot surprise you; raise it before you key.
+
+## Settings window, General: SWR
+
+settings-general-swr-tune-limit = (tuning: { $limit }:1)
+
+## Top bar and control strip: messages with values
+
+# $reading is the meter's own hover text; $faces lists the faces a click cycles through.
+topbar-smeter-hover =
+    { $reading }
+
+    Click to cycle meter face: { $faces }
+topbar-step-down = Down { $step }
+topbar-step-up = Up { $step }
+# $auto is topbar-band-plan or empty.
+topbar-repeater-shift-hover = Repeater shift { $shift } — receiving on { $rx }, transmitting on { $tx } MHz{ $auto }
+topbar-tone-and-burst = Transmitting { $tone } under the voice, and a { $ms } ms 1750 Hz burst at the start of every over
+topbar-tone-under-voice = Transmitting { $tone } under the voice
+topbar-burst-every-over = A { $ms } ms 1750 Hz burst at the start of every over
+topbar-match-tx = MATCH TX ({ $tone })
+topbar-decimation-on = Front-end decimation: the receiver is being given the middle 1/{ $n } of the { $msps } Msps this radio streams — { $span } — and the rest is thrown away before any of it reaches the receiver.
+topbar-decimation-off = Front-end decimation, off: the receiver sees the whole { $span } this radio streams.
+topbar-decimation-hint =
+    { $what }
+
+    A narrower span means finer waterfall resolution, a quieter noise floor (3 dB per halving) and less CPU — at the cost of the band either side of it. The dial still tunes anywhere; the radio moves its LO to follow.
+
+    Click to cycle: off / 2 / 4 … { $max }.
+topbar-rx-gain-hint = Front-end RX gain ({ $stage }). Too much clips the receiver's ADC and smears spurious signals across the band; too little and it goes deaf.
+topbar-rx-gain-stages =
+    {""}
+
+    This rig has { $n } RX gain stages — the rest are in Settings → Device.
+topbar-passband-now =
+    {""}
+
+    The passband is at { $dbfs } dBFS now.
+# $level is topbar-passband-now or empty.
+topbar-squelch-hint =
+    Gate the audio below this power in the receive passband, in dBFS. Left is open.{ $level } Set it above the noise and below the signal.
+
+    A stream that arrives with the radio's own AGC already in it — an Icom's 12 kHz IF, for one — sits far higher on this scale than an SDR's raw baseband does, which is why the rail reaches full scale.
+topbar-nr-cycle-hint =
+    Noise reduction: { $strength } — { $engine }
+
+    Click to cycle the strength: Low / Med / High / Off. The engine is in the rows below.
+topbar-recording-both = Recording { $audio } and { $iq }
+topbar-recording-audio = Recording audio to { $audio }
+topbar-recording-iq = Recording I/Q to { $iq }
+topbar-auto-record-armed = Auto-record armed: a file per transmission, closed after { $secs } s of silence
+topbar-rds-hover = RDS: { $ps }. Click for the station's data
+topbar-drm-hover = DRM: { $service }. Click for the broadcast's details
+topbar-drm-no-codec = DRM: { $summary } — locked, but its { $codec } audio cannot be decoded here. Click for what is missing
+topbar-drm-state = DRM: { $summary } — click for the decoder's state
+topbar-hd-hover = HD Radio: { $station }. Click for the broadcast's details
+topbar-hd-state = HD Radio: { $summary } — click for the decoder's state
+topbar-binaural-preset = { $preset } in each ear — { $lo } … { $hi } Hz, both sidebands
+topbar-nr-hover =
+    Noise reduction: { $strength } — { $engine }
+
+    Click to change engine or strength
+topbar-clipping = Clipping { $span } — press again to start it over
+topbar-record-clip = Record { $span } and stop — a clip to attach to a reception report
+topbar-starting-clip = starting a { $span } clip…
+topbar-stop-recording-after = Stop the MP3 recording after { $minutes } minutes
+topbar-stops-in = stops in { $time }
+topbar-auto-record-hint = Record each transmission to its own file, closed after { $secs } seconds of silence
+topbar-recording-silence = recording · { $secs } s of silence (closes at { $hold })
+topbar-tone-open = Receiving { $tone }, which is the tone squelch — audio open
+topbar-tone-closed = Receiving { $heard }, but the tone squelch wants { $wanted } — audio stays closed
+topbar-tone-heard = Receiving CTCSS/DCS { $tone }
+topbar-tone-nothing = Tone squelch { $tone }: nothing matching it is being received
+topbar-tone-use = USE { $tone }
+topbar-sockets = Sockets: { $sockets }
+topbar-voice-keyer-tx = Transmitting { $slot } — click to open the voice keyer
+topbar-drive-uncal-gen = This frequency, which is on no amateur band, is not calibrated, so the setting reaches the transmitter whole.
+topbar-drive-uncal-band = { $band } is not calibrated, so the setting reaches the transmitter whole.
+# $trim is signed (+1.5); $diff is its size; $more is "less" or "more".
+topbar-drive-cal-gen = This frequency, which is on no amateur band, is calibrated { $trim } dB, so the same setting puts { $diff } dB { $more ->
+        [less] less
+       *[more] more
+    } on the air here than on an uncalibrated band.
+topbar-drive-cal-band = { $band } is calibrated { $trim } dB, so the same setting puts { $diff } dB { $more ->
+        [less] less
+       *[more] more
+    } on the air here than on an uncalibrated band.
+topbar-drive-hover =
+    How hard the transmitter is driven. On a radio sdroxide modulates itself it scales the modulated samples; on a rig with its own power control it is the fraction of rated power the rig is asked for.
+
+    { $trim }
+
+    Settings → Radio → Transmit drive by band.
+topbar-cessb-hover =
+    Controlled-envelope SSB: more average power for the same peak, without splatter — three or four decibels of apparent loudness at the far end. How many decibels the voice is driven into the processor; 0 is off, 6 is a sensible first try. It does not touch Drive.
+
+    Now: { $now }
+topbar-waterfall-rate = { $rows } rows a second — { $seconds } seconds of band
+topbar-detail-auto-columns = { $n } columns, whatever Auto would have picked here
+topbar-n-columns = { $n } columns
+topbar-fft-bins-whole = { $n } bins across the whole stream — one per column, or finer
+topbar-fft-bins-pooled = { $n } bins pooled into the panadapter's { $cols } columns: sharper signals, not more of them
+topbar-sat-locked = Satellite — locked on { $name }
+topbar-amp-in-line = { $model } — in line (PTT)
+topbar-amp-bypassed = { $model } — bypassed (OFF)
+topbar-amp-not-answering = { $model } — not answering
+topbar-filter-edges = { $lo } … { $hi } Hz from the carrier
+topbar-filter-isb = Receive filter: { $width } Hz in each ear ({ $edges }). ISB's two sidebands are separate transmissions, so the width is the width of one of them.
+topbar-filter-width = Receive filter: { $width } Hz wide ({ $edges }).
+topbar-filter-hint =
+    { $what }
+
+    Click for the width, the two edges and this mode's presets, as numbers — the panadapter's grips place a passband by eye, this is where an exact figure is typed.
+topbar-band-outside-range =
+    { $band } is outside what this radio receives ({ $ranges } MHz).
+
+    { $why }
+# $time is "day" or "night".
+topbar-band-forecast = { $band }: { $verdict } ({ $time ->
+        [day] daytime
+       *[night] night
+    }) — forecast by HAMQSL.com from the solar indices, not a measurement of your own path.
+
+## Top bar: short words and captions
+
+topbar-squelch-open = open
+topbar-off = off
+topbar-recording = recording
+topbar-sql = sql
+topbar-stations = stations
+topbar-caption-reaction = reaction
+topbar-caption-scroll = scroll
+topbar-caption-surface = surface
+topbar-caption-flow = flow
+topbar-caption-detail = detail
+topbar-floor = floor

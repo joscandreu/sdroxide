@@ -398,9 +398,12 @@ impl SdroxideApp {
                 // stopped is told a figure, and this is where they find out
                 // where it came from.
                 ui.label(
-                    RichText::new(format!("(tuning: {:.1}:1)", swr_tune_limit(limit)))
-                        .size(11.0)
-                        .color(crate::theme::gray(140)),
+                    RichText::new(tr!(
+                        "settings-general-swr-tune-limit",
+                        limit = format!("{:.1}", swr_tune_limit(limit))
+                    ))
+                    .size(11.0)
+                    .color(crate::theme::gray(140)),
                 );
             });
         });

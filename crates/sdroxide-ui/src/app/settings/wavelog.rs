@@ -136,7 +136,7 @@ impl SdroxideApp {
         let label_of = |id: u32| -> String {
             match stations.iter().find(|s| s.id == id) {
                 Some(s) => s.label(),
-                None if id == 0 => tr!("settings-wavelog-none").into(),
+                None if id == 0 => tr!("settings-wavelog-none"),
                 // Chosen in an earlier session; the list arrives with a test.
                 None => tr!("settings-wavelog-location-n", id = id),
             }

@@ -580,8 +580,12 @@ fn popup_body<R>(
 
 /// A section caption inside a menu popup — the same small cyan label the
 /// module boxes wear, so a menu reads as the box it replaced.
+///
+/// Drawn as given: a caption is written in capitals at its source. Upper-casing
+/// here would be wrong for translated text — Turkish needs `İ` for `i`, and a
+/// German `ß` has no single capital.
 pub fn menu_caption(ui: &mut Ui, text: &str) {
-    ui.label(RichText::new(text.to_uppercase()).color(theme::CYAN_DIM()).size(9.5).strong());
+    ui.label(RichText::new(text).color(theme::CYAN_DIM()).size(9.5).strong());
 }
 
 /// A captioned box around a run of related controls — the caption

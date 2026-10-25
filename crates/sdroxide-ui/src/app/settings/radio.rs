@@ -385,10 +385,10 @@ pub(in crate::app) fn settings_cat_tab(
                 if !bauds.contains(&cfg.cat.serial.baud) {
                     ui.add(
                         egui::Label::new(
-                            RichText::new(format!(
-                                "the radio has no {} baud setting — {ELAD_DEFAULT_CAT_BAUD} \
-                                 will be used instead",
-                                cfg.cat.serial.baud,
+                            RichText::new(tr!(
+                                "settings-radio-no-such-baud",
+                                baud = cfg.cat.serial.baud,
+                                default = ELAD_DEFAULT_CAT_BAUD
                             ))
                             .color(crate::theme::YELLOW()),
                         )
@@ -600,20 +600,7 @@ pub(in crate::app) fn settings_cat_tab(
                 &mut cfg.cat.scope,
                 tr!("settings-radio-show-radio-s-spectrum-scope"),
             )
-            .on_hover_text(format!(
-                "Streams the radio's own scope sweep over the CI-V link and draws it \
-                     as the panadapter — the only picture of the band a demod-audio rig \
-                     can give, since the audio it sends is what already came through its \
-                     filter.\n\n\
-                     Needs the radio set up for it: CI-V USB Baud Rate to 115200 and \
-                     CI-V USB Port to \"Unlink from [REMOTE]\" (both under SET > \
-                     Connectors > CI-V), and the baud rate above set to match — below \
-                     {CAT_SCOPE_MIN_BAUD} the sweeps do not fit down the link and the \
-                     scope stays off.\n\n\
-                     The sweeps share the radio's internal USB bus with its own sound \
-                     card. If received audio starts to drop out with the scope on, this \
-                     box is the first thing to try turning off.",
-            ));
+            .on_hover_text(tr!("settings-radio-icom-scope-hint", min_baud = CAT_SCOPE_MIN_BAUD));
             ui.end_row();
 
             if cfg.cat.scope {
@@ -1201,7 +1188,11 @@ fn oc_pins(rx: u8, tx: u8) -> String {
             (0..7).filter(|b| w & (1 << b) != 0).map(|b| (b + 1).to_string()).collect();
         if pins.is_empty() { "—".into() } else { pins.join(", ") }
     };
-    if rx == tx { list(rx) } else { format!("{} / TX {}", list(rx), list(tx)) }
+    if rx == tx {
+        list(rx)
+    } else {
+        tr!("settings-radio-rx-tx-words", rx = list(rx), tx = list(tx))
+    }
 }
 
 /// RTL-SDR interface: which dongle, sample rate, gain/AGC, frequency
@@ -3022,12 +3013,8 @@ pub(in crate::app) fn settings_soapy_devices(
         ui.add_space(4.0);
         let names = native.iter().map(|b| b.label()).collect::<Vec<_>>().join(", ");
         ui.label(
-            RichText::new(format!(
-                "Hardware above is supported directly by sdroxide: {names}. Selecting that \
-                 interface above gives you its own settings — gain stages, filters and \
-                 notches SoapySDR cannot express — and needs no SoapySDR module.",
-            ))
-            .color(crate::theme::CYAN()),
+            RichText::new(tr!("settings-radio-soapy-native", names = names.to_string()))
+                .color(crate::theme::CYAN()),
         );
     }
 
@@ -3548,19 +3535,11 @@ pub(in crate::app) fn settings_rx888_tab(
         ui.vertical(|ui| {
             ui.add(
                 egui::Label::new(
-                    egui::RichText::new(format!(
-                        "How much of the digitised spectrum the panadapter shows at once. \
-                         The whole DSP chain runs at this width, so wider costs \
-                         proportionally more CPU — 1/2 is the entire band in the \
-                         waterfall, and a serious amount of arithmetic. Above the VHF \
-                         crossover ({:.1} MHz) the panadapter is not looking at the \
-                         antenna but at the tuner's IF, which is 8 MHz wide and parked \
-                         at {:.2} MHz — so anything wider than {} cannot be centred on \
-                         it, and the extra width is dead spectrum beside the signal \
-                         rather than more of it.",
-                        Rx888Config::vhf_crossover_hz(rate) / 1e6,
-                        Rx888Config::VHF_IF_CENTER_HZ / 1e6,
-                        bw_label(2.0 * Rx888Config::VHF_IF_CENTER_HZ),
+                    egui::RichText::new(tr!(
+                        "settings-radio-rx888-width-hint",
+                        crossover = format!("{:.1}", Rx888Config::vhf_crossover_hz(rate) / 1e6),
+                        if_centre = format!("{:.2}", Rx888Config::VHF_IF_CENTER_HZ / 1e6),
+                        widest = bw_label(2.0 * Rx888Config::VHF_IF_CENTER_HZ)
                     ))
                     .weak(),
                 )
@@ -3950,10 +3929,10 @@ pub(in crate::app) fn settings_elad_tab(
             if !ELAD_CAT_BAUDS.contains(&cfg.cat.serial.baud) {
                 ui.add(
                     egui::Label::new(
-                        RichText::new(format!(
-                            "the radio has no {} baud setting — {ELAD_DEFAULT_CAT_BAUD} will be \
-                             used instead",
-                            cfg.cat.serial.baud,
+                        RichText::new(tr!(
+                            "settings-radio-no-such-baud",
+                            baud = cfg.cat.serial.baud,
+                            default = ELAD_DEFAULT_CAT_BAUD
                         ))
                         .color(crate::theme::YELLOW()),
                     )
@@ -5472,10 +5451,9 @@ pub(in crate::app) fn settings_sdrplay_tab(
     // though a receiver were selected.
     if listed.is_none() && !cfg.sdrplay.serial.trim().is_empty() && !devices.is_empty() {
         ui.label(
-            RichText::new(format!(
-                "Serial {} is not among the receivers the SDRplay service reports. Pick one \
-                 of the listed receivers, or replug this one and press Rescan.",
-                cfg.sdrplay.serial.trim()
+            RichText::new(tr!(
+                "settings-radio-sdrplay-serial-missing",
+                serial = cfg.sdrplay.serial.trim()
             ))
             .color(Color32::from_rgb(220, 170, 70)),
         );
@@ -5832,14 +5810,9 @@ pub(in crate::app) fn settings_sdrplay_tab(
             // mode that is otherwise off, and a control that does nothing is
             // worse than one that is not there.
             if cfg.sdrplay.hdr {
-                ui.label(tr!("settings-radio-hdr-filter")).on_hover_text(format!(
-                    "The analog filter in front of the HDR path — a different control \
-                     from the receiver's own bandwidth. Each setting is built at a \
-                     fixed set of centres and can do nothing elsewhere; this one is \
-                     built at {}. Applies immediately.\n\nThe path itself does not work \
-                     yet — see the switch above — so this chooses a filter for a mode \
-                     that is currently silent.",
-                    cfg.sdrplay.hdr_bw.centres_label(),
+                ui.label(tr!("settings-radio-hdr-filter")).on_hover_text(tr!(
+                    "settings-radio-hdr-filter-hint",
+                    centres = cfg.sdrplay.hdr_bw.centres_label()
                 ));
                 let mut bw = cfg.sdrplay.hdr_bw;
                 enum_combo(ui, "sdrplay_hdr_bw", &mut bw, &SdrPlayHdrBw::ALL, SdrPlayHdrBw::label);
@@ -6059,12 +6032,8 @@ pub(in crate::app) fn settings_sdrplay_tab(
             );
             if !maybe_duo {
                 ui.label(
-                    RichText::new(format!(
-                        "Only an RSPduo has a second tuner, and the receiver selected here \
-                         is an {}, so this will do nothing.",
-                        model.label()
-                    ))
-                    .color(Color32::from_rgb(220, 170, 70)),
+                    RichText::new(tr!("settings-radio-rspduo-only", model = model.label()))
+                        .color(Color32::from_rgb(220, 170, 70)),
                 );
             } else if devices.is_empty() {
                 ui.label(
@@ -6676,12 +6645,9 @@ pub(in crate::app) fn settings_lime_tab(
         // reads downstream as a transmitter that does not work at all.
         if cfg.lime.tx_gain_db < LimeConfig::LOW_DRIVE_DB {
             ui.label(
-                egui::RichText::new(format!(
-                    "Transmit gain is {:.0} dB, at the bottom of its range — a few microwatts \
-                     out of the board, which will read as nothing on a power meter whatever is \
-                     downstream of it. That is the default so that an armed transmitter cannot \
-                     surprise you; raise it before you key.",
-                    cfg.lime.tx_gain_db
+                egui::RichText::new(tr!(
+                    "settings-radio-lime-tx-gain-low",
+                    db = format!("{:.0}", cfg.lime.tx_gain_db)
                 ))
                 .color(egui::Color32::from_rgb(220, 170, 70)),
             );

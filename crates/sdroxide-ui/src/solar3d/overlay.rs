@@ -213,14 +213,14 @@ fn menu_bar(
                 let btn = chrome::chip(ui, false, "LAYERS")
                     .on_hover_text("What is drawn: orbits, clouds, CMEs, labels, QSOs, aurora");
                 menu(ui, st, M_LAYERS, btn, |ui, st| {
-                    chrome::menu_caption(ui, "Layers");
+                    chrome::menu_caption(ui, "LAYERS");
                     layer_controls(ui, st);
                 });
 
                 let btn = chrome::chip(ui, false, "SUN")
                     .on_hover_text("Which SDO channel wraps the Sun, and how old it is");
                 menu(ui, st, M_SUN, btn, |ui, st| {
-                    chrome::menu_caption(ui, "Sun");
+                    chrome::menu_caption(ui, "SUN");
                     sun_controls(ui, st, data, now);
                 });
 
@@ -232,7 +232,7 @@ fn menu_bar(
                         "The aurora, the propagation numbers and which bands are open",
                     );
                     menu(ui, st, M_WEATHER, btn, |ui, st| {
-                        chrome::menu_caption(ui, "Space weather");
+                        chrome::menu_caption(ui, "SPACE WEATHER");
                         let aurora = aurora_panel(ui, st, data, Place::Inline, sim_now).is_some();
                         let prop = weather_panel(ui, st, data, Place::Inline, sim_now).is_some();
                         let bands = bands_panel(ui, st, Place::Inline).is_some();
@@ -249,21 +249,21 @@ fn menu_bar(
                 let btn = chrome::chip(ui, false, "SCALE")
                     .on_hover_text("Body and Moon-orbit exaggeration");
                 menu(ui, st, M_SCALE, btn, |ui, st| {
-                    chrome::menu_caption(ui, "Scale");
+                    chrome::menu_caption(ui, "SCALE");
                     scale_controls(ui, st);
                 });
 
                 let btn = chrome::chip(ui, st.sim_offset_s != 0.0, "TIME")
                     .on_hover_text("Scrub the whole scene forward and back");
                 menu(ui, st, M_TIME, btn, |ui, st| {
-                    chrome::menu_caption(ui, "Time");
+                    chrome::menu_caption(ui, "TIME");
                     time_controls(ui, st);
                 });
 
                 let btn = chrome::chip(ui, st.lapse_playing, "ACTIVITY")
                     .on_hover_text("Replay the last hour of decodes on the globe");
                 menu(ui, st, M_ACTIVITY, btn, |ui, st| {
-                    chrome::menu_caption(ui, "Activity");
+                    chrome::menu_caption(ui, "ACTIVITY");
                     activity_controls(ui, st);
                 });
 
@@ -271,7 +271,7 @@ fn menu_bar(
                 let btn = chrome::chip(ui, on, "PROP")
                     .on_hover_text("What the propagation heat map is showing");
                 menu(ui, st, M_PROP, btn, |ui, st| {
-                    chrome::menu_caption(ui, "Propagation");
+                    chrome::menu_caption(ui, "PROPAGATION");
                     prop_controls(ui, st);
                 });
             });
@@ -283,7 +283,7 @@ fn menu_bar(
 /// laid out the way the system is — the Sun and the Earth–Moon pair first, then
 /// one row per planet with its own moons beside it.
 fn view_controls(ui: &mut egui::Ui, st: &mut SolarUi) {
-    chrome::menu_caption(ui, "View");
+    chrome::menu_caption(ui, "VIEW");
     if chrome::chip_accent(ui, st.view.auto, "▶ AUTO", theme::CYAN(), theme::INK_ON_CYAN())
         .on_hover_text(
             "Fly a spline through a set of framed viewpoints. Any mouse input cancels it.",
@@ -521,7 +521,7 @@ fn prop_controls(ui: &mut egui::Ui, st: &mut SolarUi) {
         return;
     }
 
-    chrome::menu_caption(ui, "Display");
+    chrome::menu_caption(ui, "DISPLAY");
     ui.horizontal_wrapped(|ui| {
         let combined = st.view.prop_mode != 0;
         if chrome::chip(ui, combined, "ALL BANDS")
@@ -543,7 +543,7 @@ fn prop_controls(ui: &mut egui::Ui, st: &mut SolarUi) {
 
     let live = st.prop.live_bands();
     if st.view.prop_mode == 0 {
-        chrome::menu_caption(ui, "Band");
+        chrome::menu_caption(ui, "BAND");
         ui.horizontal_wrapped(|ui| {
             if live.is_empty() {
                 ui.label(RichText::new("nothing heard yet").size(10.5).weak());
@@ -565,7 +565,7 @@ fn prop_controls(ui: &mut egui::Ui, st: &mut SolarUi) {
     } else {
         // The legend, and the only place the colours are named. Only bands with
         // something in them: a key full of dead bands is a key to nothing.
-        chrome::menu_caption(ui, "Bands");
+        chrome::menu_caption(ui, "BANDS");
         ui.horizontal_wrapped(|ui| {
             if live.is_empty() {
                 ui.label(RichText::new("nothing heard yet").size(10.5).weak());
@@ -587,7 +587,7 @@ fn prop_controls(ui: &mut egui::Ui, st: &mut SolarUi) {
         });
     }
 
-    chrome::menu_caption(ui, "Sources");
+    chrome::menu_caption(ui, "SOURCES");
     ui.horizontal_wrapped(|ui| {
         let mut src = crate::prop_map::PropSources(st.view.prop_sources);
         for s in sdroxide_types::PropSource::ALL {
@@ -622,7 +622,7 @@ fn prop_controls(ui: &mut egui::Ui, st: &mut SolarUi) {
         }
     });
 
-    chrome::menu_caption(ui, "Memory");
+    chrome::menu_caption(ui, "MEMORY");
     ui.horizontal_wrapped(|ui| {
         ui.add(
             egui::DragValue::new(&mut st.view.prop_halflife_min)
