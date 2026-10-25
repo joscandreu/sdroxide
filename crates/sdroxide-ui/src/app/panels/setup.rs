@@ -39,17 +39,20 @@ impl SdroxideApp {
         // Per-mode parameters (RTTY/Olivia/THOR/FSQ) now live in each panel's
         // header, so this dialog only carries the shared identity + the
         // message templates the slotted QSO modes share.
-        let title = if mode.is_aprs() {
-            tr!("setup-aprs-setup").to_string()
+        // The window is keyed by its English title, which is what egui keyed
+        // it by before the title was translated: the position it was left
+        // at survives, and a change of language does not move it.
+        let (title, key) = if mode.is_aprs() {
+            (tr!("setup-aprs-setup"), "APRS Setup".to_string())
         } else if mode.is_packet() {
-            tr!("setup-packet-setup").to_string()
+            (tr!("setup-packet-setup"), "Packet Setup".to_string())
         } else if mode.is_text_modem() || mode.is_hell() || mode.is_js8() {
-            tr!("setup-mode-setup", mode = mode.label())
+            (tr!("setup-mode-setup", mode = mode.label()), format!("{} Setup", mode.label()))
         } else {
-            tr!("setup-ft8-ft4-ft2-setup").to_string()
+            (tr!("setup-ft8-ft4-ft2-setup"), "FT8 / FT4 / FT2 Setup".to_string())
         };
-        let resp = egui::Window::new(title.clone())
-            .id(crate::layout::salted_id(ctx, &title))
+        let resp = egui::Window::new(title)
+            .id(crate::layout::salted_id(ctx, &key))
             .open(&mut open)
             .frame(crate::chrome::window_frame())
             .resizable(false)
