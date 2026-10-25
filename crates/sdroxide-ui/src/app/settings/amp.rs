@@ -1,6 +1,7 @@
 //! The Hardrock amplifier: which one, on which port, and what it should do on
 //! its own. The live panel is the AMP window; this tab only sets the link up.
 
+use crate::i18n::tr;
 use eframe::egui::{self, ComboBox, RichText};
 use sdroxide_types::{AMP_BAUD_RATES, AmpConfig, AmpModel, AmpStatus};
 
@@ -15,44 +16,35 @@ pub(in crate::app) fn settings_amp_tab(
     serial_ports: &[String],
     apply: &mut bool,
 ) {
-    ui.label(RichText::new("Amplifier").size(14.0).strong().color(theme::CYAN()));
+    ui.label(RichText::new(tr!("settings-amp-amplifier")).size(14.0).strong().color(theme::CYAN()));
     ui.add_space(4.0);
     if !seeded {
-        ui.label(RichText::new("Waiting for the station's amplifier configuration…").weak());
+        ui.label(
+            RichText::new(tr!("settings-amp-waiting-station-s-amplifier-configuration")).weak(),
+        );
         return;
     }
-    ui.label(
-        RichText::new(
-            "A HobbyPCB Hardrock-500 or Hardrock-50 on its USB serial port. SDRoxide reads its \
-             meters, switches its band, mode and antenna, and runs its tuner from the AMP window. \
-             The amplifier is still keyed by the radio's PTT line as before.",
-        )
-        .weak(),
-    );
+    ui.label(RichText::new(tr!("settings-amp-hobbypcb-hardrock-500-hardrock-50")).weak());
     ui.add_space(8.0);
 
-    chrome::checkbox(ui, &mut cfg.enabled, "Enable");
+    chrome::checkbox(ui, &mut cfg.enabled, tr!("settings-amp-enable"));
     ui.add_space(4.0);
     egui::Grid::new("amp-grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-        ui.label("Model");
+        ui.label(tr!("settings-amp-model"));
         super::enum_combo(ui, "amp-model", &mut cfg.model, &AmpModel::ALL, AmpModel::label);
         ui.end_row();
         if !cfg.model.tested() {
             ui.label("");
             ui.label(
-                RichText::new(
-                    "Untested: this panel has only been tested with a Hardrock-500. \
-                     Meter limits for this model are scaled from the Hardrock-500's \
-                     and may be wrong. Watch the amplifier's own display.",
-                )
-                .color(theme::YELLOW()),
+                RichText::new(tr!("settings-amp-untested-panel-has-only-been"))
+                    .color(theme::YELLOW()),
             );
             ui.end_row();
         }
 
-        ui.label("Port");
+        ui.label(tr!("settings-amp-port"));
         let shown = if cfg.serial.path.is_empty() {
-            "— choose —".to_string()
+            tr!("settings-amp-choose")
         } else {
             cfg.serial.path.clone()
         };
@@ -69,7 +61,7 @@ pub(in crate::app) fn settings_amp_tab(
         );
         ui.end_row();
 
-        ui.label("Baud");
+        ui.label(tr!("settings-amp-baud"));
         ComboBox::from_id_salt("amp-baud")
             .width(200.0)
             .selected_text(cfg.serial.baud.to_string())
@@ -81,45 +73,38 @@ pub(in crate::app) fn settings_amp_tab(
                 }
             })
             .response
-            .on_hover_text(
-                "Must match the amplifier's menu. HobbyPCB's own control panel needs 115200.",
-            );
+            .on_hover_text(tr!("settings-amp-must-match-amplifier-s-menu"));
         ui.end_row();
     });
     ui.add_space(6.0);
-    chrome::checkbox(ui, &mut cfg.follow_band, "Follow the radio's band").on_hover_text(
-        "Sends the transmit frequency to the amplifier on every band change, so its filters \
-         follow the radio without a CAT cable of their own. Never sent during a transmission.",
-    );
-    chrome::checkbox(ui, &mut cfg.feed_tx_meter, "Show its power and SWR on the TX meter")
-        .on_hover_text(
-            "Only where the radio does not measure them itself, and only while the amplifier is \
-             in line.",
-        );
+    chrome::checkbox(ui, &mut cfg.follow_band, tr!("settings-amp-follow-radio-s-band"))
+        .on_hover_text(tr!("settings-amp-sends-transmit-frequency-amplifier-every"));
+    chrome::checkbox(ui, &mut cfg.feed_tx_meter, tr!("settings-amp-show-power-swr-tx-meter"))
+        .on_hover_text(tr!("settings-amp-only-where-radio-does-not"));
     ui.add_space(8.0);
 
     let (text, col) = if !status.configured {
-        ("Off".to_string(), theme::TEXT())
+        (tr!("settings-amp-off"), theme::TEXT())
     } else if status.connected {
-        (format!("Connected to the {}", status.model.label()), theme::GREEN())
+        (tr!("settings-amp-connected-to", model = status.model.label()), theme::GREEN())
     } else if let Some(e) = &status.error {
         (e.clone(), theme::ALERT())
     } else {
-        ("Connecting…".to_string(), theme::YELLOW())
+        (tr!("settings-amp-connecting"), theme::YELLOW())
     };
     ui.horizontal(|ui| {
-        ui.label("Status");
+        ui.label(tr!("settings-amp-status"));
         ui.label(RichText::new(text).color(col));
     });
     ui.add_space(6.0);
     if chrome::chip_accent(
         ui,
         false,
-        RichText::new(" APPLY ").strong(),
+        RichText::new(tr!("settings-amp-apply")).strong(),
         theme::GREEN(),
         theme::INK_ON_CYAN(),
     )
-    .on_hover_text("Save and (re)open the amplifier's port")
+    .on_hover_text(tr!("settings-amp-save-re-open-amplifier-s"))
     .clicked()
     {
         *apply = true;

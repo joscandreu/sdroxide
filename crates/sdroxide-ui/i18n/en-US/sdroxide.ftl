@@ -181,3 +181,1824 @@ speech-callsigns = Callsigns
 speech-quiet-on-tx = Stay quiet while transmitting
     .hint = Speech goes to your speakers, and therefore into your microphone. High-SWR warnings still get through.
 speech-device-note = Announcements play on their own sound device, so they are never recorded and never sent to anyone listening remotely. Keys for speaking the status, repeating the last announcement and stopping mid-sentence are on the Controls tab.
+
+## Settings window (src/app/settings/mod.rs)
+
+settings-waiting-station-s-network-configuration = Waiting for the station's network configuration…
+settings-device-reports = as the device reports
+settings-transverters = Transverters
+settings-one-row-per-box-while = One row per box. While the dial is inside a row's band the radio is tuned to dial + offset and that row's transmit rule and drive limit apply; outside every row the radio is on its own bands. Rows are tried top to bottom.
+settings-name = Name
+settings-band-low = Band low
+settings-band-high = Band high
+settings-offset = Offset
+settings-transmit = Transmit
+settings-max-drive = Max drive
+settings-off-takes-transverter-out-line = Off takes this transverter out of the line without losing the row — the band goes back to whatever the radio reaches on its own.
+settings-t-2-m = 2 m
+settings-what-you-call-shown-log = What you call it. Shown in the log when the dial selects it.
+settings-bottom-band-transverter-works-dial = The bottom of the band this transverter works, on the dial. 144 for 2 m.
+settings-top-band-dial-148-2 = The top of the band, on the dial. 148 for 2 m in Regions 2 and 3, 146 in Region 1.
+settings-radio-ends-up-dial-offset = The radio ends up on dial + offset, so a transverter that brings a band down to an I.F. is negative: 2 m into a 28 MHz I.F. is -116, because 144 - 116 = 28. Drag to trim it a hertz at a time for an oscillator that is slightly off.
+settings-off-while-converting-receive-only =
+    Off while converting: receive only — the row is a converter, not a transverter, and nothing is keyed on this band.
+
+    Through the same converter: it works both ways, and transmit takes the same offset.
+settings-ceiling-transmit-drive-while-transverter =
+    A ceiling on transmit drive while this transverter is selected, as a percentage of full. A transverter's I.F. input takes milliwatts and the drive that is right for the radio's own bands will destroy it, so this is the row's most important field. 100% is no limit.
+
+    Your Drive setting is held under this rather than moved, so the number you use on HF comes back when the dial leaves the band.
+settings-remove = REMOVE
+settings-add-transverter = ADD TRANSVERTER
+settings-takes-effect-apply-reconnect-like = Takes effect on Apply / reconnect, like the converter offset above.
+settings-maximum-transmit-drive = Maximum transmit drive
+settings-hard-limit-drive-tune-controls = A hard limit the Drive and TUNE controls cannot be taken past, applied after the band calibration below so nothing can lift the drive back over it. Set it where the radio makes its rated power and the whole of the Drive control becomes usable — on a transmitter that modulates its own samples (HPSDR, LimeSDR, PlutoSDR, HackRF) full drive is the transmitter wide open, which on a high-gain amplifier is well past what its finals are rated for. Off means the controls reach full drive.
+settings-limit-drive = Limit drive to
+settings-per-cent-full-drive-key = Per cent of full drive. Key the radio into a dummy load and bring this down until the meter reads the power the amplifier is rated for.
+settings-applies-immediately-every-band-tune = Applies immediately, on every band and to TUNE as well.
+settings-transmit-drive-band = Transmit drive by band
+settings-every-amplifier-has-different-gain = Every amplifier has a different gain on every band, so one Drive setting makes a different power on each. Measure the output on each band, then trim the bands that come out high until they all match: set Drive for the band that needs the most (usually the highest), and take the others down to it. Decibels of output power, applied to voice, digital and TUNE alike. Zero everywhere — the default — changes nothing.
+settings-other = Other
+settings-clear-all = CLEAR ALL
+settings-back-no-calibration-drive-setting = Back to no calibration: the Drive setting reaches every band whole.
+settings-applies-immediately-band-you-would = Applies immediately, and to the band you would transmit on — behind a transverter that is the band on the dial, and the transverter's own drive limit still wins over anything set here.
+settings-settings = Settings
+settings-enter-server-s-address-first = enter the server's address first
+settings-enter-receiver-s-address-first = enter the receiver's address first, or pick one from Public SDRs
+settings-no-radio-selected-press-discover = no radio selected — press Discover, or enter an address
+settings-enter-radio-s-address-first = enter the radio's address first
+settings-general = General
+settings-radio = Radio
+settings-ui = UI
+settings-alerts = Alerts
+settings-controls = Controls
+settings-spots = Spots
+settings-freedv = FreeDV
+settings-uploads = Uploads
+settings-winlink = Winlink
+settings-servers = Servers
+settings-t-r-switch = T/R switch
+settings-amplifier = Amplifier
+settings-remote = Remote
+settings-tle = TLE
+settings-profiles = Profiles
+settings-station = Station
+settings-enter-digital-mode-ft8-sstv = Enter a digital mode (FT8 / SSTV / …) once to load the saved values.
+settings-callsign = Callsign
+settings-grid-square = Grid square
+settings-your-callsign-grid-shared-across = Your callsign and grid, shared across FT8/FT4/FT2, SSTV image headers, and the logbook. Also editable from the FT8 / SSTV setup dialog.
+settings-iaru-region = IARU region
+settings-which-radio-interface-server-uses = Which radio interface the server uses is set on the machine it runs on.
+settings-radio-interface = Radio interface
+settings-waiting-machine-radio-attached-interface = Waiting for the machine the radio is attached to. Its interface settings are below and can be changed from here meanwhile.
+settings-converter = Converter
+settings-manual-type-offset-below = Manual — type an offset below
+settings-what-box-reads-when-offset = What this box reads when the offset is not one of the presets. Set it by typing in the Offset field below; there is nothing to select here.
+settings-frequency-converter-front-receiver-pick = A frequency converter in front of the receiver. Pick one, or type an offset beside it.
+settings-how-far-converter-moves-signal =
+    How far a converter moves the signal on its way to the receiver, in Hz — the same number and sign every converter's documentation and every other SDR program states. The radio ends up on dial + offset: positive for an upconverter (a Ham It Up is 125000000), negative for anything that brings a band down to an I.F. — a satellite LNB, or a 2 m transverter on a 28 MHz I.F., which is -116000000 (28 − 144). 0 = no converter.
+
+    Drag to trim it a hertz at a time, which is what a converter whose oscillator is slightly off wants.
+
+    This is the receive path. What is in the transmit line is the row below.
+
+    Takes effect on Apply.
+settings-what-transmit-line-while-converter =
+    What is in the transmit line while a converter is set.
+
+    Off while converting: nothing is transmitted — the safe default, and right for a receive-only accessory.
+
+    Through the same converter: one box converts both ways, a transverter. Transmit takes the offset above and follows it when it is trimmed.
+
+    Its own offset: the transmit line is different from the receive one. Nought is the common case — a converter (an LNB, a Ham It Up) on receive with the transmitter on its own antenna, which is the QO-100 station.
+
+    The amateur-band check still applies, on the frequency you are transmitting on.
+
+    Takes effect on Apply.
+settings-how-far-transmit-line-moves =
+    How far the transmit line moves the signal, in Hz, on the same sign rule as the receive offset: the radio transmits at dial + offset.
+
+    0 = the transmitter is wired to its own antenna and works on the frequency the dial says — a QO-100 station's 2.4 GHz uplink.
+
+    A transmit converter that takes an I.F. *up* is a negative number: the radio works below the dial.
+settings-rx-range = RX range
+settings-which-frequencies-radio-receives-mhz =
+    Which frequencies this radio receives, in MHz: 144-146, 430-440. Leave empty to use whatever the device reports about itself.
+
+    Band buttons outside the range are greyed out and the dial will not go there.
+
+    These are dial frequencies. With a converter set, state the band you tune — 144-148 for a 2 m transverter — not the I.F. the radio is really on.
+
+    Takes effect on Apply.
+settings-tx-range = TX range
+settings-which-frequencies-radio-transmits-mhz =
+    Which frequencies this radio transmits on, in MHz: 144-146, 430-440. Leave empty to use whatever the device reports — and if it reports nothing, the driver is taken at its word and any frequency is allowed.
+
+    Dial frequencies, like the receive range above.
+
+    This is a limit you set, not a licence: transmitting outside the amateur bands is refused regardless unless you have turned that off in config.toml. Nor does it give a receive-only device a transmitter.
+
+    Takes effect on Apply.
+settings-antenna = Antenna is
+settings-where-radio-listens-station-antenna =
+    Where this radio listens from.
+
+    At the station: the antenna is yours, so your own locator says where it is. The default, and right for everything in the shack.
+
+    Somewhere else: an online receiver, or your own set up on a hilltop. What it hears is reported to PSK Reporter, WSPRnet and FreeDV Reporter from the locator beside this, never from yours — and ADS-B places aircraft against it too.
+
+    Picking a receiver under "Public SDRs" fills this in for you.
+
+    Takes effect on Apply.
+settings-receiver-s-maidenhead-locator-jn88ec =
+    The receiver's Maidenhead locator — JN88ec, DO30db. Four or six characters.
+
+    Leave it empty if you do not know where the receiver is: nothing is then reported at all, which is the only honest answer. Reporting from your own square would put somebody else's reception on the wrong continent.
+settings-audio = Audio to
+settings-gain-per-band = Gain per band
+settings-remember-receive-gain-per-band = Remember receive gain per band
+settings-each-band-keeps-receive-gain = Each band keeps the receive gain you last set on it, and gets it back when the dial returns — a band button, a drag across a band edge or the radio's own knob. General coverage is split into HF, VHF, UHF and above. A band you have not set a gain on keeps whatever is in force. Off: one gain everywhere.
+settings-s-meter-calibration = S-meter calibration
+settings-added-radio-s-s-meter =
+    Added to this radio's S-meter reading. An SDR's meter starts out reading dBFS — level against the converter's full scale — so a receiver with plenty of gain can show S9 with no antenna connected. Set this to the difference between what the meter shows and a level you know: a signal generator, or a quiet band you trust to sit around S2–S3. Applies at once.
+
+    On top of cal_offset_db in config.toml, which is one figure for the whole station.
+settings-t-0-db = 0 dB
+settings-antenna-somewhere-else-no-locator = The antenna is somewhere else and no locator is set, so nothing this radio hears is reported to PSK Reporter, WSPRnet or FreeDV Reporter. Type the receiver's locator above to report from it.
+settings-ranges-are-mhz-low-high = Ranges are in MHz, low-high, separated by commas: 144-146, 430-440 — that is 144000000-146000000 Hz and 430000000-440000000 Hz. They are dial frequencies: a converter offset does not move them. The converter offset above is the field in hertz. Leave a range empty to use whatever the device reports about itself; a device that reports nothing is taken at its word.
+settings-careful-rtl-sdr-blog-v4 = Careful on an RTL-SDR: the Blog V4 upconverts on its own below 28.8 MHz, so a negative offset that lands the hardware there shifts twice.
+settings-transmit-audio = Transmit audio
+settings-use = in use
+settings-every-stage-off = every stage off
+settings-open-tx-audio = Open TX Audio…
+settings-microphone-processing-chain-gate-eq = The microphone processing chain — gate, EQ, de-esser, compressor and limiter — with a test recording to tune it by ear without transmitting. Voice modes only. Also opened by clicking Mic in the TX box.
+settings-pick-radio-interface-above-configuration = Pick a radio interface above (this configuration used the removed auto-detect mode).
+settings-configuration-used-removed-auto-detect = This configuration used the removed auto-detect mode. Pick an interface above once the machine the radio is attached to has answered.
+settings-radio-has-no-interface-yet = This radio has no interface yet — pick one above and press Apply / reconnect.
+settings-radio-has-no-interface-yet-2 = This radio has no interface yet. One can be picked above once the machine the radio is attached to has answered.
+settings-apply-reconnect = Apply / reconnect
+settings-switch-interface-now-no-restart = Switch to this interface now — no restart needed
+settings-switch-server-s-radio-interface = Switch the server's radio to this interface now — no restart needed. The old one keeps running if the new one cannot be opened.
+settings-switches-live-radio-without-restarting = Switches the live radio without restarting.
+settings-everything-above-server-s-own = Everything above is the server's own configuration, and changes are saved there. Most settings apply as you change them; the ones fixed when the device is opened — the sample rate, an address, the interface itself — need this button.
+settings-dx-cluster-telnet = DX cluster (telnet)
+settings-enabled = Enabled
+settings-host = Host
+settings-port = Port
+settings-login-call = Login call
+settings-commands = Commands
+settings-one-per-line-e-g = one per line, e.g. SET/FT8
+settings-reverse-beacon-network = Reverse Beacon Network
+settings-read-world-s-cw-rtty = Read the world's CW/RTTY skimmers and feed the propagation map with them. This is what makes the map show bands this radio is not listening to. On by default: it puts nothing on the air, needs no account, and uses the callsign from the General tab. RBN spots do not appear in the spot list — they are measurements, not invitations.
+settings-t-7000-cw-rtty-feed-7001 = 7000 is the CW/RTTY feed, 7001 the FT8/FT4 one
+settings-one-per-line-e-g-2 = one per line, e.g. set/filter cont=eu
+settings-sent-after-login-place-narrow = Sent after login. The place to narrow the feed — without a filter this is every skimmer on Earth.
+settings-rbn-paths-are-placed-country = RBN paths are placed from country centres, not locators — accurate for a small country, out by a long way for a large one. They are a separate layer on the propagation map and can be switched off there.
+settings-pota-sota-psk-reporter = POTA / SOTA / PSK Reporter
+settings-pota-activator-spots = POTA activator spots
+settings-sota-spots = SOTA spots
+settings-psk-reporter-current-band = PSK Reporter (current band)
+settings-upload-my-ft8-ft4-ft2 = Upload my FT8/FT4/FT2/JS8 decodes
+settings-report-what-station-hears-pskreporter = Report what this station hears to pskreporter.info, so it appears there as a receiver. Uses the callsign and grid from the General tab.
+settings-antenna-2 = Antenna
+settings-collector = Collector
+settings-t-4739-live-collector-14739-test = 4739 is the live collector, 14739 the test one
+settings-max-age-s = Max age (s)
+settings-wsprnet = WSPRnet
+settings-upload-my-wspr-decodes = Upload my WSPR decodes
+settings-send-every-wspr-reception-wsprnet = Send every WSPR reception to wsprnet.org. On by default: it puts nothing on the air, and reporting what you hear is what makes a WSPR receiver part of the network rather than a private curiosity. A slot that decoded nothing is reported too, which is how the network tells a shut band from a receiver that was switched off.
+settings-download-who-heard-me = Download who heard me
+settings-ask-wsprnet-org-which-stations = Ask wsprnet.org which stations decoded this one. WSPR has no acknowledgement of any kind, so this is the only way a transmitting beacon learns anything about its own reach.
+settings-ask-every = Ask every
+settings-looking-back = looking back
+settings-apply = {" "}APPLY{" "}
+settings-persist-re-connect-feeds = Persist and (re)connect the feeds
+settings-broadcast-stations = Broadcast stations
+settings-winlink-account = Winlink account
+settings-password = Password
+settings-winlink-account-password-not-gateway = The Winlink account password, not the gateway password. It is case-sensitive — enter it exactly as it was issued.
+settings-locator = Locator
+settings-how-connect = How to connect
+settings-route = Route
+settings-internet = Internet
+settings-forward-cms-over-internet = Forward with the CMS over the internet
+settings-radio-packet = Radio (packet)
+settings-call-rms-gateway-air-radio = Call an RMS gateway on the air. The radio must be in PACKET or PACKET-HF.
+settings-gateway = Gateway
+settings-via = Via
+settings-digipeaters-order-separated-spaces-usually = Digipeaters, in order, separated by spaces. Usually empty — a gateway you can hear directly is a gateway you should call directly.
+settings-speed = Speed
+settings-most-rms-gateways-answer-1200 = Most RMS gateways answer at 1200. Calling a 1200 gateway at 9600 sounds exactly like a gateway that is off the air, so set this from what the gateway's owner publishes rather than guessing. 9600 also needs the radio's data port at both ends. 300 is HF.
+settings-frequency = Frequency
+settings-clear = CLEAR
+settings-zero-leaves-dial-alone-which = Zero leaves the dial alone, which is what you want when you park on one channel. Anything else tunes the radio when the session starts.
+settings-my-gateways = My gateways
+settings-winlink-s-published-gateway-list = Winlink's published gateway list needs an API key sdroxide does not have, so keep your own. The two or three gateways reachable from one location are learned by trying, and they rarely change.
+settings-use-2 = USE
+settings-call-one-next-connect = Call this one on the next connect
+settings-current-dial = current dial
+settings-forget = FORGET
+settings-forget-gateway = Forget this gateway
+settings-add-gateway = + ADD GATEWAY
+settings-save-gateway-above-list = Save the gateway above to the list
+settings-internet-gateway = Internet gateway
+settings-cms-address = CMS address
+settings-client-name = Client name
+settings-winlink-s-production-servers-only = Winlink's production servers only accept client names they know, and answer an unknown one with "Unknown client types are not allowed on production servers". Until sdroxide is registered with the Winlink Development Team, connecting needs a name they recognise.
+settings-automatic-connection = Automatic connection
+settings-connect-timer = Connect on a timer
+settings-every = Every
+settings-persist-winlink-account = Persist the Winlink account
+settings-callsign-lookup = Callsign lookup
+settings-provider = Provider
+settings-auto-fill-name-qth-grid = Auto-fill name/QTH/grid on spot click & QSO
+settings-choose-provider-enter-login = Choose a provider to enter its login.
+settings-qrz-user = QRZ user
+settings-qrz-pass = QRZ pass
+settings-hamqth-user = HamQTH user
+settings-hamqth-pass = HamQTH pass
+settings-one-hamqth-account-does-both = One HamQTH account does both — this login is the one the HamQTH upload tab uses.
+settings-upload = Upload
+settings-auto-upload-each-new-qso = Auto-upload each new QSO
+settings-master-switch-which-services-qso = The master switch. Which services a QSO goes to is set on each tab below.
+settings-turn-auto-upload-each-new = Turn on "Auto-upload each new QSO" above first — a service ticked here is not pushed until it is.
+settings-auto-upload-off-above-so = Auto-upload is off above, so the service ticks are disabled and nothing is pushed automatically yet — the per-QSO UP button in the logbook still works.
+settings-qrz-log-key = QRZ log key
+settings-qrz-logbook-api-key-your = The QRZ logbook API key from your QRZ logbook settings — not the XML-lookup login.
+settings-eqsl-user = eQSL user
+settings-eqsl-pass = eQSL pass
+settings-eqsl-qth = eQSL QTH
+settings-qth-nickname-eqsl-profile-upload = The QTH Nickname of the eQSL profile to upload to and download from — needed only when the account owns more than one; leave it blank otherwise.
+settings-same-login-hamqth-callsign-lookup = The same login as the HamQTH callsign lookup — filling in either one fills in both.
+settings-club-log-email = Club Log email
+settings-club-log-pass = Club Log pass
+settings-club-log-key = Club Log key
+settings-wrl-api-key = WRL API key
+settings-developer-api-key-world-radio = The developer API key from World Radio League → Integrations → Developer API. It is shown once when you generate it, so copy it then. Contacts go to your default logbook — set one in WRL if you keep more than one.
+settings-confirmations-download = Confirmations (download)
+settings-lotw-user = LoTW user
+settings-lotw-pass = LoTW pass
+settings-lotw-upload-uses-tqsl-export = LoTW upload uses TQSL — export ADIF from the logbook and sign it. LoTW/eQSL confirmations are downloaded here to mark worked-vs-confirmed.
+settings-sync-confirmations = SYNC CONFIRMATIONS
+settings-fetching-subscriptions = Fetching subscriptions…
+settings-spectrum-waterfall-everything-read-off =
+    Its spectrum, its waterfall and everything read off them are on that radio's tab, which is why it has none of its own. The interface settings above are still this radio's and still apply — press Apply / reconnect after changing them and both radios come back up together.
+
+    To use it on its own again, clear the Panadapter receiver box on that radio's page.
+settings-panadapter = Panadapter
+settings-give-radio-wideband-panadapter-borrowing = Give this radio a wideband panadapter by borrowing another radio's receiver — an SDR on the same antenna, or one fed from this radio's I.F. output. The spectrum, the waterfall, the sub receiver, the digital modes and the skimmer all come from that receiver; the dial, the mode, the filter and the transmitter stay here.
+settings-receiver = Receiver
+settings-none = None
+settings-which-radio-receives-one-leaves =
+    Which radio receives for this one. It leaves the tab strip while it is lent — its front end belongs to this radio's engine — and comes straight back when this is set to None.
+
+    Takes effect on Apply.
+settings-connected = Connected to
+settings-how-far-above-radio-s =
+    How far above this radio's dial the receiver sits, in hertz — 0 for a receiver on the same antenna. For an I.F. tap, the intermediate frequency the receiver is parked on: 8215000 for a K3's KXV3B, 9000000 for a 9 MHz I.F.
+
+    This is not the Converter field above, which retunes the radio, and not the CAT tab's I/Q centre offset, which is about this radio's own sound card. Nothing typed here is ever sent to either radio.
+
+    Takes effect on Apply.
+settings-audio-2 = Audio from
+settings-follow-dial = Follow the dial
+settings-keep-receiver-radio-s-dial = Keep the receiver on this radio's dial, and move the dial when you tune on the panadapter. Off parks the receiver where it is — a fixed watch on one segment while the radio goes elsewhere.
+settings-invert-spectrum = Invert spectrum
+settings-mirror-receiver-s-span-about = Mirror the receiver's span about its centre, for a tap whose oscillator sits above the signal and hands the band over the wrong way round. Leave it off unless the waterfall fills with signals that are all on the wrong side of the dial.
+settings-mute-transmit = Mute on transmit
+settings-silence-receive-audio-while-radio = Silence receive audio while this radio is transmitting. On by default: with the receiver on the same antenna, or on this radio's I.F., what it hears during an over is your own transmitter. Overs keyed at the radio itself — the microphone's PTT, a foot switch, MOX — count too, as soon as the CAT link says the rig has gone to transmit.
+settings-blank-transmit = Blank on transmit
+settings-stop-panadapter-waterfall-while-radio = Stop the panadapter and waterfall while this radio is transmitting. On by default: a transmitter painted across the whole span erases the band behind it. Turn it off to watch the band — or your own signal — through an over, which is worth having with the receiver on a separate antenna. Applies to overs sdroxide keys: one keyed at the radio is received right through, so the picture keeps running whatever this says.
+settings-per-mode-offsets-radio-whose = Per-mode offsets, for a radio whose I.F. moves with the mode. A mode left empty uses the offset above.
+settings-computer = On this computer
+settings-add-radio-computer = Add a radio on this computer
+settings-radio-s-settings-are-below = This radio's settings are below. Drag to move it along the strip.
+settings-switch-radio-dialog-follows-drag = Switch to this radio (the dialog follows). Drag to move it along the strip.
+settings-tx = ● TX
+settings-mute-radio-s-audio = Mute this radio's audio
+settings-link = LINK
+settings-close-radio-configuration-kept = Close this radio (its configuration is kept)
+settings-close-tab-close-radio-station = Close this tab, or close the radio on its station
+settings-close-tab = Close this tab
+settings-transverters-full = { $max } is the most this table holds
+settings-dialling = Dialling { $url }…
+settings-region-note = Where the station is. Sets every band plan: the band edges, the CW / data / phone sub-segments on the waterfall strip, where the skimmers listen, the calling frequencies offered, and what counts as out of band for transmit. In Region { $region } that makes 70 cm { $region ->
+        [1] 430–440 MHz — so 446 is out of band, and 40 m stops at 7.200
+        [2] 420–450 MHz, and 40 m runs to 7.300
+       *[3] 430–450 MHz, and 80 m stops at 3.900
+    }. Takes effect at once, and applies to every radio at this station.
+settings-rx-grid-reported = Receptions through this radio are reported from { $grid }, not from your own locator.
+settings-rx-grid-invalid = { $grid } is not a Maidenhead locator, so nothing this radio hears is reported. Four or six characters: two letters, two digits, and optionally two more letters.
+settings-bypassed = bypassed
+# $state is one of settings-bypassed, settings-use or settings-every-stage-off.
+settings-tx-audio-chain = Chain { $state }.
+settings-gateway-via = { " " }via { $via }
+settings-auto-upload-to = Auto-upload each new QSO to { $service }
+settings-tle-updated = Updated { $n } { $n ->
+        [one] subscription
+       *[other] subscriptions
+    }: { $total } satellites.
+settings-tle-updated-failed = Updated { $ok } of { $n }; { $failed } failed — see the rows above.
+settings-panadapter-of = This radio is { $radio }'s panadapter
+settings-radio-n = radio { $n }
+settings-on-station = On { $station }
+settings-add-radio-on-station = Add a radio on { $station } — the station serves it straight away
+settings-panadapter-receiver-for = Panadapter receiver for { $radio }
+settings-hang-up-stays-on = Hang up. The radio stays on { $station }.
+settings-close-on-station = Close { $radio } on { $station }? Its configuration stays on that machine; the tab here closes with it, and so does everyone else's.
+settings-close-it-on = Close it on { $station }
+settings-locator-hint = locator
+
+## Settings window, Alerts (src/app/settings/alerts.rs)
+
+settings-alerts-audible-alerts = Audible alerts
+settings-alerts-sound-alarm-when-decode-matters = Sound an alarm when a decode matters
+settings-alerts-plays-over-own-audio-output = Plays over its own audio output, so it is heard even when the band is in a different speaker than this screen.
+settings-alerts-volume = Volume
+settings-alerts-output = Output
+settings-alerts-test = Test
+settings-alerts-what-sound = What to sound
+settings-alerts-each-station-quiet-while-after = Each station is quiet for a while after an alert, so a busy band does not ring every slot. Voice and Tone + voice are read by the spoken-announcement voice — switch it on in Settings → UI.
+
+## Settings window, Amplifier (src/app/settings/amp.rs)
+
+settings-amp-amplifier = Amplifier
+settings-amp-waiting-station-s-amplifier-configuration = Waiting for the station's amplifier configuration…
+settings-amp-hobbypcb-hardrock-500-hardrock-50 = A HobbyPCB Hardrock-500 or Hardrock-50 on its USB serial port. SDRoxide reads its meters, switches its band, mode and antenna, and runs its tuner from the AMP window. The amplifier is still keyed by the radio's PTT line as before.
+settings-amp-enable = Enable
+settings-amp-model = Model
+settings-amp-untested-panel-has-only-been = Untested: this panel has only been tested with a Hardrock-500. Meter limits for this model are scaled from the Hardrock-500's and may be wrong. Watch the amplifier's own display.
+settings-amp-port = Port
+settings-amp-choose = — choose —
+settings-amp-baud = Baud
+settings-amp-must-match-amplifier-s-menu = Must match the amplifier's menu. HobbyPCB's own control panel needs 115200.
+settings-amp-follow-radio-s-band = Follow the radio's band
+settings-amp-sends-transmit-frequency-amplifier-every = Sends the transmit frequency to the amplifier on every band change, so its filters follow the radio without a CAT cable of their own. Never sent during a transmission.
+settings-amp-show-power-swr-tx-meter = Show its power and SWR on the TX meter
+settings-amp-only-where-radio-does-not = Only where the radio does not measure them itself, and only while the amplifier is in line.
+settings-amp-off = Off
+settings-amp-connecting = Connecting…
+settings-amp-status = Status
+settings-amp-apply = {" "}APPLY{" "}
+settings-amp-save-re-open-amplifier-s = Save and (re)open the amplifier's port
+
+## Settings window, Controls (src/app/settings/controls.rs)
+
+settings-controls-keyboard = Keyboard
+settings-controls-click-shortcut-rebind-then-press = Click a shortcut to rebind it, then press the key combination (Esc cancels). Bindings are ignored while you are typing in a text field.
+settings-controls-shortcut = Shortcut
+settings-controls-does = Does
+settings-controls-step-mode = Step / mode
+settings-controls-accel = Accel
+settings-controls-on = On
+settings-controls-press-key = press a key…
+settings-controls-remove-binding = Remove this binding
+settings-controls-add-shortcut = + Add shortcut
+settings-controls-restore-defaults = Restore defaults
+settings-controls-bind-hold-talk-space = Bind hold-to-talk to Space
+settings-controls-hold-space-transmit-releasing-losing = Hold Space to transmit; releasing it — or losing window focus — unkeys
+settings-controls-unkey-held-ptt-after = Unkey a held PTT after
+settings-controls-backstop-against-stuck-key-controller = Backstop against a stuck key or a controller that stops reporting. 0 disables.
+settings-controls-panadapter-mouse = Panadapter mouse
+settings-controls-wheel = Wheel
+settings-controls-wheel-shift = Wheel + Shift
+settings-controls-tune-step = Tune step
+settings-controls-zoom-rate = Zoom rate
+settings-controls-click-tune-rounding = Click-tune rounding
+settings-controls-invert-wheel-direction = Invert wheel direction
+settings-controls-left-drag-tunes-well-pans = Left-drag tunes as well as pans
+settings-controls-off-makes-left-drag-pan = Off makes left-drag pan the view only, like right-drag.
+settings-controls-scroll-digit-frequency-readout-tune = Scroll a digit on the frequency readout to tune it
+settings-controls-both-wheel-actions-are-tune = Both wheel actions are Tune — there is no way left to zoom.
+settings-controls-restore-mouse-defaults = Restore mouse defaults
+settings-controls-mouse-buttons = Mouse buttons
+settings-controls-left-right-buttons-are-reserved = The left and right buttons are reserved for tuning and panning; the middle and extra buttons are free. A side button held for PTT behaves like a footswitch.
+settings-controls-add-mouse-button = + Add mouse button
+settings-controls-f1-always-opens-manual-even = F1 always opens this manual, even while typing, so it is not rebindable.
+settings-controls-midi-controller = MIDI controller
+settings-controls-midi-controllers-need-native-app = MIDI controllers need the native app — the browser client has no MIDI access.
+settings-controls-any-class-compliant-midi-surface = Any class-compliant MIDI surface works: a DJ controller's jog wheel makes a fine VFO knob, its pads make PTT and band buttons, its faders make gain controls.
+settings-controls-enable = Enable
+settings-controls-controller = Controller
+settings-controls-feedback = Feedback to
+settings-controls-rescan-ports = Rescan ports
+settings-controls-not-connected = Not connected.
+settings-controls-move-control-see-here = Move a control to see it here.
+settings-controls-control = Control
+settings-controls-reads = Reads as
+settings-controls-led = LED
+settings-controls-move = move it…
+settings-controls-click-then-move-control-you = Click, then move the control you want to bind
+settings-controls-speed-sensitivity-spin-faster-tune = Speed sensitivity: spin faster to tune faster
+settings-controls-send-current-value-back-light = Send the current value back, to light an LED or move a fader
+settings-controls-add-midi-control = + Add MIDI control
+settings-controls-clear-all = Clear all
+settings-controls-endless-jog-encoders-send-relative = Endless (jog) encoders send a relative step rather than a position, in one of three encodings that look alike from small movements. LEARN guesses from a clockwise turn; if the knob then tunes the wrong way, tick “rev”.
+settings-controls-none = — none —
+
+## Settings window, General (src/app/settings/general.rs)
+
+settings-general-system-default = System default
+settings-general-remote-access = Remote access
+settings-general-what-remote-client-browser-page = What a remote client — the browser page, or another sdroxide started with --connect — has to give before this station will let it operate. Applies in server mode (--server); the next sign-in picks up a change, with no restart.
+settings-general-username = Username
+settings-general-password = Password
+settings-general-clients-must-give-password-leaving = Clients must give the password. Leaving the username empty is fine.
+settings-general-clients-must-sign = Clients must sign in.
+settings-general-empty-anyone-who-can-reach = ⚠ Empty: anyone who can reach the server's port can operate this radio, on your callsign. Set a password before forwarding the port.
+settings-general-stored-clear-config-toml-like = Stored in the clear in config.toml, like the other passwords sdroxide keeps.
+settings-general-receive-audio-gain = Receive audio gain
+settings-general-t-0-db = 0 dB
+settings-general-extra-gain-everything-radio-sends =
+    Extra gain on everything this radio sends to the speakers, on top of the volume control. Leave it at 0 dB unless the radio is quiet at full volume: the volume rail's top is the audio as it arrives, so it can turn a radio down but never up, and some transceivers' USB sound output sits well below full scale.
+
+    Go up 6 dB at a time. Too much clips — the audio is limited at full scale rather than allowed to wrap round, so overdoing it sounds harsh rather than loud. Recordings are taken ahead of this and are not affected.
+settings-general-reload-band-plan = RELOAD BAND PLAN
+settings-general-re-read-bandplan-json-machine = Re-read bandplan.json on the machine the radio is attached to and apply it — band edges, sub-segments and skimmer windows — without restarting.
+settings-general-running-station-s-own-band = Running on the station's own band plan.
+settings-general-running-built-iaru-tables = Running on the built-in IARU tables.
+settings-general-settings-file = Settings file
+settings-general-settings-are-machine-radio-attached = The settings are on the machine the radio is attached to. Export them there.
+settings-general-export = EXPORT…
+settings-general-write-every-setting-station-radios = Write every setting at this station — the radios, the modes, the servers, the memories, the band plan — to one file you can carry to another installation. Your logbook and any saved server password stay here.
+settings-general-import = IMPORT…
+settings-general-replace-station-s-settings-ones = Replace this station's settings with the ones in a file exported from another installation. Restart sdroxide afterwards.
+settings-general-import-overwrites-what-here-file = An import overwrites what is here, file for file, and takes effect the next time sdroxide starts — the settings already in memory would otherwise be written straight back over it. Anything the file does not mention is left as it is, so a bundle from a one-radio station does not remove a second radio here. Your logbook is never in the file: export it as ADIF from the LOG window if you want to move that too.
+settings-general-sdroxide-settings = sdroxide settings
+settings-general-swr-guard = SWR guard
+settings-general-stop-transmitting-high-swr = Stop transmitting on high SWR
+settings-general-trip = Trip at
+settings-general-stops-transmission-when-radio-reports =
+    Stops the transmission when the radio reports an SWR at or above this figure, and keeps transmit locked out until you acknowledge it. Catches a disconnected antenna, a failed feeder, or a switch left on the wrong port.
+
+    Tuning is treated differently, because feeding a mismatch is the point of it: an antenna tuner gets double the limit and about five seconds before the guard applies at all. A manual tuner that takes longer than that wants the guard switched off for the session.
+
+    Needs a rig that reports SWR over CAT. Ignores the first fifth of a second of each transmission, and does not wait for high power.
+settings-general-per-mode-settings = Per-mode settings
+settings-general-reset-every-mode = RESET EVERY MODE
+settings-general-forget-every-mode-s-remembered = Forget every mode's remembered AGC, squelch, noise reduction, notch and stereo switches, and put each mode's own defaults back.
+settings-general-selecting-mode-lays-mode-s = Selecting a mode lays that mode's own starting values for AGC, squelch, noise reduction, the notch and the stereo switches on the receiver, and changing one remembers it for that mode alone. The circular-arrow chip at the end of the receiver's filter/noise row lists what has been changed and puts the current mode back.
+settings-general-your-audio-speakers-microphone = Your audio (speakers / microphone)
+settings-general-output = Output
+settings-general-channels = Channels
+settings-general-which-speaker-channel-s-received = Which speaker channel(s) the received audio reaches. Left or right puts everything, mixed to mono, on that side only.
+settings-general-input = Input
+
+## Settings window, network services (src/app/settings/net.rs)
+
+settings-net-operator = Operator
+settings-net-callsign-grid-are-set-general = Callsign and grid are set on the General tab.
+settings-net-set-your-callsign-grid-general = ⚠ Set your callsign and grid on the General tab.
+settings-net-freedv-reporter = FreeDV Reporter
+settings-net-enable = Enable
+settings-net-connects-whenever-enabled-your-station = Connects whenever enabled. Your station is only shown to others while the radio is in RADE — in any other mode you stay connected but hidden.
+settings-net-station = Station
+settings-net-message = Message
+settings-net-receive-only-i-cannot-transmit = Receive only (I cannot transmit)
+settings-net-server = Server
+settings-net-host = Host
+settings-net-port = Port
+settings-net-tls-wss = TLS (wss://)
+settings-net-not-yet-implemented-freedv-gui = Not yet implemented — FreeDV GUI uses plain ws:// too.
+settings-net-reporting = Reporting
+settings-net-report-stations-i-decode = Report stations I decode
+settings-net-sends-rx-report-each-callsign = Sends an rx_report for each callsign recovered from a RADE End-of-Over frame.
+settings-net-show-other-reporter-stations-spots = Show other reporter stations as spots
+settings-net-adds-them-panadapter-overlay-world = Adds them to the panadapter overlay, world map and SPOTS window under the FREEDV filter.
+settings-net-set-your-callsign-grid-general-2 = ⚠ Set your callsign and grid on the General tab. Without both, the connection is view-only: you will see other stations but will not appear yourself.
+settings-net-apply = {" "}APPLY{" "}
+settings-net-persist-re-connect = Persist and (re)connect
+settings-net-longwave-shortwave-stations-labelled-waterfall = The longwave and shortwave stations labelled on the waterfall. The shortwave schedule is downloaded from eibispace.de for the current broadcasting season and re-downloaded when the season changes.
+settings-net-season = Season
+settings-net-downloading = downloading…
+settings-net-using-built-copy = using the built-in copy
+settings-net-your-own-stations-corrections-go = Your own stations and corrections go in this file. sdroxide never writes it, and an entry here replaces a scheduled one with the same name and frequency.
+settings-net-reload = Reload
+settings-net-re-read-your-station-file = Re-read your station file after editing it
+settings-net-download-schedule-now = Download schedule now
+settings-net-fetch-season-s-schedule-again = Fetch this season's schedule again, replacing the cached copy
+settings-net-broadcast-stations-labelled-waterfall-come = The broadcast stations labelled on the waterfall come from the list built into this build. Editing them needs the desktop app.
+settings-net-ask-service-whether-these-credentials = Ask the service whether these credentials work. Applies the settings above first, and logs nothing: it only reads.
+settings-net-checking = checking…
+
+## Settings window: messages with values filled in.
+
+settings-amp-connected-to = Connected to the { $model }
+settings-controls-last-midi = Last message: { $message }  value { $value }
+settings-general-band-plan-file = Every band edge and sub-segment comes from { $path }, written from the built-in IARU tables the first time and yours to edit after that — narrow a band to your licence and sdroxide will refuse to transmit outside it. Frequencies are in MHz; delete the file for a fresh copy of the defaults. This is the regional allocation, not your licence: your own conditions may be narrower, and national plans differ inside a region.
+settings-general-exported = Exported { $note } — choose where to save it.
+settings-general-export-failed = Export failed: { $error }
+settings-general-import-failed = Import failed: { $error }
+settings-general-imported = { $summary } — restart sdroxide to use them.
+settings-general-import-skipped = Skipped { $path }: { $why }
+settings-general-swr-tripped = ⚠ Currently tripped at { $swr }:1 — transmit is locked out.
+settings-net-call-grid-set-on-general = { $call } / { $grid } — set on the General tab
+settings-net-reporting-as = Reporting as { $call } / { $grid } — SDRoxide { $version }
+settings-net-schedule-download-failed = ⚠ Download failed: { $error }. Using the built-in schedule.
+settings-net-test-service = Test { $service }
+
+## Settings window (src/app/settings/mod.rs), continued
+
+settings-transmit-off-while-converter-set = Transmit is off while a converter is set — say what is in the transmit line above to turn it back on.
+settings-transmit-goes-through-same-converter = Transmit goes through the same converter, so the radio works the same offset away from the dial in both directions.
+settings-transmit-not-converted-radio-transmits = Transmit is not converted: the radio transmits on the frequency the dial shows, while receive comes through the converter.
+settings-transmit-takes-own-offset-separate = Transmit takes its own offset, separate from the receive one.
+settings-no-enabled-subscriptions-update = No enabled subscriptions to update.
+settings-add-radio-here-station-you = Add a radio — here, or on a station you are connected to
+
+## Settings window, General, continued
+
+settings-general-every-band-edge-sub-segment = Every band edge and sub-segment comes from bandplan.json on the machine the radio is attached to. This is the regional allocation, not your licence: your own conditions may be narrower, and national plans differ inside a region.
+
+## Settings window, picture upload (src/app/settings/picup.rs)
+
+settings-picup-received-pictures-ftp = Received pictures → FTP
+settings-picup-uploads-every-received-sstv-picture = Uploads every received SSTV picture (and, if ticked, every weather chart) as it is saved, laid out the way QSSTV does it so web pages written for QSSTV work unchanged.
+settings-picup-upload-received-pictures = Upload received pictures
+settings-picup-server = Server
+settings-picup-port = Port
+settings-picup-security = Security
+settings-picup-user = User
+settings-picup-password = Password
+settings-picup-certificate = Certificate
+settings-picup-trusted-when-computer-s-operating = Trusted when this computer's operating system trusts it, as a browser here would. A private CA can be added below (PEM).
+settings-picup-extra-ca = Extra CA
+settings-picup-only-certificate-fingerprint-accepted-way = Only the certificate with this fingerprint is accepted — the way to trust a self-signed server. TEST shows the server's.
+settings-picup-any-certificate-accepted-link-encrypted = ⚠ Any certificate is accepted. The link is encrypted, but anyone in the path can pose as the server and read the password.
+settings-picup-plain-ftp-sends-password-pictures = ⚠ Plain FTP sends the password and the pictures unencrypted.
+settings-picup-sstv = SSTV
+settings-picup-sstv-dir = SSTV dir
+settings-picup-weather-fax = Weather fax
+settings-picup-wefax-dir = WEFAX dir
+settings-picup-empty-login-directory = Empty is the login directory.
+settings-picup-file-names = File names
+settings-picup-format = Format
+settings-picup-add-extension = add extension
+settings-picup-image1-png-rather-than-qsstv = image1.png rather than QSSTV's bare image1
+settings-picup-caption-bar = Caption bar
+settings-picup-time-frequency-mode-sender-s = Time, frequency, mode and the sender's FSK ID across the top, as QSSTV draws it. Only the uploaded copy is marked.
+settings-picup-fit-960-768 = Fit 960 × 768
+settings-picup-qsstv-s-heartbeat-tiny-picture = QSSTV's heartbeat: a tiny picture whose height is the minute, uploaded beside each one, and made two pixels wide when the program closes.
+settings-picup-nat-workaround = NAT workaround
+settings-picup-ignore-private-address-server-s = Ignore a private address in the server's passive-mode reply and use the server's own — for a server behind NAT that does not know its public address.
+settings-picup-apply = {" "}APPLY{" "}
+settings-picup-test = TEST
+settings-picup-connect-settings-above-applied-not = Connect with the settings above — applied or not — log in, and write and delete a small file in each upload directory.
+settings-picup-checking = checking…
+settings-picup-trust-certificate = Trust this certificate
+settings-picup-pin-switch-pinned-fingerprint-one = Pin it: switch to "Pinned fingerprint" with this one. Check it against the server first — this is what the server said, not proof of who it is. Then APPLY.
+settings-picup-last-upload = Last upload
+
+## Settings window, Profiles (src/app/settings/profiles.rs)
+
+settings-profiles-profiles-station-s-saved-setups = Profiles: the station's saved setups
+settings-profiles-profile-captures-whole-working-setup = A profile captures the whole working setup — the dials and VFOs, the mode and filters, the gains, drive and antennas, your callsign and message templates, and the per-band registers — and applies it back in one click. The hardware (back end, audio devices, converters) is deliberately left alone: a profile is the way you work the station, not the radio it runs on.
+settings-profiles-save-current-setup = Save the current setup
+settings-profiles-profile-name = profile name
+settings-profiles-save = Save
+settings-profiles-applies-whatever-sdroxide-attached-dials = Applies to whatever sdroxide is attached to: dials and VFOs, mode and filters, levels, gains, drive, antennas, the digital identity and the band stacks.
+settings-profiles-no-profiles-saved-yet-name = No profiles saved yet — name one above and press Save.
+settings-profiles-saved-profiles = Saved profiles
+settings-profiles-apply = Apply
+
+## Settings window, T/R switch (src/app/settings/relay.rs)
+
+settings-relay-transmit-receive-switch = Transmit/receive switch
+settings-relay-waiting-station-s-t-r = Waiting for the station's T/R switch configuration…
+settings-relay-closes-contact-while-station-transmits = Closes a contact while this station transmits — to disconnect and ground the SDR's antenna input, and to key an amplifier or an outboard T/R relay in sequence with it. Works with the cheap USB relay boards (LCUS, KMtronic, Numato), with a serial RTS/DTR line into any interface that wants a PTT closure, and with anything else through a command hook.
+settings-relay-hardware = Hardware
+settings-relay-board = Board
+settings-relay-lcus-four-byte-a0-command = LCUS is the four-byte A0-command board sold under a dozen names; KMtronic and Numato can also be asked what they are set to
+settings-relay-port = Port
+settings-relay-choose = — choose —
+settings-relay-device = Device
+settings-relay-gpio-pin = GPIO pin
+settings-relay-pin-3-every-homebrew-plan = Pin 3 on every homebrew plan and every commercial board — it is the one at the end of the package that a wire can be tacked to. If the relay does not click, the card is a clone that does not implement these pins at all.
+settings-relay-gpio-chip = GPIO chip
+settings-relay-linux-only-gpiodetect-lists-chips = Linux only. `gpiodetect` lists the chips on the machine.
+settings-relay-transmit = On transmit
+settings-relay-receive = On receive
+settings-relay-nothing-switched = Nothing is switched.
+settings-relay-starting-program-costs-unpredictable-amount = Starting a program costs an unpredictable amount of time, and none of it is counted in the lead — so leave a wider margin here than you would for a relay board. The contact table's numbers mean nothing for this link: your commands are run once on key-down and once on key-up.
+settings-relay-contacts = Contacts
+settings-relay-contact-1-rts-contact-2 = Contact 1 is RTS and contact 2 is DTR.
+settings-relay-no = No.
+settings-relay-gpio = GPIO
+settings-relay-name = Name
+settings-relay-job = Job
+settings-relay-tx-closes = TX closes
+settings-relay-lead = Lead
+settings-relay-hold = Hold
+settings-relay-line-s-offset-chip-bcm = The line's offset on this chip — the BCM number on a Raspberry Pi header, which is not the physical pin number
+settings-relay-sdr-antenna = SDR antenna
+settings-relay-decides-default-timings-what-log = Decides the default timings and what the log calls it — and, for a band decoder, that the contact follows the band table below
+settings-relay-transmitting-energises-coil-off-transmitting =
+    On: transmitting energises the coil. Off: transmitting releases it.
+
+    This is a wiring decision before it is a setting — see the note below.
+settings-relay-how-long-before-rf-contact = How long before RF this contact moves from its band's RX word to its TX word. A retune moves it at once; this is for key-down, when a transmit-only filter has to be in circuit before the power is.
+settings-relay-closed-long-before-rf-small = Closed this long before RF. A small coax relay throws in 5 to 15 ms. Transmit waits for the longest of these, so a large value is an audible gap in the receive audio; anything over 250 ms is ignored.
+settings-relay-how-long-after-rf-stops = How long after RF stops this contact goes back from its TX word to its RX word.
+settings-relay-opened-long-after-rf-stops = Opened this long after RF stops. Longer than the lead on purpose: letting the antenna back a moment late costs nothing, and letting it back early costs a front end. Zero is a real answer, and the right one for an amplifier's key line.
+settings-relay-test = {" "}TEST{" "}
+settings-relay-not-while-station-air = Not while the station is on the air
+settings-relay-close-contact-half-second-so = Close this contact for half a second, so you can hear the relay and check the wiring with the transmitter cold
+settings-relay-remove = Remove
+settings-relay-add-contact = + add a contact
+settings-relay-if-will-not-answer = If it will not answer
+settings-relay-switch-exists-protect-receiver-not = A switch that exists to protect a receiver is not worth having if it silently stops protecting it — so refusing is the default. Choose the other where a loose USB cable ending your contest is the worse outcome.
+settings-relay-order-timings-longest-lead-closes = The order is the timings: the longest lead closes first, and the longest hold opens last. So give the antenna relay the longer lead and the longer hold, and the amplifier the shorter of each — then the antenna is always switched before the amplifier is keyed, and the amplifier always unkeys before the antenna comes back.
+settings-relay-transmit-sense-input = Transmit sense input
+settings-relay-when-transceiver-keys-itself-own = When a transceiver keys itself — its own microphone button, foot switch, VOX or keyer — sdroxide finds out by asking over CAT, and that answer arrives a few hundred milliseconds into the over. Wire the rig's SEND line, through an opto-isolator, into a handshake input on this same port and it is seen in a few milliseconds instead. The meter and the transmit interlock get faster with it.
+settings-relay-line = Line
+settings-relay-transmitting = Transmitting is
+settings-relay-high-line = a high line
+settings-relay-most-opto-isolated-interfaces-pull = Most opto-isolated interfaces pull the line down when the rig keys, so this is usually off
+settings-relay-belongs-radio = Belongs to radio
+settings-relay-which-radio-tab-sensed-transceiver = Which radio tab the sensed transceiver is. On a station with one radio this is 1 and nothing depends on it.
+settings-relay-needs-serial-port-handshake-lines = Needs a serial port — the handshake lines are on it.
+settings-relay-wiring-only-fail-safe-survives = Wiring is the only fail-safe that survives this program.
+settings-relay-choose-tx-closes-so-de = Choose “TX closes” so that the *de-energised* contact is the state you want when the board is unplugged, the computer is off, or sdroxide is not running. Wired so that de-energised means grounded, a dead relay leaves the SDR deaf — annoying, and safe. Wired the other way, a dead relay plus one transmission is a dead front end. With a real amplifier behind it, take the first.
+settings-relay-cannot-protect-first-instant-over = This cannot protect the first instant of an over you start at the radio. Key the rig from sdroxide and the contacts always lead the RF; wire the sense input above and they follow within milliseconds. For a front end genuinely worth protecting, use an RF-sensed hardware T/R switch as well — no program on a computer can be the whole answer.
+settings-relay-contacts-transmit = contacts in TRANSMIT
+settings-relay-not-open = Not open.
+settings-relay-status-unknown-press-apply = Status unknown — press APPLY.
+settings-relay-station-air-apply-will-take = The station is on the air — APPLY will take effect after this over.
+settings-relay-band-decoder-outputs = Band decoder outputs
+settings-relay-one-control-word-per-band = One control word per band: bit 0 is contact 1, bit 1 contact 2 and so on, matching the numbering above. RX follows the receive dial's band; TX the band of whichever radio keyed, switched in on each contact's lead before RF and back after its hold — give them the same value for a filter that does not care which way the RF is going, and different ones for a receive-only preamp bypass or a transmit-only LPF bank. Bands left at 0 assert nothing. Applies on Apply / reconnect.
+settings-relay-band = Band
+settings-relay-rx = RX
+settings-relay-tx = TX
+settings-relay-outputs-asserted = Outputs asserted
+settings-relay-other = Other
+settings-relay-everywhere-outside-amateur-bands-short = Everywhere outside the amateur bands — short-wave listening, and anything a transverter's dial lands on that no band covers.
+settings-relay-apply = {" "}APPLY{" "}
+settings-relay-persist-re-open-switch = Persist and (re)open the switch
+
+## Settings window, Remote (src/app/settings/remote.rs)
+
+settings-remote-connect-server = Connect to a server
+settings-remote-drive-sdroxide-running-somewhere-else = Drive an sdroxide running somewhere else — the shack machine, a remote site — over the network. Start it there with --server, and enter its address here. The radio, the decoders and the logbook stay on that machine; this screen gets the waterfall and the audio, and its speakers and microphone are the ones you use.
+settings-remote-address = Address
+settings-remote-host-name-ip = host name or IP
+settings-remote-machine-running-sdroxide-server-host = The machine running sdroxide --server: a host name, an IPv4 or IPv6 address, or a complete ws:// (or wss://) URL if the server sits behind a reverse proxy — a URL is used exactly as typed and ignores the port and the switch below.
+settings-remote-port = Port
+settings-remote-port-server-listens-server-port = The port that server listens on — server_port in its config.toml. 4950 unless it was given --port.
+settings-remote-secure = Secure
+settings-remote-wss-tls = wss:// (TLS)
+settings-remote-tick-where-server-sits-behind = Tick this where the server sits behind something that terminates HTTPS for it — a reverse proxy on port 443, which is the usual way a station is reached across the open internet. sdroxide's own server speaks plain ws:// and does not want this.
+settings-remote-connect = {" "}CONNECT{" "}
+settings-remote-open-station-radio-tab-own = Open this station as a radio tab of its own
+settings-remote-client-cannot-hold-second-connection = This client cannot hold a second connection.
+settings-remote-station-appears-tab-beside-radios =
+    The station appears as a tab beside the radios already open here, and the tab strip at the top of the window switches between them (⊞ puts two side by side). Close it from the roster at the top of the Radio tab — that hangs up; nothing on the server is changed.
+
+    If the server asks for a username and password, its sign-in screen comes up in the new tab. A plain ws:// link carries none of this encrypted, so across the open internet either put it through a VPN or an SSH tunnel, or terminate HTTPS in front of the server and tick Secure above.
+
+## Settings window, Servers (src/app/settings/servers.rs)
+
+settings-servers-wsjt-x-udp-broadcast = WSJT-X UDP broadcast
+settings-servers-waiting-station-s-wsjt-x = Waiting for the station's WSJT-X broadcast configuration…
+settings-servers-sends-decodes-station-status-logged = Sends decodes, station status and logged QSOs the way WSJT-X does, so GridTracker, JTAlert, N1MM+ and Log4OM work with sdroxide unchanged. Output only — nothing on this socket can touch the radio.
+settings-servers-enable = Enable
+settings-servers-send = Send to
+settings-servers-t-127-0-0-1-reaches = 127.0.0.1 reaches clients on this machine; a LAN address or a multicast group (224.0.0.1) reaches others
+settings-servers-port = Port
+settings-servers-t-2237-port-every-client-defaults = 2237 is the port every client defaults to
+settings-servers-identify = Identify as
+settings-servers-name-clients-see-some-loggers = The name clients see. Some loggers only accept traffic identifying itself as WSJT-X.
+settings-servers-n1mm-contactinfo-broadcast = N1MM+ contactinfo broadcast
+settings-servers-same-news-n1mm-s-words = The same news in N1MM's words: one XML datagram per logged contact, for the loggers that listen for N1MM rather than for WSJT-X — the World Radio League's bridge takes either. Contacts only; there is no decode stream in this protocol. Its own switch and its own port, because a station may want both.
+settings-servers-t-127-0-0-1-reaches-2 = 127.0.0.1 reaches clients on this machine. N1MM's own advice for a contest network is this subnet's broadcast address — 192.168.1.255 for a 192.168.1.n network — which reaches every position at once.
+settings-servers-t-12060-port-n1mm-s-documentation = 12060 is the port N1MM's documentation recommends
+settings-servers-station-name = Station name
+settings-servers-what-n1mm-calls-stationname-name = What N1MM calls the StationName: the name of the computer that sent the packet. Loggers show it to tell one operating position from another.
+settings-servers-decoded-cw-over-udp = Decoded CW over UDP
+settings-servers-cw-panel-s-copy-plain = The CW panel's copy as plain text, one UDP datagram per piece as it settles — for a station controller, a logger's CW window or a script. No protocol: a listener just appends what arrives (try nc -ul 9999). Only settled text is sent, never the tail the decoder is still revising. Each radio has its own switch.
+settings-servers-t-127-0-0-1-reaches-3 = 127.0.0.1 reaches programs on this machine; a LAN address or this subnet's broadcast address reaches others.
+settings-servers-t-9999-default = 9999 by default
+settings-servers-apply = {" "}APPLY{" "}
+settings-servers-persist-re-open-broadcast-sockets = Persist and (re)open the broadcast sockets
+settings-servers-hamlib-rigctld-server = Hamlib rigctld server
+settings-servers-waiting-station-s-rigctld-configuration = Waiting for the station's rigctld configuration…
+settings-servers-listen = Listen on
+settings-servers-t-127-0-0-1-machine = 127.0.0.1 (this machine)
+settings-servers-t-0-0-0-0-whole = 0.0.0.0 (whole network)
+settings-servers-t-4532-port-every-rigctld-client = 4532 is the port every rigctld client assumes
+settings-servers-rig-name = Rig name
+settings-servers-reported-clients = reported to clients
+settings-servers-max-clients = Max clients
+settings-servers-allow-clients-transmit = Allow clients to transmit
+settings-servers-off-refuses-every-key-request = Off refuses every key request and stops advertising a transmit range, so Hamlib itself declines to key.
+settings-servers-rigctld-has-no-authentication-0 = ⚠ rigctld has no authentication. On 0.0.0.0, anyone who can reach this port can tune and key your transmitter.
+settings-servers-t-1-client = 1 client
+settings-servers-not-running = Not running.
+settings-servers-status-unknown-press-apply = Status unknown — press APPLY.
+settings-servers-persist-re-bind-server = Persist and (re)bind the server
+settings-servers-lets-any-hamlib-capable-program = Lets any Hamlib-capable program drive this radio: frequency, mode, PTT, split, RIT and power. In WSJT-X, fldigi or CQRLOG choose the rig “Hamlib NET rigctl” (model 2) and point it at this address; in GPredict and N1MM enter the host and port directly. Unlike the TCI server it carries control only — no audio, no IQ.
+settings-servers-antenna-rotator = Antenna rotator
+settings-servers-waiting-station-s-rotator-configuration = Waiting for the station's rotator configuration…
+settings-servers-points-motorized-antenna-satellite-you = Points a motorized antenna at the satellite you are locked onto, through a Hamlib rotctld daemon (run e.g. “rotctld -m 603 -r /dev/ttyUSB0” for a GS-232B rotator, or “rotctld -m 1” to try it without hardware) — one daemon covers every rotator Hamlib drives — or through PSTRotator, with UDP Control enabled in its Setup.
+settings-servers-program = Program
+settings-servers-host = Host
+settings-servers-t-4533-rotctld-s-default-pstrotator = 4533 is rotctld's default. PSTRotator's UDP control port is 12000 by default, and it answers position queries on the next port up, 12001 — which has to be free on this machine.
+settings-servers-min-elevation = Min elevation
+settings-servers-below-rotator-parks-instead-tracking = Below this the rotator parks instead of tracking — set it to your local horizon or roofline
+settings-servers-azimuth-offset = Azimuth offset
+settings-servers-added-every-command-rotator-whose = Added to every command, for a rotator whose north is off
+settings-servers-min-movement = Min movement
+settings-servers-steps-smaller-than-are-not = Steps smaller than this are not sent — chasing tenths of a degree wears motors for nothing
+settings-servers-park-position = Park position
+settings-servers-drive-position-when-idle = drive to a position when idle
+settings-servers-off-leaves-antenna-wherever-last = Off leaves the antenna wherever the last pass ended
+settings-servers-not-connected = Not connected.
+settings-servers-persist-re-connect-daemon = Persist and (re)connect to the daemon
+settings-servers-waiting-station-s-tci-server = Waiting for the station's TCI server configuration…
+settings-servers-built-tci-server = Built-in TCI server
+settings-servers-device-name = Device name
+settings-servers-off-leaves-control-receive-streams = Off leaves control and the receive streams working, but every key request is refused.
+settings-servers-tci-has-no-authentication-0 = ⚠ TCI has no authentication. On 0.0.0.0, anyone who can reach this port can tune and key your transmitter.
+settings-servers-tci-client = TCI Client
+settings-servers-when-you-tune-send-radio = When you tune, send this radio's VFO to another TCI server so that rig tunes along. Control only — no audio, no IQ, and it does not key the transmitter.
+settings-servers-server = Server
+settings-servers-same-address-server-above-client = This is the same address as the server above. The client connects only when that server is not the one listening — leave it off, or on another port, when 590Ctrl is using this port.
+settings-servers-tci-client-connected = ● TCI Client connected
+settings-servers-tci-client-connecting = TCI Client connecting…
+settings-servers-tci-client-press-apply = TCI Client — press APPLY.
+settings-servers-persist-re-bind-server-connect = Persist and (re)bind the server, and connect the TCI client
+settings-servers-server-lets-tci-capable-programs = The server lets TCI-capable programs drive this radio: frequency and mode control, wideband IQ, receive audio, and transmit audio. In WSJT-X choose the SunSDR (TCI) rig type, point it at this address, and set PTT to TCI. TCI Client is the other direction: sdroxide's dial is sent as a VFO command to 590Ctrl (or any TCI server) at the address above. It does not pass audio.
+
+## Settings window, TLE (src/app/settings/tle.rs)
+
+settings-tle-satellites-element-sets-frequencies = Satellites: element sets and frequencies
+settings-tle-waiting-station-s-satellite-configuration = Waiting for the station's satellite configuration…
+settings-tle-tracker-already-fetches-celestrak-s = The tracker already fetches CelesTrak's amateur group on its own. This is for everything else: the NOAA weather birds, a cubesat too new to be in the group, or a fresher element set than the one that arrived. The listings are fetched — and kept — where the radio engine runs, so this is the same set of satellites wherever the app is open.
+settings-tle-subscriptions = Subscriptions
+settings-tle-listings-fetched-kept-current-same = Listings fetched and kept current, on the same six-hourly cadence as the amateur set. Refreshed while the solar window is open, and by UPDATE NOW here.
+settings-tle-fetch-track-listing = Fetch and track this listing
+settings-tle-remove-subscription = Remove this subscription
+settings-tle-orbits = Orbits
+settings-tle-which-satellites-listing-get-orbit = Which satellites in this listing get an orbit ring and a label. A whole group wants "curated": ninety rings at once is unreadable, and none at all leaves ninety anonymous dots.
+settings-tle-nothing-listing-sdroxide-s-curated = Nothing in this listing is in sdroxide's curated list — that list is ten amateur satellites, so this would behave exactly like "none".
+settings-tle-all-satellites = all satellites
+settings-tle-catalogue-numbers-keep-comma-separated = Catalogue numbers to keep, comma separated. Empty tracks everything the listing carries.
+settings-tle-not-fetched-yet = not fetched yet
+settings-tle-subscription = + Subscription
+settings-tle-update-now = {" "}UPDATE NOW{" "}
+settings-tle-ask-radio-engine-fetch-every = Ask the radio engine to fetch every enabled subscription now
+settings-tle-celestrak-groups = CelesTrak groups
+settings-tle-pasted-element-sets = Pasted element sets
+settings-tle-one-off-these-do-not = For a one-off. These do not update themselves, and SGP4 stops propagating an element set once it is a fortnight past its epoch — subscribe instead for anything you mean to keep.
+settings-tle-track-one = Track this one
+settings-tle-show-two-element-lines = Show the two element lines
+settings-tle-remove = Remove
+settings-tle-paste-two-three-line-element = Paste two- or three-line element sets here
+settings-tle-add-pasted = + Add pasted
+settings-tle-nothing-paste-box-looked-like = Nothing in the paste box looked like an element set.
+settings-tle-clear-box = Clear box
+settings-tle-frequencies = Frequencies
+settings-tle-shown-under-pass-table-solar = Shown under the pass table in the solar window. An entry here replaces the built-in one for that catalogue number outright, so start from a copy of it unless you mean to drop the rest.
+settings-tle-remove-satellite-s-entry = Remove this satellite's entry
+settings-tle-link = LINK
+settings-tle-downlink = DOWNLINK
+settings-tle-uplink = UPLINK
+settings-tle-mode = MODE
+settings-tle-note = NOTE
+settings-tle-fm-repeater = FM repeater
+settings-tle-fm = FM
+settings-tle-ctcss-67-0-hz = CTCSS 67.0 Hz
+settings-tle-link-2 = + Link
+settings-tle-copy-built = Copy built-in
+settings-tle-frequency-either-one-number-145 = A frequency is either one number (145.800) or a transponder passband written 145.950-145.970. Leave a direction blank for a beacon.
+settings-tle-norad = NORAD
+settings-tle-satellite = + Satellite
+settings-tle-frequency-entry-needs-satellite-s = A frequency entry needs the satellite's NORAD catalogue number.
+
+## Settings window, Wavelog (src/app/settings/wavelog.rs)
+
+settings-wavelog-address = Address
+settings-wavelog-api-key = API key
+settings-wavelog-your-wavelog-s-front-page = Your Wavelog's front-page address — https://log.example.org or http://192.168.1.10/wavelog — and a key from its API page. Uploading needs a read/write key.
+settings-wavelog-plain-http-address-internet-api = Plain http:// to an address on the internet: the API key travels unencrypted. Fine inside your own network; use https:// across the internet.
+settings-wavelog-trusted-cert = Trusted cert
+settings-wavelog-forget-certificate = Forget this certificate
+settings-wavelog-go-back-ordinary-checking-against = Go back to ordinary checking against the public certificate authorities — for a server that now has a proper certificate.
+settings-wavelog-connection-check-runs-machine-radio = The connection check runs on the machine the radio is attached to — use the settings there to test it and list the station locations.
+settings-wavelog-server-presented-certificate-sha-256 = The server presented this certificate (SHA-256):
+settings-wavelog-compare-your-server-s-e = Compare it with your server's — e.g. `openssl x509 -noout -fingerprint -sha256 -in cert.pem` — and trust it only if they match. From then on this exact certificate is accepted and any other is refused.
+settings-wavelog-trust-certificate = Trust this certificate
+settings-wavelog-station-location = Station location
+settings-wavelog-none = — none —
+settings-wavelog-press-test-above-list-station = Press Test above to list the station locations defined in your Wavelog.
+settings-wavelog-default = Default
+settings-wavelog-where-qsos-go-when-operating = Where QSOs go when the operating profile does not name a location.
+settings-wavelog-profile = This profile
+settings-wavelog-use-default = Use the default
+settings-wavelog-not-set = not set
+settings-wavelog-no-station-location-chosen-uploads = No station location chosen — uploads will fail until one is.
+settings-wavelog-qsos-not-wavelog = QSOs not in Wavelog
+settings-wavelog-every-qso-logbook-wavelog = Every QSO in the logbook is in Wavelog.
+settings-wavelog-everything-logbook-wavelog-has-not = Everything in the logbook Wavelog has not acknowledged — including contacts from before auto-upload. Ones it already has come back as duplicates and are simply marked as sent.
+settings-wavelog-set-address-key-station-location = Set the address, key and a station location first.
+settings-wavelog-yes-send-them = Yes, send them
+settings-wavelog-cancel = Cancel
+settings-wavelog-download-into-logbook = Download into this logbook
+settings-wavelog-downloading-runs-where-radio-attached = Downloading runs where the radio is attached, into that machine's logbook — set it up there.
+settings-wavelog-download-qsos-start-every = Download QSOs at start and every
+settings-wavelog-downloaded-qsos-join-logbook-so = Downloaded QSOs join the logbook, so FT8 and the spot lists know what you have worked from other programs and rigs. Each download fetches only what is new.
+settings-wavelog-press-test-above-choose-which = Press Test above to choose which station locations to download.
+settings-wavelog-sync-now = Sync now
+settings-wavelog-fetch-what-wavelog-has-added = Fetch what Wavelog has added since the last download. Applies the settings above first.
+settings-wavelog-full-resync = Full resync…
+settings-wavelog-download-ticked-locations-whole-compare = Download the ticked locations whole and compare them with the log: QSOs edited or deleted in Wavelog, or from a location no longer ticked, are brought into line. You see the changes before anything happens.
+settings-wavelog-full-resync-changes-make = Full resync — changes to make
+settings-wavelog-qsos-logged-here-imported-file = QSOs logged here or imported from a file are never changed or removed — only ones that were downloaded from Wavelog.
+settings-wavelog-apply = Apply
+settings-wavelog-discard = Discard
+settings-wavelog-live-radio-status = Live radio status
+settings-wavelog-send-frequency-mode-wavelog-they = Send frequency and mode to Wavelog as they change
+settings-wavelog-radio-name = Radio name
+settings-wavelog-pick-radio-wavelog-s-live = Pick this radio in Wavelog's live logging and its form follows the dial. Needs a read/write key. From the station's main radio only.
+
+## Settings window, picture upload: messages with values
+
+settings-picup-server-fingerprint = Server certificate SHA-256: { $fingerprint }
+
+## Settings window, Profiles: messages with values
+
+settings-profiles-apply-hint = Put the station back onto “{ $name }”: dials, VFOs, mode, filters, gains, drive, antennas, identity and band stacks.
+settings-profiles-delete = Delete “{ $name }”
+
+## Settings window, T/R switch: messages with values
+
+settings-relay-not-usable = Not usable yet: { $why }
+settings-relay-receiving = receiving
+settings-relay-rx-tx-words = { $rx } / TX { $tx }
+
+## Settings window, Servers: messages with values
+
+settings-servers-n-clients = { $n ->
+        [one] { $n } client
+       *[other] { $n } clients
+    }
+settings-servers-listening = ● Listening on { $addr } — { $clients }
+settings-servers-failed = Failed: { $error }
+settings-servers-rotator-at = ● Connected — antenna at { $az }° az, { $el }° el
+settings-servers-tci-client-error = TCI Client: { $error }
+
+## Settings window, TLE: messages with values
+
+settings-tle-subscription-age = { $count } satellites · { $age } old
+settings-tle-subscribed = Subscribed to { $name }. Press UPDATE NOW to fetch it.
+settings-tle-norad-too-stale = NORAD { $norad } · { $age } old — too stale to propagate
+settings-tle-norad-age = NORAD { $norad } · { $age } old
+settings-tle-norad-n = NORAD { $norad }
+settings-tle-added = Added { $n } element { $n ->
+        [one] set
+       *[other] sets
+    }.
+settings-tle-added-refreshed = Added { $added } and refreshed { $r } element { $r ->
+        [one] set
+       *[other] sets
+    }.
+settings-tle-links = { $n } { $n ->
+        [one] link
+       *[other] links
+    }
+settings-tle-replace-links = Replace these links with the built-in ones for { $name }
+
+## Settings window, Wavelog: messages with values
+
+settings-wavelog-call-mismatch = Location "{ $location }" is { $station_call }, but you log as { $call } — Wavelog will refuse these QSOs.
+settings-wavelog-grid-mismatch = Location "{ $location }" is at { $station_grid }, but your grid is { $grid } — Wavelog will refuse these QSOs.
+settings-wavelog-location-n = location #{ $id }
+settings-wavelog-saved-with-callsign = Saved with the callsign ({ $call }) in Settings → Profiles, so a portable profile can log to a portable location.
+settings-wavelog-owed = { $n } { $n ->
+        [one] QSO
+       *[other] QSOs
+    } logged since auto-upload was switched on still to send — retried every 5 minutes.
+settings-wavelog-send-unsent = Send { $n } { $n ->
+        [one] QSO
+       *[other] QSOs
+    } not yet in Wavelog…
+settings-wavelog-send-confirm = Send { $n } QSOs to { $location }? Settings are applied first.
+settings-wavelog-plan-add = • { $n } QSOs in Wavelog to add to the log
+settings-wavelog-plan-update = • { $n } downloaded QSOs changed in Wavelog to update
+settings-wavelog-plan-remove = • { $n } downloaded QSOs no longer in Wavelog (or from an unticked location) to remove
+settings-wavelog-plan-mark = • { $n } of your own QSOs to mark as being in Wavelog
+
+## Settings window, Radio tab (src/app/settings/radio.rs)
+
+settings-radio-antenna = Antenna
+settings-radio-which-socket-back-radio-using =
+    Which socket on the back the radio is using — its own ANT command, the same setting as the ANT button on the front panel.
+
+    Applies immediately, and it is the radio's setting rather than a copy kept here: the socket the radio is on is read back when the session opens.
+
+    The choice is remembered per band. Switch to the beam on 2 m and the wire on 40, and each comes back the next time the dial crosses into that band — and the next time sdroxide starts. A memory channel stored here carries its socket too.
+settings-radio-receive-antenna = Receive antenna
+settings-radio-radio-s-separate-receiving-antenna =
+    The radio's separate receiving antenna — RX ANT on the back — switched into the receive path or out of it. Its own setting, the same one as the radio's RX ANT button.
+
+    The aerial on the main socket stays on transmit either way: this is an extra input for receiving, a loop or a beverage, not a choice of socket.
+
+    Unlike the antenna above, this is *not* remembered here. The radio holds it per band itself, so sdroxide reads it back after every band change and shows what the radio says; ticking this box is the only thing that moves it.
+settings-radio-receive-path = In the receive path
+settings-radio-radio-power = Radio power
+settings-radio-switch-radio-itself-off-back =
+    Switch the radio itself off, and back on again, over the control link. This is the one true on/off in the program — not sdroxide's own LINK switch, which closes sdroxide's end and leaves the radio running.
+
+    For the switch back on to reach anything, the radio's control end has to stay awake while it is off. Over the network that is what Network Control does. Over a serial cable it is the radio's CI-V port, which stays powered from the mains supply on a set that is switched off at the front rather than unplugged; sdroxide sends the wake-up run Icom's own documentation asks for in front of the power-on.
+
+    Switching off ends the audio and the meters — there is no radio behind them — and sdroxide keeps the control link open so the switch back on has somewhere to go.
+settings-radio-on = On
+settings-radio-off = Off
+settings-radio-waiting-configuration-machine-radio-attached = Waiting for the configuration of the machine the radio is attached to.
+settings-radio-sound-format = Sound format
+settings-radio-invert-spectrum = Invert spectrum
+settings-radio-swap-i-q = Swap I/Q
+settings-radio-mirror-panadapter-about-tuned-frequency =
+    Mirror the panadapter about the tuned frequency, for a rig that carries I and Q the other way round on its sound card. The giveaway is a waterfall full of convincing signals that are all on the wrong side of the dial, with SSB coming out on the opposite sideband — swapping the two cables at the sound card would fix it just as well.
+
+    Receive only: transmit hands the radio one real audio signal, which has no sideband to invert.
+settings-radio-i-q-sample-rate = I/Q sample rate
+settings-radio-how-fast-radio-s-i =
+    How fast the radio's I/Q sound card is run — and so how much band the panadapter shows, because a quadrature stream spans its whole sample rate: 48 kHz gives ±24 kHz either side of the dial, 192 kHz gives ±96.
+
+    The card has the final say. One that cannot do the rate picked here is opened at the nearest it can, and the panadapter is that much narrower — the log says so at startup when it happens.
+
+    A faster card is also more work: the machine has proportionally less time to empty it, and one that cannot keep up drops samples. That shows up as audio breaking up while the waterfall still looks perfect, and it too is logged. If you see it, come back down a step.
+settings-radio-t-48-khz-24-khz = 48 kHz (±24 kHz)
+settings-radio-t-96-khz-48-khz = 96 kHz (±48 kHz)
+settings-radio-t-192-khz-96-khz = 192 kHz (±96 kHz)
+settings-radio-t-384-khz-192-khz = 384 kHz (±192 kHz)
+settings-radio-i-q-centre-offset = I/Q centre offset
+settings-radio-how-far-radio-s-i =
+    How far the radio's I/Q output is centred above its own dial, for a rig whose receive I.F. has been moved off zero — on an Elecraft, MENU:RX SHFT set to 8.0 instead of NOR, which takes the dial off the mixer's DC spike (and stops a strong nearby SSB/AM station being AM-detected).
+
+    Not a converter: the radio still displays and transmits on the real frequency, and nothing here is ever sent to it. This only says where the samples on the sound card sit, and the stream is shifted back onto the dial as it arrives.
+
+    Leave at 0 unless you have turned such a menu entry on. If signals land twice the offset away, the sign is the other way round.
+settings-radio-iq-correction = IQ correction
+settings-radio-cancel-mirror-image-every-signal =
+    Cancel the mirror image of every signal, and the DC spike in the middle of the waterfall.
+
+    A radio's I/Q output is two analogue paths that are never quite equal in gain nor exactly 90° apart, and what that leaves is a copy of every signal reflected about the tuned frequency, usually 30-40 dB down — strong enough to look like a station that is not there, and to be decoded as one. Radios with front-panel balance trimmers are adjusting exactly this; here it is measured off the received noise and needs no setting.
+
+    Leave it on. Turn it off if you are listening to AM tuned dead on the carrier — the carrier is DC, so it goes with the spike — or to check whether a signal is real by watching whether it survives.
+settings-radio-cancel-mirror-images = Cancel mirror images
+settings-radio-dc-notch = DC notch
+settings-radio-widen-hole-taken-out-middle =
+    Widen the hole taken out of the middle of the span, for a radio whose centre spike is broader than the offset underneath it.
+
+    0 leaves the ordinary blocker, which is a few tens of hertz wide and removes the offset without touching anything else. Wind it up and the bottom of the span goes with it: a first-order high-pass, 3 dB down at the figure set here and further in below it.
+
+    It is centred where the radio's I/Q is centred, which is the dial unless the offset above has moved it — so anything tuned there goes too. A CW note at 600 Hz is inside a 600 Hz setting.
+settings-radio-panadapter-bw = Panadapter BW
+settings-radio-cat-family = CAT family
+settings-radio-rigctld-address = rigctld address
+settings-radio-host-port-running-hamlib-rigctld =
+    host:port of a running Hamlib rigctld — 127.0.0.1:4532 is its own default, on this machine.
+
+    Start one with, for example, `rigctld -m 2028 -r /dev/ttyUSB0 -s 38400`, where -m is the Hamlib model number for your radio (`rigctl -l` lists them).
+
+    This is the catch-all: it reaches the frequency, mode, PTT, power, S-meter and SWR and nothing else. Where one of the native families above fits your radio it does more — keying from the rig's own text buffer, the receive filter, and per-model meter scales.
+settings-radio-flrig-address = flrig address
+settings-radio-host-port-running-flrig-127 =
+    host:port of a running flrig — 127.0.0.1:12345 is its own default, on this machine. flrig serves XML-RPC whenever it is running; the port is under its Config → Setup → Server.
+
+    Like the Hamlib option this drives a daemon rather than the radio, but through flrig's own per-model driver — on a number of rigs its power and filter handling is the more faithful of the two. It reaches the frequency, mode, PTT, transmit power (in whole watts), the receive bandwidth, the S-meter, SWR and power-out. CW keys through flrig's own cwio port, which must be configured in flrig itself.
+settings-radio-serial-port = Serial port
+settings-radio-select = — select —
+settings-radio-baud = Baud
+settings-radio-data-bits = Data bits
+settings-radio-parity = Parity
+settings-radio-stop-bits = Stop bits
+settings-radio-force-rts = Force RTS
+settings-radio-force-dtr = Force DTR
+settings-radio-ptt-method = PTT method
+settings-radio-how-transmit-keyed = How transmit is keyed.
+settings-radio-how-transmit-keyed-network-link = How transmit is keyed. A network link has no control lines, so DTR and RTS key nothing here — use CAT, which asks the daemon to key the radio, or VOX.
+settings-radio-mode-control = Mode control
+settings-radio-digimode-mode = Digimode mode
+settings-radio-what-put-radio-mode-sdroxide =
+    What to put the radio in for a mode sdroxide modulates through its sound card. "DIGI" selects the rig's DATA/PKT position, which takes the transmit audio from the USB or ACC input with the microphone path's speech processing out of it; "USB" leaves it on the plain sideband, for a radio already set to modulate SSB from its data input or one with no DATA position at all.
+
+    It covers every digital mode — FT8, FT4, PSK, RTTY, SSTV and the rest — and CW sent as "Sound card", and it overrides Mode control for them. SSTV is the one whose sideband follows the band, so there it means the DATA position on that sideband: USB-D above 40 m, LSB-D at and below it. SSTV-FM is not part of it — an FM carrier has no sideband to choose.
+settings-radio-cw-keying = CW keying
+settings-radio-how-cw-panel-s-keyer =
+    How the CW panel's keyer transmits. "Rig keyer" puts the radio in CW and hands it the text to send with its own keyer. It uses the rig's keyer speed (set from the panel's WPM), and on Yaesu it sends by way of keyer memory 1, overwriting whatever was stored in it.
+
+    It needs break-in on at the radio, which sdroxide turns on itself with each message on Icom, Yaesu and Kenwood — a rig with break-in off takes the message and transmits nothing. It is left on afterwards, and a full break-in is never turned down to semi.
+
+    "Sound card" sends the keyed sidetone as audio instead (MCW), a tone at dial + pitch — and because a rig in CW would ignore its sound card entirely, selecting CW then follows the Digimode mode setting (USB, DATA, or Radio controlled) instead of switching the rig to CW. Pick "Radio controlled" there for rigs whose data position can't be commanded over CAT (a Xiegu's U-D) and park the rig on it yourself, as for FT8.
+settings-radio-poll-rate = Poll rate
+settings-radio-how-often-radio-asked-what =
+    How often the radio is asked what it is doing — its dial, its mode and its meters. This is the half of the control link that runs from the radio back to sdroxide: turn the rig's own VFO knob or change its mode on the front panel and the readout, the band and the panadapter follow within one poll.
+
+    It is also the whole of the control traffic this end generates, and on a modern Icom that traffic is not free: the CI-V port and the sound card sit behind one USB hub inside the radio, so frames asked for here are bus time the audio does not get — heard as dropouts that look like a DSP fault and are not one. The default of 2 Hz is half a second behind the knob and quiet enough to stay out of the audio's way. Raise it where the control port is its own device (a separate USB-serial adapter, a network rigctld); lower it if the radio's audio breaks up.
+
+    An Icom with CI-V Transceive switched on in its own menu needs none of this for the dial: it reports the knob the instant it moves, and sdroxide stands the dial poll down as soon as it sees it do so — and picks it back up again if the radio ever moves without saying so.
+
+    The rate is the dial's. The mode rides along with only every fourth poll, since it is a setting that changes a few times in an evening rather than one that follows a knob.
+settings-radio-send-command = Send command
+settings-radio-which-transceiver-generation-keys-rig =
+    Which transceiver generation keys the rig, for PTT method "CAT". The two disagree about what the TX parameter means and nothing on the wire tells them apart, so pick the one that matches your radio.
+
+    "TS-2000 style (TX;)" — TS-480, TS-570, TS-870, TS-2000: the ordinary send, on the main band.
+
+    "TS-590 style (TX1;)" — TS-590S/SG, TS-890, TS-990: DATA SEND, which keys with the ACC2/USB audio input live. On these rigs the plain send selects the microphone instead and mutes the audio sdroxide transmits.
+
+    Set wrong, a TS-590 transmits silence — but a TS-2000 transmits on the sub-band, which is another band entirely.
+settings-radio-radio = Radio
+settings-radio-k3-k3s-kx3-kx2-k4 = K3 · K3S · KX3 · KX2 · K4
+settings-radio-one-profile-covers-family-k3 =
+    One profile covers the family: the K3 command set, which the KX3, KX2 and K4 all answer. There is nothing to pick here — how many watts the Drive slider spans (12 on a bare KX2 or KX3, 110 with a KPA3 or a KXPA100) is read from the rig's own option-module query when the port opens.
+
+    Note the baud rates above: the K3, K3S, KX3 and KX2 go no faster than 38400, and a rig set below the rate chosen here answers nothing at all.
+settings-radio-transmit-input = Transmit input
+settings-radio-where-radio-takes-transmit-audio =
+    Where the radio takes its transmit audio from — the rig's TI command, which is menu 32 "TX IN" at the front panel. Asserted when the port opens.
+
+    "USB audio" is what makes this interface work: the FDM-DUO transmits what sdroxide puts into its USB sound card. A radio left on "Microphone" sends the room instead, and nothing on screen says so.
+
+    "Auto" lets the rig choose — the microphone for a PTT press on the microphone, the USB port for a CAT or RTS key-down.
+
+    "Leave as set on the radio" sends no TI at all, for an operator who sets this at the front panel.
+settings-radio-which-two-sockets-back-receiver =
+    Which of the two sockets on the back the receiver listens on — the rig's AN command, which is menu 31 "ANTENNAS" at the front panel and the "ANT 1 2" indicator on its display.
+
+    "RTX" is one antenna doing both jobs, on the M-type socket that also carries transmit. "RX only" moves receive to the second socket and leaves transmit on RTX — a receiving antenna, a loop or a beverage, with the beam still on the transmitter.
+
+    Applies immediately, and is read back from the radio when the port opens: this is the rig's own setting rather than a copy kept here.
+settings-radio-one-profile-covers-both-there =
+    One profile covers both. There is nothing to pick here — the radio names itself when the port opens.
+
+    This is the CAT half only: it drives the dial, the mode, PTT, the S-meter, the SWR and the transmit power over the rig's CAT USB port, and takes audio from its USB Audio port. The FDM-DUO's third USB port carries wideband I/Q, which this interface does not read — select the ELAD interface above for that.
+
+    Note the baud rate: menu 70 "CAT BAUD" on the radio must match, and it ships at 38400.
+
+    CW is keyed by the radio's own key or paddle. The FDM-DUO has no command that accepts text, so the CW panel cannot key it over CAT.
+settings-radio-one-profile-covers-range-qrp =
+    One profile covers the range: QRP Labs' own command set, which is a subset of the Kenwood TS-480's with a good deal added. There is nothing to pick here — the radio names itself and its firmware version when the port opens, and the version is what decides whether the SWR-protection read is asked for at all.
+
+    Not the Kenwood profile: on a QMX the PC command is the power METER rather than the power control, so a radio driven as a Kenwood would have its meter read written to as if it were a setting, and MD8 — a Kenwood mode — is SWR Tune here.
+
+    The transmit power is set at the radio. There is no CAT command for it, so the Drive slider only reaches the level of the audio going into the sound card.
+
+    The receive filter is the radio's too: it reports the width its mode implies (3.2 kHz in Digi, 300 Hz in CW) and offers nothing to change it with.
+settings-radio-baud-rate-ignored-port-usb = Baud rate is ignored — the port is USB
+settings-radio-qmx-serves-own-virtual-com =
+    A QMX serves its own virtual COM ports over USB, so the rate set above has no effect on either end. It offers up to three of them; if the radio answers nothing, the most likely reason is the wrong one.
+
+    One thing does matter about the port: a carriage return sent to it switches the radio into terminal mode for the rest of the session. sdroxide never sends one — but a terminal program left open on the same port will, and CAT stops working the moment it does.
+settings-radio-i-q-mode-switched-radio = I/Q mode is switched on at the radio
+settings-radio-radio-s-sound-card-carries =
+    The radio's sound card carries either demodulated audio or the raw I/Q its ADC sees, and sdroxide asserts whichever the Sound format above asks for when the port opens (the radio's Q9 command, the "IQ mode" menu entry).
+
+    The centre offset and sample rate above have been set to what a QMX needs: its receiver is a superhet with a 12 kHz I.F., so the synthesiser sits 12 kHz below the dial and everything on the card is 12 kHz above the middle of the span. The card runs at 48 kHz, which makes the panadapter 48 kHz wide.
+
+    In CW the radio moves that I.F. by a further ~700 Hz, which one figure cannot follow — add it by hand if you run the panadapter with the radio in CW. In Digi, where a radio used as an I/Q front end normally sits, there is nothing to add.
+
+    QRP Labs note that I/Q mode is not suitable for WSJT-X and other programs that expect demodulated audio; here the demodulation happens on this side, so it is.
+settings-radio-rs-hfiq-5-w-hf = RS-HFIQ (5 W HF transceiver)
+settings-radio-hobbypcb-s-rs-hfiq-there =
+    HobbyPCB's RS-HFIQ. There is nothing to pick here: the profile is the whole of the radio's command set, and the firmware version is logged when the port opens.
+
+    The control link carries two things and no more — where to put the oscillator, and whether to transmit. There is no mode, power, filter, squelch or meter command, because the radio has none of them. Everything else is sdroxide's: what comes off the sound card is complex baseband centred on the dial, so the mode, the filter and the modulation all happen on this side.
+
+    The frequency command covers 3–30 MHz. Ask for anything outside that and the radio refuses it and stays where it is; the log says so.
+
+    CW is keyed as audio through the transmit chain — this radio has no keyer that takes text. (It has an internal CW generator; sdroxide never uses it, on the firmware's own advice.)
+settings-radio-sound-format-baud-ptt-are = Sound format, baud and PTT are the radio's, not settings
+settings-radio-all-three-have-been-filled =
+    All three have been filled in and none of them is a preference:
+
+    • Sound format is I/Q (stereo) — the card carries complex baseband and nothing else.
+    • 57600 baud, 8N1 — the firmware's one rate, with no menu to change it. Any other is a silent link, so it is pinned when the port opens.
+    • PTT over CAT — the *X command is the only transmit switch the interface has.
+
+    The centre offset has been set to zero: the synthesiser runs at four times the dial into a quadrature detector, so the middle of the span is the dial. Set the sample rate above to whatever your sound card is actually running at; that is what makes the panadapter as wide as it is.
+settings-radio-dl2man-pe1nnz-s-pocket-qrp =
+    DL2MAN/PE1NNZ's pocket QRP transceiver and the open uSDX firmware it grew from. It emulates a Kenwood TS-480, but the subset is thin: the dial, the mode, PTT and RIT/XIT clear are all it answers. No S-meter, no SWR, no power control, no VFO B, no split and no CAT keyer, so the Drive slider and the meters do nothing over CAT — the audio level is the only transmit control there is.
+
+    CW is keyed as audio (MCW) through the sideband, or with the key or paddle at the radio; there is no command that takes text.
+settings-radio-audio = Audio
+settings-radio-tr-usdx-has-no-sound =
+    A (tr)uSDX has no sound card of its own and two ways to be heard, and which is right is a fact about your shack rather than the radio.
+
+    "One cable" takes the audio inside the CAT serial link itself — the radio's own 8-bit stream, over the same USB cable as the control, with nothing else to plug in. The catch is the firmware: it cannot take a CAT command while its stream is running (a command sent into the stream does not pause it, it kills it), so this mode never polls. Tuning and mode changes are sent as you make them, each pausing the stream for a moment and starting it again, so expect a brief gap on each change; nothing is sent while you are simply listening. The radio's own dial and mode are not followed either — there is no read to follow them with — so drive it from here.
+
+    "USB sound card" takes the audio from an external sound card wired to the radio's 3.5 mm speaker/mic jack, and behaves as any other CAT rig: the dial poll runs, so the radio's own knob and mode are followed. Pick the card under Radio audio below.
+
+    Both modes open the port with DTR held high: the serial adapter's DTR is wired to the radio's reset, so opening the port reboots it and the first second or two is quiet while it comes up. DTR is never used to key.
+settings-radio-radio-model = Radio model
+settings-radio-which-icom-two-things-ci =
+    Which Icom, for the two things CI-V does not do the same way on all of them.
+
+    The transceiver address below is filled in from it: every model ships with a different one, and a frame sent to the wrong address is simply ignored — a radio that answers nothing, with no error anywhere to say why.
+
+    It also decides whether sdroxide can select DATA mode. On CI-V, USB and USB-DATA are the same mode byte and a separate command tells them apart; without it a digital-mode over goes out through the microphone input, with the rig's speech processing and SSB filter in the path.
+
+    "Other" leaves the address to you and sends no DATA-mode command at all.
+settings-radio-radio-id-hex = Radio ID (hex)
+settings-radio-show-radio-s-spectrum-scope = Show the radio's spectrum scope
+settings-radio-scope-span = Scope span
+settings-radio-how-wide-sweep-radio-keeps = How wide to sweep it. The radio keeps whatever span was last chosen on its own screen — often a few kHz. Setting a span here also puts the scope into centre mode, so it follows the dial. It changes the radio's own display too; "As set on the radio" leaves it alone.
+settings-radio-press-apply-reconnect-switch-without = Press "Apply / reconnect" to switch without a restart.
+settings-radio-radio-audio-sound-card = Radio audio (sound card)
+settings-radio-waiting-sound-cards-machine-radio = Waiting for the sound cards on the machine the radio is plugged into.
+settings-radio-radio-rx = From radio (RX)
+settings-radio-radio-tx = To radio (TX)
+settings-radio-apply-reconnect = Apply / reconnect
+settings-radio-reopen-cat-rig-these-sound = Reopen the CAT rig with these sound cards — no restart
+settings-radio-reconnects-radio-without-restarting = Reconnects the radio without restarting.
+settings-radio-receive-radio-pc = Receive (radio → PC)
+settings-radio-sound-card-radio-s-own = The sound card the radio's own audio comes in on — its headphone socket into the computer's line or mic input. Everything on the panadapter and in the decoders arrives here.
+settings-radio-transmit-pc-radio-mic = Transmit (PC → radio mic)
+settings-radio-sound-card-carries-audio-radio = The sound card that carries the audio the radio must broadcast — the computer's output into the radio's mic socket. The radio keys itself, by VOX, the moment audio arrives here, so this device is silent unless the radio is being transmitted through.
+settings-radio-radio-has-no-control-cable = This radio has no control cable — it keys itself off VOX, so there is no PTT to command. Transmit is audio into the radio's microphone.
+settings-radio-reopen-radio-these-sound-cards = Reopen the radio with these sound cards — no restart
+settings-radio-devices = Devices
+settings-radio-discover = Discover
+settings-radio-no-devices-press-discover = no devices — press Discover
+settings-radio-manual-ip = Manual IP
+settings-radio-optional-e-g-192-168 = optional, e.g. 192.168.1.50
+settings-radio-sample-rate = Sample rate
+settings-radio-receiver-ddc = Receiver (DDC)
+settings-radio-protocol-2-board-carries-several = A Protocol 2 board carries several independently tunable receivers (DDCs) on one connection — run this radio on DDC1 and another radio, same address, on DDC2. The transmitter belongs to the DDC1 radio. Protocol 1 boards have DDC1 only.
+settings-radio-lna-gain = LNA gain
+settings-radio-front-end-gain-hermes-lite = Front-end gain of a Hermes-Lite 2. Takes effect immediately — no reconnect — and is remembered as the level the radio starts at. Too high clips the ADC and the whole band looks distorted; too low and the receiver goes deaf.
+settings-radio-overload-protection = Overload protection
+settings-radio-back-lna-gain-off-itself =
+    Back the LNA gain off by itself while the board reports its ADC overflowing, and let it back up once it stops.
+
+    A Hermes-Lite 2 samples the whole of 0-38 MHz onto one 12-bit converter with no mixer and no preselector in front of it, so a broadcast station a band away can drive it into overflow while the band you are looking at shows nothing wrong at all — the noise floor climbs, everything intermodulates and the decoders stop. The board knows, and this is what acts on it.
+
+    Off by default: it moves a control you set. Nothing happens while transmitting.
+settings-radio-wind-gain-back-when-adc = Wind the gain back when the ADC overflows
+settings-radio-applies-apply-reconnect-main-window = Applies on Apply / reconnect. The main window's Gain rail reads the gain the board is actually running, so it follows the loop and you can watch what it does; the slider above is the level the radio starts at, and the loop does not rewrite it.
+settings-radio-step = {"  "}Step
+settings-radio-how-far-gain-moves-each = How far the gain moves each time, in dB. One is the step the board's own gain register has.
+settings-radio-attack-decay = {"  "}Attack / decay
+settings-radio-how-often-gain-may-come =
+    How often the gain may come down while the converter is overflowing, and how often it may go back up once it has stopped.
+
+    The two are deliberately a hundred times apart. Retreat immediately: every millisecond of overflow is a receiver full of intermodulation. Return slowly: whatever caused it — a neighbour keying, a broadcaster coming up at dusk — has usually not gone away, and a loop that recovered as fast as it retreated would spend the evening oscillating across the threshold. 100 ms and 10 s per decibel is what PowerSDR's Auto S-Att and N1GP's HermesIntf have both used.
+settings-radio-range = {"  "}Range
+settings-radio-lowest-highest-gain-loop-may = The lowest and highest gain the loop may use, in dB. The ceiling is what stops it deciding how sensitive your receiver should be; the floor is where you say that below some point the overload is somebody else's problem and the answer is a filter, not another twenty decibels.
+settings-radio-filter-board = Filter board
+settings-radio-accessory-board-hermes-lite-2 = Accessory board on the Hermes-Lite 2's J16 header (or the open-collector outputs of any other openHPSDR board — Protocol 2 included). "N2ADR" picks one relay per band; "Alex / Hermes band code" puts the band number on outputs 1-4, which is what an ANAN's Alex board, a Zeus SDR, a HiQSDR and Quisk expect. "Custom" opens a table below where you state the seven outputs yourself, band by band, on receive and on transmit — for an antenna switch, an amplifier's band decoder or anything else neither preset fits; either preset can be poured into it as a starting point. Leave this at "None" unless something really is fitted: those seven pins are general-purpose open-collector outputs, and operators also wire them to amplifier PTT, antenna relays and transverter switching. Driving them from band data would start operating whatever is connected. Applies on Apply / reconnect.
+settings-radio-io-board-rx-input = IO board RX input
+settings-radio-where-n2adr-hl2ioboard-takes-receive = Where an N2ADR HL2IOBoard takes its receive signal from. The board itself is found automatically and needs no setting; this one exists only for operators who have wired its own SMA jacks. Leave it at "Radio's own input" otherwise — selecting the IO board's J9 with nothing connected to it leaves the receiver deaf. Applies on Apply / reconnect. Set to either J9 choice, the inputs also appear on the ANT control and are remembered per band.
+settings-radio-power-amplifier = Power amplifier
+settings-radio-use-hermes-lite-2-s = Use the Hermes-Lite 2's onboard PA
+settings-radio-default-what-you-want-unless = On by default, and what you want unless an external amplifier is driven from the board's low-power RF1 output. With it off the radio still keys — the T/R relay throws and any accessory board follows — but the antenna jack makes no power at all, and the relay is deliberately held in receive. Ignored on boards other than a Hermes-Lite.
+settings-radio-mirror-board-s-spectrum-about = Mirror the board's spectrum about the tuned frequency, on transmit as well as receive. On by default: a Hermes-Lite 2 needs it. Turn it off only if signals show up on the wrong side of the dial and nothing decodes — the giveaway is a waterfall full of convincing traces while SSB lands on the wrong sideband and FT8 returns no decodes at all.
+settings-radio-frequency-correction = Frequency correction
+settings-radio-crystal-tcxo-error-ppm-applied = Crystal/TCXO error in ppm, applied to RX and TX. Applies immediately.
+settings-radio-ppm = {" "}ppm
+settings-radio-transmit-buffer = Transmit buffer
+settings-radio-how-far-ahead-real-time = How far ahead of real time transmit audio is fed to the board over the network, before sdroxide slows down to match it. The board itself holds no such buffer — this only widens sdroxide's own margin. Raise it on a WiFi link or a VPN, where the low default (right for a direct wired connection) is not enough headroom against jitter and the transmitted audio or PTT stutters; higher costs transmit latency. Takes effect on APPLY, which reconnects to the board.
+settings-radio-puresignal = PureSignal
+settings-radio-adaptive-predistortion-linearise-transmitter-sample = Adaptive predistortion: linearise the transmitter from a sample of what it actually emitted, for twenty-odd decibels less intermodulation at the same power. The receiver is the feedback path — the board keeps receiving through an over — so a directional coupler and an attenuator have to put a sample of the amplifier's output into an input the T/R switch does not take away on transmit. On a Hermes-Lite 2 that means the IO board's PureSignal jack, and the receive input above set to match; on a board without one, an ANAN's RX port or an external relay that switches the coupler in for the length of the over. It is this receiver that is read — a board with a second ADC cannot use RX2 as the feedback tap, however its own firmware routes it. With nothing coupled in, the loop never locks and the transmitter is left exactly as it would have been. Applies on Apply / reconnect, and only on the radio that owns the transmitter (DDC1).
+settings-radio-correct-transmitter-receiver-s-own = Correct the transmitter from the receiver's own feedback
+settings-radio-table-steps = {"  "}Table steps
+settings-radio-how-finely-amplifier-s-curve = How finely the amplifier's curve is modelled. More steps follow a sharper knee and take longer to fill in; 32 is a sensible start.
+settings-radio-adaptation = {"  "}Adaptation
+settings-radio-how-fast-correction-follows-what = How fast the correction follows what the coupler reports. Slow is right — this is averaging an amplifier's curve, which does not move, out of a feedback path that has noise in it.
+settings-radio-hold = Hold
+settings-radio-stop-adapting-keep-correction-where = Stop adapting and keep the correction where it is — for measuring, and for an operator happy with what it has learned.
+settings-radio-manual-ip-overrides-discovery-press = A manual IP overrides discovery. Press "Apply / reconnect" to switch without a restart.
+settings-radio-open-collector-outputs-band = Open-collector outputs by band
+settings-radio-one-control-word-per-band = One control word per band, as your hardware's documentation states it: bit 0 is output 1, bit 6 is output 7. RX is asserted while receiving on that band and TX while the transmitter is keyed — give them the same value for a filter, and different ones for anything that belongs on one side of the changeover only (an amplifier's key line, a receive preamplifier's bypass). Bands left at 00 assert nothing. Applies on Apply / reconnect.
+settings-radio-alex-band-code = ALEX BAND CODE
+settings-radio-replace-table-what-preset-would = Replace the table with what this preset would send on every band, as a starting point to edit. Nothing else in the configuration changes.
+settings-radio-clear = CLEAR
+settings-radio-every-output-off-every-band = Every output off on every band, which is what "None" does.
+settings-radio-band = Band
+settings-radio-rx = RX
+settings-radio-tx = TX
+settings-radio-outputs-asserted = Outputs asserted
+settings-radio-other = Other
+settings-radio-everywhere-outside-amateur-bands-short = Everywhere outside the amateur bands — short-wave listening, and anything a transverter's dial lands on that no band covers.
+settings-radio-dongle = Dongle
+settings-radio-rescan = Rescan
+settings-radio-re-list-usb-bus-no = Re-list the USB bus. No device is opened, so this is safe to press while receiving.
+settings-radio-no-dongles-press-rescan = no dongles — press Rescan
+settings-radio-first-one-found = — first one found —
+settings-radio-rtl2832u-s-resampler-reaches-225 = The RTL2832U's resampler reaches 225–300 kHz and 900 kHz–3.2 MHz, nothing between. Takes effect on Apply.
+settings-radio-often-drops-samples = {"  "}(often drops samples)
+settings-radio-agc = AGC
+settings-radio-manual-setting-measurement-weak-signal = Manual is the setting for measurement and weak-signal digital modes. The tuner and the demodulator have independent automatic loops.
+settings-radio-tuner-gain = Tuner gain
+settings-radio-applies-immediately-no-reconnect-tuner = Applies immediately — no reconnect. The tuner has 29 discrete steps, so the value snaps to the nearest one it can produce. Ignored while the tuner AGC is running.
+settings-radio-crystal-error-parts-per-million = Crystal error in parts per million. Run with RUST_LOG=sdroxide_rtlsdr=debug and the log prints the measured clock error after about 20 seconds — that is the number to enter. Applies immediately.
+settings-radio-hf-reception = HF reception
+settings-radio-tuner-itself-starts-24-mhz =
+    The tuner itself starts at 24 MHz. An RTL-SDR Blog V4 upconverts below that in hardware; other dongles reach HF only by sampling the ADC directly, through the V3's HF port. Automatic hands everything below 24 MHz to the ADC and everything above it to the tuner.
+
+    Direct sampling covers every HF band, 17 m and 15 m included — they arrive in the ADC's second Nyquist zone, the right way up. Nothing filters the ADC's input, though, so whatever is at 28.8 MHz minus the dial comes with them: 10.7 MHz under 17 m, 7.726 MHz under 15 m.
+
+    Switching modes briefly interrupts the stream.
+settings-radio-removes-dongle-s-own-dc =
+    Removes the dongle's own DC spike from the centre of the span, and the mirror image every signal leaves reflected about it, by measuring the imbalance in the samples themselves — no calibration, and it applies immediately. The tuner has no offset-tuning mode, so this is the only way to clear the centre.
+
+    An AM carrier tuned dead on the dial is at DC too, so it goes with the spike: tune a kilohertz off it, or switch this off.
+settings-radio-remove-centre-spike-mirror-image = Remove the centre spike and mirror image
+settings-radio-bias-tee = Bias tee
+settings-radio-feed-4-5-v-dc = Feed ~4.5 V DC up the coax
+settings-radio-bias-tee-never-connect-transceiver = Bias tee is ON. Never connect a transceiver, a grounded antenna, or a preamp powered from elsewhere while this is enabled — the DC goes straight down the feedline.
+settings-radio-receive-only-dongle-sample-rate = Receive only. The dongle and sample rate take effect on Apply; everything else applies as you change it.
+settings-radio-server-address = Server address
+settings-radio-where-rtl-tcp-listening-address =
+    Where rtl_tcp is listening: an address, or an address and port. The port defaults to 1234, which is rtl_tcp's own default.
+
+    On the far end, start it as `rtl_tcp -a 0.0.0.0` — bound to 127.0.0.1, which is what it does with no -a, it only accepts connections from that same machine.
+
+    Takes effect on Apply.
+settings-radio-host-host-port-e-g = host or host:port, e.g. raspberrypi.local:1234
+settings-radio-requested-server-same-resampler-limits =
+    Requested of the server, with the same resampler limits as a local dongle — it is the same silicon on the far end.
+
+    The figure beside each rate is what it costs on the link: the samples are sent uncompressed, and a rate the network cannot carry makes rtl_tcp drop the connection rather than degrade. Takes effect on Apply.
+settings-radio-wired-link = {"  "}(wired link)
+settings-radio-runs-server-s-dongle-manual = Runs on the server's dongle. Manual is the setting for measurement and weak-signal digital modes.
+settings-radio-applies-immediately-no-reconnect-sent = Applies immediately — no reconnect. Sent in tenths of a dB and snapped by the server to a step its tuner has; the protocol has no replies, so what it settled on cannot be read back and this slider keeps showing what was asked for. Ignored while the tuner AGC is running.
+settings-radio-crystal-error-server-s-dongle =
+    Crystal error of the *server's* dongle, in parts per million — a property of that hardware, so it is set here and not on this machine's dongles. Applies immediately.
+
+    The measured clock error the USB interface prints is not available here: over a network what that measurement sees is the buffering, not the crystal, and it is wrong by thousands of ppm. Calibrate the dongle on USB once and carry the number over, or tune a broadcast station of known frequency and adjust until it sits on the dial.
+settings-radio-tuner-starts-24-mhz-below =
+    The tuner starts at 24 MHz; below that the far end needs help. A Blog V4 upconverts by itself and Automatic leaves it alone — which is the only thing it can do, since the protocol reports the tuner chip and nothing else, and a V4 is indistinguishable from a plain R828D over the wire.
+
+    On a V3 or any other dongle, Automatic switches the server to direct sampling below the tuner's own 24 MHz floor — which covers every HF band, 17 m and 15 m arriving in the ADC's second Nyquist zone with 28.8 MHz minus the dial folded on top. Choose Direct sampling explicitly for a plain R828D that hears nothing on HF. Switching briefly interrupts the stream.
+settings-radio-removes-dongle-s-dc-spike =
+    Removes the dongle's DC spike and mirror image here, from the samples as they arrive — they are artefacts of the hardware, so they travel over the network with everything else. Applies immediately.
+
+    An AM carrier tuned dead on the dial sits at DC too, so it goes with the spike: tune a kilohertz off it, or switch this off.
+settings-radio-powers-preamp-far-end-s = Powers a preamp from the far end's dongle. Older servers do not implement the command and ignore it silently — the protocol has no way to say no — so a bias tee that does not come on is not necessarily this end's doing.
+settings-radio-feed-4-5-v-dc-2 = Feed ~4.5 V DC up the remote coax
+settings-radio-bias-tee-hardware-somewhere-else = Bias tee is ON, on hardware that is somewhere else. Whatever is on the other end of that feedline — a transceiver, a grounded antenna, a preamp already powered — is not in front of you to check.
+settings-radio-sdrplay-server-rsp-tcp = SDRplay server (rsp_tcp)
+settings-radio-sdrplay-server-greets-exactly-like = An SDRplay server greets exactly like a dongle, so these are shown always rather than when one is detected. Against an ordinary rtl_tcp server they are simply ignored — the protocol has no replies and discards commands it does not know. The Device tab names the server as rsp_tcp once one has identified itself.
+settings-radio-input = Input A
+settings-radio-input-b = Input B
+settings-radio-hi-z = Hi-Z
+settings-radio-lna-state = LNA state
+settings-radio-step-index-not-db-figure = A step index, not a dB figure: how much each step is worth depends on the RSP model and the band. 0 is the most gain.
+settings-radio-if-gain-reduction = IF gain reduction
+settings-radio-reduction-so-more-less-signal = A reduction, so more is less signal. Only obeyed with the RSP's AGC off.
+settings-radio-enable = Enable
+settings-radio-dbfs = {" "}dBfs
+settings-radio-level-rsp-s-agc-aims = The level the RSP's AGC aims to hold.
+settings-radio-notches = Notches
+settings-radio-am = AM
+settings-radio-fm = FM
+settings-radio-dab = DAB
+settings-radio-rf = RF
+settings-radio-reference-out = Reference out
+settings-radio-t-24-mhz-clock-out = 24 MHz clock out
+settings-radio-rsp2-rspduo-only = RSP2 and RSPduo only.
+settings-radio-receive-only-address-sample-rate = Receive only. The address and sample rate take effect on Apply; everything else applies as you change it. A dropped connection is retried on its own, so a server that is restarted comes back without touching anything here.
+settings-radio-where-spyserver-listening-address-address =
+    Where spyserver is listening: an address, or an address and port. The port defaults to 5555, which is spyserver's own default.
+
+    On the far end, check that its config file binds an address other machines can reach — bound to 127.0.0.1 it only accepts connections from that same machine.
+
+    Takes effect on Apply.
+settings-radio-host-host-port-e-g-2 = host or host:port, e.g. raspberrypi.local:5555
+settings-radio-i-q-bandwidth = I/Q bandwidth
+settings-radio-how-wide-slice-band-arrives =
+    How wide a slice of the band arrives as I/Q — and so how much of the link this uses. This is the *demodulated* window: it follows the dial, and everything wider than it is the server's FFT in the strip above the panadapter.
+
+    Automatic aims at about 96 kHz, which carries every mode here including wide FM and still fits down a cellular uplink. Takes effect on Apply.
+settings-radio-which-stage-server-s-own =
+    Which stage of the server's own rate ladder to ask for. Every receiver has a different ladder — it is its maximum rate halved stage by stage — so this is stored as the stage rather than as a figure in hertz, and the same setting still means something sensible pointed at a different server.
+
+    Automatic aims at about 1 Msps. Press Test connection to see what the stages come to on this server. Takes effect on Apply.
+settings-radio-automatic = Automatic
+settings-radio-sample-format = Sample format
+settings-radio-bits-per-component-wire-so =
+    Bits per component on the wire, and so what this costs on the link: 16-bit is twice 8-bit, and 32-bit float is four times it for no more information than the receiver's ADC had.
+
+    8-bit is what makes a remote receiver work over a domestic uplink and is right for almost everything. A server may override this — some are configured to insist on one format — and says so in the log when it does. Takes effect on Apply.
+settings-radio-gain = Gain
+settings-radio-server-s-gain-stage-index =
+    The server's gain stage, as an index — not a number of decibels. What each index means belongs to the receiver on the far end and changes with the band, and the protocol never says, so nothing here can turn it into dB without inventing a figure.
+
+    The real range is the server's and is only known once connected; an index past it is clamped. Applies immediately — no reconnect.
+settings-radio-index = index{" "}
+settings-radio-digital-gain = Digital gain
+settings-radio-how-far-server-scales-samples =
+    How far the server scales its samples up before quantising them for the wire. Automatic watches what actually arrives and holds the peak at half of full scale, which is the only thing that can be right on both a dead band and a crowded one — the two are thirty decibels apart and no fixed figure serves both.
+
+    It matters only at 8 bits, where a signal far below full scale loses its lower bits to the quantiser and one above it is clipped flat. Wider formats have room to spare and get the figure every other client computes, from the gain index and the decimation stage. Applies immediately.
+settings-radio-full-band-strip = Full-band strip
+settings-radio-server-s-own-fft-whole =
+    The server's own FFT of the whole band, drawn in the strip above the panadapter. In this interface it is the only band view there is — the panadapter itself is only as wide as the I/Q being received.
+
+    Switching it off leaves a receiver with no way to see anything it is not already tuned to. Applies immediately, with a short break in the audio while the server changes what it is sending.
+settings-radio-ask-server-low-rate-fft =
+    Ask the server for a low-rate FFT of the whole band as well as the I/Q, and draw it in the strip above the panadapter.
+
+    It costs almost nothing — a couple of kilobytes a frame, a dozen or so times a second — and it shows the whole receiver rather than the slice being demodulated. Worth switching off only on a link where every byte counts. Applies immediately, with a short break in the audio.
+settings-radio-show = Show
+settings-radio-whole-band = whole band
+settings-radio-how-much-receiver-strip-covers = How much of the receiver the strip covers. The whole band is the widest view there is; narrowing it puts the same number of bins across less spectrum, which is finer detail over a smaller stretch.
+settings-radio-strip-db-window = Strip dB window
+settings-radio-server-quantises-fft-into-window =
+    The server quantises its FFT into this window before sending it, one byte a bin — so these decide how finely the strip is measured, not just how it is drawn. The floor and ceiling the strip is *displayed* with are set by the engine's own auto-levelling and are a separate thing.
+
+    The default 150 dB is the whole protocol range and needs no attention. Narrowing it around the noise floor buys resolution on a receiver whose signals all sit in a small part of the scale. Applies immediately.
+settings-radio-top = top{" "}
+settings-radio-range-2 = range{" "}
+settings-radio-i-q-correction = I/Q correction
+settings-radio-remove-dc-spike-mirror-image = Remove the DC spike and the mirror image in DSP, on this side. Whether the receiver on the far end needs it depends on what it is — an Airspy HF+ does not, an RTL-SDR does — and the protocol does not say which it is talking to. Applies immediately.
+settings-radio-enabled = Enabled
+settings-radio-test-connection = Test connection
+settings-radio-connect-read-what-server-says = Connect, read what the server says about its receiver, and disconnect again — without starting a stream, so it is safe to press against a server somebody else is using.
+settings-radio-receive-only-panadapter-narrow-i = Receive only. The panadapter is the narrow I/Q window, which follows the dial; the band view is the server's FFT in the strip above it. Press "Apply / reconnect" to switch without a restart.
+settings-radio-receive-only-wideband-i-q = Receive only. Wideband I/Q, the same as any local SDR. Press "Apply / reconnect" to switch without a restart.
+settings-radio-receiver-address = Receiver address
+settings-radio-where-receiver-serves-web-page =
+    Where the receiver serves its web page: an address, or an address and port. The port defaults to 8073, which is a KiwiSDR's own.
+
+    Note that a receiver reached through the project's proxy (something.proxy.kiwisdr.com — nearly half the public ones) answers on port 80 instead, so give it explicitly. Picking a receiver from "Public SDRs" fills this in correctly.
+
+    Takes effect on Apply.
+settings-radio-host-host-port-e-g-3 = host or host:port, e.g. kiwi.example.org:8073
+settings-radio-password = Password
+settings-radio-receiver-s-user-password-where =
+    The receiver's *user* password, where its operator has set one. Blank on almost every public receiver. Not the admin password.
+
+    Takes effect on Apply.
+settings-radio-announce = Announce as
+settings-radio-name-connection-shows-up-under =
+    The name this connection shows up under, which the receiver's owner and everybody else listening to it can see.
+
+    Left blank it is your station callsign, which is the network's own convention — some operators do block clients that will not identify. Takes effect on Apply.
+settings-radio-blank-station-callsign = blank = station callsign
+settings-radio-band-view = Band view
+settings-radio-ask-receiver-own-waterfall-well =
+    Ask the receiver for its own waterfall as well as its I/Q, and draw it in the strip above the panadapter.
+
+    Worth having: the I/Q is only about 12 kHz wide, so without this there is nothing to tune *by*. It is a second connection carrying roughly 20 kB/s at full speed, against the I/Q's 44 kB/s.
+
+    Takes effect on Apply.
+settings-radio-show-receiver-s-0-30 = show the receiver's 0-30 MHz waterfall
+settings-radio-band-view-speed = Band view speed
+settings-radio-how-often-receiver-sends-waterfall =
+    How often the receiver sends a waterfall row, 1 (slowest) to 4. The only setting here that changes what the link costs while running, so turn it down on a metered connection.
+
+    Applies immediately.
+settings-radio-band-view-span = Band view span
+settings-radio-how-much-band-receiver-s =
+    How much band the receiver's waterfall covers. Its full 0-30 MHz at the left of the slider, halving with each step to the right.
+
+    The waterfall is always 1024 bins wide however wide the window is, so this is really a resolution control: the whole band is 29 kHz to a bin, which is a band *map* rather than a picture of anything, while a few hundred kilohertz shows individual stations in a broadcast band. Zoomed in, the window follows your dial.
+
+    The whole band is the default and is what makes the strip a thing to tune by; the panadapter below it is the ~12 kHz of I/Q. Applies immediately.
+settings-radio-receiver-agc = Receiver AGC
+settings-radio-receiver-s-agc-which-far =
+    The *receiver's* AGC, which is on the far side of the link and ahead of the I/Q — so it acts before anything sdroxide does.
+
+    On by default, unlike every local SDR here, because the measured alternative was worse: on a live receiver the manual gain was not monotonic across its range and its top end clipped the I/Q at full scale, while the AGC held about -24 dBFS with 7 dB of headroom.
+
+    It does mean the sample amplitude is not a signal level, which is why the S-meter is read from the receiver's own figure instead. Applies immediately.
+settings-radio-let-receiver-ride-own-gain = let the receiver ride its own gain
+settings-radio-manual-gain = Manual gain
+settings-radio-fixed-gain-when-receiver-s = Fixed gain when the receiver's AGC is off, on its own 0-90 scale. Not decibels of anything stated — the protocol calls it manGain and says no more, and it was measured not to be monotonic, so treat it as a dial to find a good spot on rather than a calibration. Applies immediately.
+settings-radio-read-receiver-s-status-page = Read the receiver's status page: what it is, what it covers, how many channels are free, and whether its operator allows connections from apps other than a browser. Takes none of its channels.
+settings-radio-host-port-e-g-127 = host:port, e.g. 127.0.0.1:50001
+settings-radio-iq-sample-rate = IQ sample rate
+settings-radio-receiver = Receiver
+settings-radio-rig-two-receivers-sunsdr2dx-can = A rig with two receivers (SunSDR2DX) can serve two radio tabs from one connection — run this radio on RX1 and another on RX2. The transmitter belongs to the RX1 radio.
+settings-radio-stream-delay = Stream delay
+settings-radio-how-long-rig-s-iq = How long the rig's IQ takes to arrive on a new centre after sdroxide moves it. It is the rig's own DSP pipeline, not the network — a server on this machine has one too — and while the panadapter is dragged fully zoomed out, being wrong by this much moves the newest waterfall rows sideways of the history by the error times the speed of the drag. Too high displaces them exactly as far as too low, the other way. Measure it with `cargo run --release -p sdroxide-tci --example retune_latency`; the default is a SunSDR2DX on ExpertSDR3 at 192 kHz.
+settings-radio-wideband-iq-receive-audio-transmit = Wideband IQ receive, audio transmit. Press "Apply / reconnect" to switch without a restart.
+settings-radio-radio-address = Radio address
+settings-radio-address-shown-radio-under-set = The address shown on the radio under SET > Network. Network Control has to be on there, and the radio needs a network user name and password set.
+settings-radio-host-ip-e-g-192 = host or IP, e.g. 192.168.1.50
+settings-radio-control-port = Control port
+settings-radio-t-50001-unless-has-been-changed = 50001 unless it has been changed on the radio.
+settings-radio-network-user = Network user
+settings-radio-stored-clear-radio-json-protocol = Stored in the clear in radio.json. The protocol obfuscates it reversibly on the wire, so nothing here would make it a secret.
+settings-radio-receive = Receive from
+settings-radio-af-radio-demodulates-sdroxide-shows = AF: the radio demodulates and sdroxide shows the audio band. 12 kHz IF: the radio sends its DRM intermediate frequency instead and sdroxide demodulates, which brings its own filters, noise reduction and decoders to bear over about ±12 kHz. Either way the wide waterfall is the radio's own scope — no Icom outputs I/Q. An IF preference temporarily uses AF for wider modes such as WFM, then restores IF for compatible modes. An AF preference stays AF. HD Radio is unavailable on this connection.
+settings-radio-audio-sample-rate = Audio sample rate
+settings-radio-t-12-khz-if-needs-48000 = A 12 kHz IF needs the 48000 Hz stream — at this rate the radio's demodulated audio is used instead.
+settings-radio-if-spectrum = IF spectrum
+settings-radio-which-way-round-radio-s = Which way round the radio's 12 kHz IF runs. "Automatic" uses what the model is known to do — mirrored on an IC-7760, normal on every other Icom. Set it by hand if SSB comes out on the wrong sideband: the giveaway is having to select USB where the band runs LSB while the radio's own mode display agrees with sdroxide throughout.
+settings-radio-normal = Normal
+settings-radio-mirrored = Mirrored
+settings-radio-displayed-bandwidth = Displayed bandwidth
+settings-radio-width-audio-band-panadapter-cat = Width of the audio-band panadapter, as for a CAT rig. Used in the digital modes and where the radio's scope is off; otherwise the panadapter is the scope, and Scope span sets its width.
+settings-radio-how-cw-panel-s-keyer-2 = How the CW panel's keyer transmits. "Rig keyer" puts the radio in CW and hands it the text to send with its own keyer (CI-V 0x17). "Sound card" sends the keyed sidetone over the LAN as audio instead (MCW), a tone at dial + pitch — and because a rig in CW would ignore its modulator input, selecting CW then keeps the radio in plain USB, the same mode the digital modes ride.
+settings-radio-how-much-audio-radio-holds = How much audio the radio holds before modulating. More survives a worse network, at the cost of transmit latency.
+settings-radio-streams-radio-s-own-475 = Streams the radio's own 475-bin sweep. On AF it is the panadapter — the audio the radio sends is what came through its filter, not a picture of the band — and on the 12 kHz IF it is the full-band waterfall above one. Either way it is the radio's picture, not sdroxide's DSP: there is no I/Q to compute one from.
+settings-radio-how-wide-sweep-only-wide = How wide to sweep it. This is the only wide view an Icom has, and the radio keeps whatever span was last chosen on its own screen — often a few kHz, which is why the strip can come up no wider than the panadapter under it. Setting a span here also puts the scope into centre mode, so it follows the dial. It changes the radio's own display too; "As set on the radio" leaves it alone.
+settings-radio-switch-modulation-input-lan = Switch modulation input to LAN
+settings-radio-transmit-audio-only-heard-when = Transmit audio is only heard when the radio's MOD input is set to LAN. sdroxide can write that on a model whose menu numbering it knows; on any other it says so and leaves the menu alone. It is a loan: whatever the radio held there is read first and put back when the session ends, so a rig used on its own afterwards still hears its own microphone.
+settings-radio-copy-diagnostic-report = Copy diagnostic report
+settings-radio-copies-radio-s-last-session = Copies this radio's last session — its handshake and CI-V trace — to the clipboard, for a bug report. This radio's, not the station's: with two Icoms on the LAN each tab answers about its own address.
+settings-radio-control-audio-radio-s-own = Control, audio and the radio's own scope over one network connection — no serial cable and no sound card. Press "Apply / reconnect" to switch without a restart.
+settings-radio-testing = Testing…
+settings-radio-was-only-check-press-apply = That was only a check — press Apply / reconnect below to start using this radio.
+settings-radio-radios = Radios
+settings-radio-asks-network-iio-devices-also = Asks the network for IIO devices, and also tries 192.168.2.1 directly — a Pluto on the end of a USB cable is often unreachable by multicast even though the address works.
+settings-radio-no-radios-press-discover = no radios — press Discover
+settings-radio-address = Address
+settings-radio-overrides-selection-above-usb-cable = Overrides the selection above. The USB cable presents the Pluto as a network adapter, not a serial port, so this is an IP address even when the radio is on your desk.
+settings-radio-pluto-revision-c-pluto-unlocked = A Pluto+ or a revision-C Pluto unlocked to 2R2T can serve two radio tabs from one box — this radio on RX1 and another on RX2, each on its own antenna. The two chains share the one oscillator, so retuning either radio moves both; what RX2 buys is a second antenna on the same spectrum (diversity), not a second band. The transmitter belongs to the RX1 radio. A stock 1R1T Pluto refuses RX2 when it connects.
+settings-radio-width-spectrum-sdroxide-receives-ad9361 = Width of the spectrum sdroxide receives. The AD9361 reaches 61.44 Msps; the USB network link does not, which is what this list is scaled to. The lowest rates need a filter configuration loaded into the AD9361, which sdroxide does not do — a stock Pluto runs them at about 2.084 Msps instead and says so when it connects. Takes effect on Apply.
+settings-radio-more-than-usb-2-will = {"  "}(more than USB 2 will carry)
+settings-radio-stock-pluto-runs-2-084 = {"  "}(a stock Pluto runs at 2.084)
+settings-radio-analog-filter = Analog filter
+settings-radio-ad9361-s-baseband-filter-leave = The AD9361's baseband filter. Leave at 0 for automatic, which opens it to nine tenths of the sample rate — wide on purpose, because the receiver parks its oscillator a quarter of a span off the dial to keep signals clear of the DC spike, and a narrow filter would cut off exactly the part it moved them to. Takes effect on Apply.
+settings-radio-ad9361-has-four-modes-not = The AD9361 has four modes, not an on/off switch. Slow attack suits SSB and CW; fast attack suits bursty signals; manual is the setting for measurement and weak-signal digital modes. Applies immediately.
+settings-radio-rx-gain = RX gain
+settings-radio-applies-immediately-no-reconnect-ignored = Applies immediately — no reconnect. Ignored unless the AGC is set to manual, which is the AD9361's own behaviour, not sdroxide's.
+settings-radio-tx-gain = TX gain
+settings-radio-negative-because-ad9361-expresses-transmit = Negative because the AD9361 expresses transmit level as attenuation: 0 dB is full output. Applies immediately. The transmitter is set to its quietest before this value is applied on connect, so nothing the previous program left behind can be live.
+settings-radio-reference-error-parts-per-million = Reference error in parts per million. Run with RUST_LOG=sdroxide_pluto=debug and the log prints the measured clock error after about 20 seconds — that is the number to enter. Applied by sdroxide, not written to the radio's own persistent trim. Applies immediately.
+settings-radio-full-duplex = Full duplex
+settings-radio-keep-receiving-while-transmitting = Keep receiving while transmitting
+settings-radio-leave-off-pluto-reached-over =
+    Leave this off on a Pluto reached over its USB cable. That link cannot carry a megasample per second in both directions at once, and an over that starves the transmit buffer goes out chopped — so by default receive stops for the length of an over.
+
+    Turn it on for a board on real Ethernet (a LibreSDR, a Pluto on a gigabit adapter), where there is room for both: you then hear the receiver through your own transmission, which is how a QO-100 station listens to its own downlink.
+
+    An over needs twice the sample rate's worth of link — 2.5 Msps is 10 MB/s each way — so lower the rate if the log starts saying the link is not carrying it. The panadapter still shows the transmitted signal during an over; it is the audio that keeps coming.
+
+    Takes effect on Apply.
+settings-radio-duplex = Duplex
+settings-radio-whether-ad9361-runs-both-directions =
+    Whether the AD9361 runs both directions at once (FDD, which is how a Pluto boots and what sdroxide has always left it in) or one at a time (TDD).
+
+    Leave this on FDD unless you want the PTT pins below — TDD is what those key from, and it rules out Full duplex above. Takes effect on Apply.
+settings-radio-ptt-pins = PTT pins
+settings-radio-pluto-s-four-gpo-test =
+    The Pluto's four GPO test points can key an external power amplifier, LNA or transmit-receive switch by themselves. Pick a pair and one pin is high the whole time the radio receives, the other the whole time it transmits — no host software in the loop and no serial PTT line to wire.
+
+    This puts the radio in TDD whatever the Duplex row says, because the pins follow the AD9361's enable lines and in FDD both of those are asserted the entire session. Full duplex goes off with it, so leave both at their defaults if you work satellites and need to hear your own downlink.
+
+    Analog Devices' own note puts an external LNA on GPO0/GPO1, so use GPO2/GPO3 if your board is wired that way. The pins are about 1.3 V at a few milliamps: drive a transistor or an opto-isolator with them, never a relay coil.
+
+    Takes effect on Apply.
+settings-radio-buffer-size = Buffer size
+settings-radio-how-much-device-holds-before =
+    How much the device holds before each transfer, in complex samples. The default of 32768 is about 16 ms at 2 Msps: long enough that the per-transfer round trip is not the bottleneck, short enough that a retune is not visibly late.
+
+    Halve it if the log reports the receive socket being replaced. A marginal link — a Pluto reached over its USB cable at a high sample rate is the usual one — stalls part-way through a transfer, and a smaller transfer is both less likely to be caught mid-flight and quicker to make good afterwards. Raise it to trade retune latency for fewer round trips.
+
+    Takes effect on Apply.
+settings-radio-samples = {" "}samples
+settings-radio-rx-tx-port = RX / TX port
+settings-radio-ad9361-s-rf-port-select = The AD9361's rf_port_select. A stock Pluto wires one of each, so leave these empty unless you have a board that does not. Takes effect on Apply.
+settings-radio-opens-radio-reads-what-says = Opens the radio, reads what it says about itself, and reports the tuning range this particular board has. Does not start a stream.
+settings-radio-copies-last-session-s-protocol = Copies the last session's protocol trace to the clipboard, for a bug report.
+settings-radio-wideband-iq-receive-transmit-half = Wideband IQ receive and transmit. Half duplex — receive stops for the length of an over, because the USB network link will not carry both at once. No SoapySDR and no libiio needed.
+settings-radio-not-yet-verified-against-real = Not yet verified against real hardware. If it misbehaves, please send the diagnostic report — it contains every command exchanged with the radio, and the first bytes of the sample stream.
+settings-radio-flexradio-announces-itself-local-network = A FlexRadio announces itself on the local network about once a second. A radio reached through a router or a VPN never broadcasts to you — enter its address below instead.
+settings-radio-another-gui-client-has-radio = Another GUI client has this radio and multiFLEX is disabled. Disconnect that client, or enable multiFLEX on the radio.
+settings-radio-overrides-selection-above-use-radio = Overrides the selection above. Use this for a radio on another subnet, behind a VPN, or on a non-standard port.
+settings-radio-width-spectrum-sdroxide-receives-192 = Width of the spectrum sdroxide receives. 192 kHz is the radio's maximum for a DAX IQ stream, and so the widest span this interface can show.
+settings-radio-t-192-khz-widest-dax-iq = 192 kHz is the widest DAX IQ stream a FLEX will send, and the radio ties the panadapter's span to it — so that is the whole span, and no setting here widens it.
+settings-radio-dax-iq-channel = DAX IQ channel
+settings-radio-radio-has-four-change-only = The radio has four. Change this only if something else on the network is already using channel 1 — the radio refuses a channel twice over.
+settings-radio-station-name = Station name
+settings-radio-shown-against-session-radio-s = Shown against this session in the radio's client list. The radio also remembers a client by it, so renaming makes the radio treat sdroxide as a new one.
+settings-radio-gui-client-id = GUI client ID
+settings-radio-identity-radio-restores-session-s = The identity the radio restores this session's slices and panadapters to. Left empty it is derived from the station name — stable, but the same on every sdroxide that kept the default name, and a radio settles a duplicate by throwing the earlier client off. sdroxide spots that on the wire and falls back to a one-session identity, which costs the restore; put a UUID of your own here to keep it.
+settings-radio-optional-e-g-uuid-your = optional, e.g. a UUID of your own
+settings-radio-mirror-radio-s-i-q =
+    Mirror the radio's I/Q about the centre of the panadapter. Off by default, which is how a FLEX-6600 was verified.
+
+    Try it if receive audio is unintelligible on USB *and* on LSB and nothing decodes, while the waterfall looks entirely convincing — that is what a mirrored stream looks like, and it is the one fault with no other symptom (issue #368). If it is not that, turning this on makes it obvious rather than subtle. Applies on Apply / reconnect.
+settings-radio-network-mtu = Network MTU
+settings-radio-largest-datagram-radio-may-send = Largest datagram the radio may send. 1450 is what SmartSDR itself asks for. Lower it on a path with a smaller MTU — a VPN or a tunnel — where the fragments are dropped and no spectrum arrives at all.
+settings-radio-b = {" "}B
+settings-radio-checks-radio-answers-without-registering = Checks the radio answers, without registering as a GUI client — so it will not disturb a SmartSDR session already running.
+settings-radio-wideband-iq-receive-over-dax = Wideband IQ receive over DAX, audio transmit the radio modulates. Press "Apply / reconnect" to switch without a restart.
+settings-radio-not-yet-verified-against-real-2 = Not yet verified against real hardware. If it misbehaves, please send the diagnostic report — it contains every protocol line exchanged with the radio.
+settings-radio-devices-soapysdr-can-see = Devices SoapySDR can see
+settings-radio-waiting-machine-radio-attached-where = Waiting for the machine the radio is attached to, where the modules are installed. Which device it opens is `device_args` in that machine's config.toml, or its --device.
+settings-radio-ask-every-installed-soapysdr-module = Ask every installed SoapySDR module to scan. Nothing is opened, so this is safe while receiving — but it can take a moment.
+settings-radio-not-enumerated-yet-press-rescan = Not enumerated yet — press Rescan.
+settings-radio-no-soapysdr-devices-found-check = No SoapySDR devices found. Check that the module for your radio is installed and that you may access the device.
+settings-radio-not-radio = not a radio
+settings-radio-sound-card-listed-above-if = A sound card is listed above as if it were an SDR. It accepts any frequency and ignores it, so opening it shows the sound card's input instead of the band. sdroxide does not pick those automatically — but a device_args line naming one is still obeyed.
+settings-radio-which-one-opens-set-device = Which one opens is set by --device or device_args in config.toml; with neither, the first radio listed wins.
+settings-radio-no-device = no device
+settings-radio-rig-has-no-software-adjustable = This rig has no software-adjustable gains.
+settings-radio-rx-gains = RX gains
+settings-radio-tx-gains = TX gains
+settings-radio-antennas = Antennas
+settings-radio-remembered-next-start = Remembered for the next start.
+settings-radio-these-controls-appear-once-soapysdr = These controls appear once a SoapySDR device is open — they are the device's own, and it has to be asked.
+settings-radio-stream = Stream
+settings-radio-follow-app-setting = Follow the app setting
+settings-radio-msps = or, in Msps
+settings-radio-baseband-filter = Baseband filter
+settings-radio-let-driver-choose = Let the driver choose
+settings-radio-changing-either-reopens-radio = Changing either reopens the radio.
+settings-radio-driver-publishes-no-settings-own = This driver publishes no settings of its own.
+settings-radio-applied-once-remembered-next-start = Applied at once, and remembered for the next start.
+settings-radio-no-rx-888-found-press = No RX-888 found — press Rescan
+settings-radio-adc-clock = ADC clock
+settings-radio-t-129-6-msps-needs-superspeed = 129.6 Msps needs a SuperSpeed link and a fast host; 64.8 is the safe default. Changing it reopens the receiver automatically, which takes a moment but needs no restart.
+settings-radio-panadapter-width = Panadapter width
+settings-radio-hf-only = {"  "}· HF only
+settings-radio-usable-both-front-ends = Usable on both front ends.
+settings-radio-below-vhf-crossover-ordinary-width = Below the VHF crossover this is an ordinary width. Above it the tuner's 8 MHz IF cannot be centred in a window this wide, so the live spectrum sits off to one side of the panadapter with nothing beside it.
+settings-radio-dial-above-crossover-now-so = The dial is above the crossover now, so this width is showing the tuner's 8 MHz off-centre with dead spectrum beside it. Narrow the width to fill the panadapter.
+settings-radio-vga-gain = VGA gain
+settings-radio-ad8370-variable-gain-amplifier-ahead = AD8370 variable-gain amplifier ahead of the ADC.
+settings-radio-attenuator = Attenuator
+settings-radio-pe4304-step-attenuator-0-5 = PE4304 step attenuator, in 0.5 dB steps.
+settings-radio-adc-range = ADC range
+settings-radio-wide-2-25-vp-p = Wide (2.25 Vp-p)
+settings-radio-selects-adc-s-wider-input = Selects the ADC's wider input range: more headroom for strong broadcast signals, fewer counts for weak ones. Off selects the more sensitive 1.5 Vp-p range.
+settings-radio-dither = Dither
+settings-radio-adds-small-dither-signal-ahead = Adds a small dither signal ahead of the ADC: costs a little noise floor, buys spurious-free dynamic range.
+settings-radio-randomiser = Randomiser
+settings-radio-adc-scrambles-output-so-digital = The ADC scrambles its output so the digital bus stops radiating into the front end; the driver unscrambles it. Leave this on unless you are debugging. Applies on reconnect.
+settings-radio-dc-hf-antenna-port = DC on the HF antenna port
+settings-radio-powers-active-antenna-preamp-down = Powers an active antenna or preamp down the coax.
+settings-radio-vhf-tuner-gain = VHF tuner gain
+settings-radio-r828d-rf-gain-used-above = R828D RF gain, used above the automatic HF/VHF crossover. 29 discrete steps; the nearest is used.
+settings-radio-auto = Auto
+settings-radio-let-tuner-run-own-lna = Let the tuner run its own LNA and mixer loops.
+settings-radio-bias-tee-vhf = Bias tee (VHF)
+settings-radio-dc-vhf-antenna-port = DC on the VHF antenna port
+settings-radio-clock-trim = Clock trim
+settings-radio-corrects-reference-oscillator-applied-when = Corrects the reference oscillator. Applied when you let go of the value — reopening on every pixel of a drag would restart the receiver hundreds of times.
+settings-radio-receive-only-below-adc-s = Receive only. Below the ADC's Nyquist limit the antenna is sampled directly and retuning is instant, because there is no hardware downconverter — the full ADC stream is converted to baseband on the host. Above it the receiver switches to its R828D tuner and the VHF SMA automatically, so both antennas need to be connected. VHF needs an ADC clock of 32.4 Msps or more for the tuner's IF to fit, and at clocks below 48 Msps there is a gap between the two ranges that nothing can reach. Every setting here applies straight away — there is no Apply button to press.
+settings-radio-device = Device
+settings-radio-no-devices-press-rescan = no devices — press Rescan
+settings-radio-six-rates-are-six-different =
+    The six rates are six different FPGA images, not a register — which is why nothing in ELAD's protocol selects between them, and why what this setting means depends on the model.
+
+    FDM-S1 / FDM-S2: a command. Their FPGA is loaded by the computer at every power-up, and sdroxide runs ELAD's own elad-firmware loader to put this rate's image in. Without that loader installed a sampler sends no samples at all, and sdroxide says so on screen.
+
+    FDM-DUO: not a command. The radio boots its own FPGA and arrives at whatever rate it powered up in or FDM-SW2 last left it in (192 kHz on a fresh one), and this only says how the stream is READ. Get it wrong and the panadapter is simply the wrong width, with every frequency inside it scaled to match.
+
+    The stream's real rate is measured a couple of seconds after it starts, and a mismatch is reported on screen. Takes effect on Apply.
+settings-radio-fdm-s-fpga-image-loaded = FDM-S: the FPGA image loaded — FDM-DUO: how the stream is read
+settings-radio-receiver-s-input-pad-one = The receiver's input pad — one step, in or out. The same control as the main window's Gain slider.
+settings-radio-pre-selection-filters = Pre-selection filters
+settings-radio-low-pass-bank-front-adc = The low-pass bank in front of the ADC. Bypassing it gives the widest view and the worst behaviour near strong out-of-band signals — a broadcast transmitter a few miles away will put images across the band. Leave it on unless you are deliberately listening outside the filtered range.
+settings-radio-filters-circuit = Filters in circuit
+settings-radio-rig-control-fdm-duo-only = Rig control — FDM-DUO only
+settings-radio-transceiver-s-cat-usb-port = The transceiver's CAT USB port, which is a separate cable from the receive one. Leave the port unset on an FDM-S1 or FDM-S2, which have none — and on an FDM-DUO you would rather drive through its receive cable alone, where it can still be tuned and keyed but no meter can be read.
+settings-radio-port-set-radio-s-display = With the port set, the radio's display and this dial are the same number in both directions: the FDM-DUO's receive window is built around its VFO, so tuning here moves the front panel and turning the front-panel knob moves the readout here. The panadapter re-centres on the dial as it goes. With no port — or none the radio answers on — there is no VFO to command, and tuning stays inside the window the radio is already sending.
+settings-radio-none-usb-control-only = — none (USB control only) —
+settings-radio-must-match-menu-70-cat = Must match menu 70 "CAT BAUD" on the radio, which ships at 38400. The radio has these four rates and no others, and a port opened at any other one is silent both ways — the radio ignores the dial and refuses to key, with nothing to say why.
+settings-radio-how-transmit-keyed-cat-sends = How transmit is keyed. "CAT" sends the radio's own TX command and needs nothing set up on the rig; RTS needs menu 54 "PTT" set to PTT+RTS.
+settings-radio-where-radio-takes-transmit-audio-2 =
+    Where the radio takes its transmit audio from — the rig's TI command, which is menu 32 "TX IN" at the front panel. Asserted when the port opens.
+
+    "USB audio" is what makes transmit work here: the FDM-DUO sends what sdroxide puts into its USB sound card. A radio left on "Microphone" sends the room instead, and nothing on screen says so.
+settings-radio-which-two-sockets-back-receiver-2 =
+    Which of the two sockets on the back the receiver listens on — the rig's AN command, which is menu 31 "ANTENNAS" at the front panel and the "ANT 1 2" indicator on its display.
+
+    "RTX" is one antenna doing both jobs, on the M-type socket that also carries transmit. "RX only" moves receive to the second socket and leaves transmit on RTX — a receiving antenna, a loop or a beverage, with the beam still on the transmitter.
+
+    It moves this whole receiver: the panadapter, the demodulators and the rig's own audio all come from the socket selected here.
+
+    Applies immediately, and is read back from the radio when the control port opens — this is the rig's own setting, not a copy of it kept here.
+settings-radio-how-often-radio-asked-what-2 = How often the radio is asked what it is doing — its dial, its mode and its meters. Turn the rig's own VFO knob and the readout follows within one poll. It is also the whole of the control traffic this end generates, so lower it if the radio's audio breaks up.
+settings-radio-transmit-audio = Transmit audio
+settings-radio-system-default = — system default —
+settings-radio-fdm-duo-s-own-usb = The FDM-DUO's own USB Audio port. Left on the system default it is almost never the radio — it is the machine's speakers.
+settings-radio-press-rescan-list-sound-cards = press Rescan to list the sound cards
+settings-radio-copies-last-session-s-trace = Copies the last session's trace to the clipboard, for a bug report: every command exchanged with the device, and the first bytes of the sample stream.
+settings-radio-only-receiving-fdm-duo-has = Only receiving on an FDM-DUO has been run on real hardware so far. If anything misbehaves, please attach the diagnostic report to a bug report.
+settings-radio-cw-keyed-radio-s-own = CW is keyed by the radio's own key or paddle: the FDM-DUO has no command that accepts text, so the CW panel cannot key it.
+settings-radio-press-apply-reopen-radio = Press Apply to reopen the radio.
+settings-radio-no-receivers-press-rescan = no receivers — press Rescan
+settings-radio-which-rates-receiver-has-depends = Which rates a receiver has depends on the model and the firmware. Takes effect on Apply.
+settings-radio-every-rate-any-hf-model = every rate any HF+ model offers — connect one to see its own
+settings-radio-receiver-s-own-gain-control = The receiver's own gain control. Leave it on for general listening; turn it off to set the attenuator by hand for measurement.
+settings-radio-agc-threshold = AGC threshold
+settings-radio-high = High
+settings-radio-high-trades-little-sensitivity-headroom = High trades a little sensitivity for headroom against strong neighbours — the right setting on a crowded band at night.
+settings-radio-front-end-attenuation-gain-0 = Front-end attenuation, as a gain — 0 dB is none. Only obeyed with the AGC off.
+settings-radio-preamp = Preamp
+settings-radio-hf-low-noise-amplifier-buys = The HF low-noise amplifier. Buys sensitivity at the cost of intermodulation, so it is off by default — which is usually right on a real antenna.
+settings-radio-lna = LNA on
+settings-radio-frequency-calibration = Frequency calibration
+settings-radio-parts-per-billion-receiver-s = Parts per billion — this receiver's own unit, a thousand times finer than the ppm an RTL-SDR uses. Nothing here is ever written to the receiver's flash: this overrides the stored value for the session only.
+settings-radio-use-receiver-s-stored-value = Use the receiver's stored value
+settings-radio-ppb = {" "}ppb
+settings-radio-feed-dc-up-coax = Feed DC up the coax
+settings-radio-not-every-hf-has-one = Not every HF+ has one; on a receiver without, this does nothing.
+settings-radio-host-dsp = Host DSP
+settings-radio-image-balancer-zero-if-offset = The image balancer, the zero-IF offset and the fine-tuning oscillator. Turn it off only to see raw hardware output — with it off, the mirror image appears on the zero-IF rates and the dial is accurate only to the nearest kilohertz.
+settings-radio-correct-image-fine-tune = Correct the image and fine-tune
+settings-radio-copies-last-session-s-trace-2 = Copies the last session's trace to the clipboard, for a bug report: every command exchanged with the receiver, and the first bytes of the sample stream.
+settings-radio-receive-only-no-soapysdr-no = Receive only. No SoapySDR and no libairspyhf needed. Below the synthesiser's floor the host oscillator does the tuning, which is how this receiver reaches VLF. The receiver and sample rate take effect on Apply; everything else applies as you change it.
+settings-radio-not-yet-verified-against-real-3 = Not yet verified against real hardware. If it misbehaves, please send the diagnostic report — it contains every command exchanged with the receiver, and the first bytes of the sample stream decoded as I/Q pairs.
+settings-radio-no-airspy-r2-mini-found = No Airspy R2 or Mini found — press Rescan
+settings-radio-read-receiver = read from this receiver
+settings-radio-r2-mini-offer-different-rates = an R2 and a Mini offer different rates and cannot be told apart until one is open
+settings-radio-rate-you-get-receiver-s = This is the rate you get. The receiver's ADC runs at twice it — it digitises a real signal and sdroxide makes complex baseband from it on the host.
+settings-radio-gain-curve = Gain curve
+settings-radio-step-along-curve-above-not = A step along the curve above, not a dB figure — the tuner's LNA, mixer and VGA move together, and how much each step is worth depends on the curve and the band. 0 is the quiet end.
+settings-radio-tuner-agc = Tuner AGC
+settings-radio-lna-2 = LNA
+settings-radio-hands-lna-tuner-s-own = Hands the LNA to the tuner's own loop, overriding the curve.
+settings-radio-mixer = Mixer
+settings-radio-same-mixer-stage = The same for the mixer stage.
+settings-radio-loop-running-gain-slider-no = With a loop running, the gain slider no longer sets the stage it owns — the loop overwrites it.
+settings-radio-dc-antenna-port = DC on the antenna port
+settings-radio-t-12-bit-packing = 12-bit packing
+settings-radio-third-less-usb-traffic-leave = A third less USB traffic. Leave it on: this is a USB 2.0 device and the top rate is 30 MB/s packed against 40 unpacked. Applies on reconnect.
+settings-radio-dc-removal = DC removal
+settings-radio-remove-adc-s-offset = Remove the ADC's offset
+settings-radio-turn-off-see-raw-hardware = Turn it off to see raw hardware output. Worth knowing where the spur goes: the offset lands at the edge of the span, not its centre, because the signal is translated by a quarter of the sample rate on the way through.
+settings-radio-every-command-exchanged-receiver-sample = Every command exchanged with the receiver, the sample-rate arithmetic, and the first samples decoded as I/Q.
+settings-radio-receive-only-24-1800-mhz = Receive only, 24–1800 MHz. No SoapySDR and no libairspy needed. The receiver, sample rate and packing take effect on Apply; everything else applies as you change it.
+settings-radio-not-yet-verified-against-real-4 = Not yet verified against real hardware. If it misbehaves, please send the diagnostic report — it contains every command exchanged with the receiver, the rate arithmetic, and the first samples decoded as I/Q pairs.
+settings-radio-no-hydrasdr-rfone-found-press = No HydraSDR RFOne found — press Rescan
+settings-radio-these-are-rates-receiver-turned = these are the rates this receiver turned out to have
+settings-radio-receiver-only-reports-three-these = the receiver only reports three of these; the rest are in the firmware's alternate table and an older build may not carry them
+settings-radio-rf-input = RF input
+settings-radio-antenna-sma-only-socket-bias = The antenna SMA — the only socket with the bias tee behind it.
+settings-radio-cable-socket-no-bias-tee = A cable socket. No bias tee here; the hardware puts it on ANT alone.
+settings-radio-powers-active-antenna-preamp-down-2 = Powers an active antenna or preamp down the coax. Only the ANT socket has one — the two cable ports are plain inputs.
+settings-radio-third-less-usb-traffic-leave-2 = A third less USB traffic. Leave it on: this is a USB 2.0 device and the top rate is 36 MB/s packed against 48 unpacked. Applies on reconnect.
+settings-radio-one-these-boards-1d50-60a1 = One of these boards is on 1d50:60a1, the USB id HydraSDR's prototypes share with the Airspy R2 and Mini. sdroxide checks the firmware after opening and will say so if the wrong interface has been picked, in either direction.
+settings-radio-receive-only-24-1800-mhz-2 = Receive only, 24–1800 MHz. No SoapySDR and no libhydrasdr needed. The receiver, sample rate and packing take effect on Apply; everything else applies as you change it.
+settings-radio-re-list-fobos-sdrs-no = Re-list Fobos SDRs. No device is opened, so this is safe to press while receiving.
+settings-radio-no-fobos-sdr-found-press = No Fobos SDR found — press Rescan
+settings-radio-input-2 = Input
+settings-radio-through-tuner-lna-vga-mixer = Through the tuner: LNA, VGA, and the mixer's own frequency range.
+settings-radio-direct-sampling-hf1-antenna-input = Direct sampling on the HF1 antenna input — no tuner, no LNA/VGA gain, tuned entirely in software.
+settings-radio-direct-sampling-hf2-antenna-input = Direct sampling on the HF2 antenna input, same as HF1.
+settings-radio-both-real-adc-channels-once = Both real ADC channels at once, combined by the diversity filter below — a noise source nulled, or two fading paths combined.
+settings-radio-direct-sampling-tuner-so-lna = Direct sampling — the tuner (and so LNA/VGA gain) is not in the path. The rate below is a target for the software downconverter, not a hardware setting, so the achieved rate can differ from it.
+settings-radio-receiver-s-own-reported-rates = this receiver's own reported rates
+settings-radio-measured-one-real-unit-connect = measured on one real unit — connect this receiver and Rescan to see its own list
+settings-radio-clock-source = Clock source
+settings-radio-external-reference = External reference
+settings-radio-diversity-taps = Diversity taps
+settings-radio-taps = {" "}taps
+settings-radio-one-tap-gain-phase-null = One tap is a gain and a phase — a null at one frequency that gets worse either side of it, which is all an analogue phaser can do. Each further tap buys one sample period of the path difference between HF1 and HF2 that the filter can equalise, which is what turns that notch into a band quiet all the way across.
+settings-radio-receive-only-rf-port-tuner = Receive only. RF port (tuner), HF1/HF2 (direct sampling, decoded in software) and HF1+HF2 (both at once, combined by the diversity filter) all work. The receiver, input and sample rate take effect on Apply; gain, clock source and taps apply as you change them — the diversity filter's mode, adapt rate and hold are on the main window's own DIV box once this radio is selected.
+settings-radio-no-hackrf-found-press-rescan = No HackRF found — press Rescan
+settings-radio-front-end-amplifier-8-db = Front-end amplifier, in 8 dB steps. This is the stage that changes sensitivity — and the stage that overloads first on a real antenna.
+settings-radio-baseband-amplifier-after-mixer-2 = Baseband amplifier after the mixer, in 2 dB steps. Turn this up for a weak signal before reaching for the LNA.
+settings-radio-rf-amp = RF amp
+settings-radio-one-switch-shared-transmit-setting = One switch, shared with the transmit setting below — the radio applies whichever belongs to the direction it is entering. Off is usually right on a real antenna.
+settings-radio-hackrf-pro-chooses-itself-three = A HackRF Pro chooses this itself — three quarters of the sample rate, filtered in the FPGA — and ignores anything the host asks for.
+settings-radio-leave-automatic-choosing-one-too = Leave on Automatic. Choosing one too narrow does not just soften the band edges — it withdraws the LO offset that keeps the DC spike off your signal.
+settings-radio-about-3-v-50-ma = About 3 V at 50 mA down the coax, for an active antenna or a preamp. A HackRF One or Pro only; the Jawbreaker and rad1o have no such circuit.
+settings-radio-remove-dc-mirror-image = Remove DC and the mirror image
+settings-radio-zero-if-radio-so-own = This is a zero-IF radio, so its own LO leakage sits mid-span and the mixer's quadrature error puts a mirror image across it. Turning this off shows raw hardware output, which is the quick way to tell a driver problem from a DSP one.
+settings-radio-corrects-reference-oscillator = Corrects the reference oscillator.
+settings-radio-transmit = Transmit
+settings-radio-transmitter = Transmitter
+settings-radio-off-default-while-off-backend = Off by default. While this is off the backend publishes no transmit channel at all, so nothing can key the radio. Applies on reconnect.
+settings-radio-tx-vga-gain = TX VGA gain
+settings-radio-transmit-driver-amplifier-drive-applied = The transmit driver amplifier. Drive is applied digitally before this stage, so leave the drive high and set output level here — turning drive down instead runs the DAC at a fraction of full scale and raises intermodulation.
+settings-radio-same-switch-receive-setting-above = The same switch as the receive setting above, applied when the radio changes direction.
+settings-radio-transmit-armed-into-dummy-load = Transmit is armed. Into a dummy load until you have measured it: a HackRF's harmonics are strong enough to need an external low-pass filter for the band you are on, and it is half duplex, so receive stops for the length of every over.
+settings-radio-every-command-exchanged-radio-session = Every command exchanged with the radio this session, in order, including the sequence around each key-down.
+settings-radio-dc-7-25-ghz-half = DC – 7.25 GHz, half duplex. No SoapySDR, no libusb and no libhackrf needed. The radio and the sample rate take effect on Apply; everything else applies as you change it. The band edges are the firmware's: a HackRF is specified for 1 MHz – 6 GHz (100 kHz on a Pro) and is heavily attenuated outside that, but it does tune there.
+settings-radio-ask-sdrplay-api-service-device = Ask the SDRplay API service for its device list. Nothing is opened, so this is safe to press while receiving.
+settings-radio-no-rsps-press-rescan-needs = no RSPs — press Rescan (needs the SDRplay API service)
+settings-radio-both-tuners-running-api-fixes = With both tuners running, the API fixes the ADC at 6 MHz and hands back 2 Msps from a low IF — so 2 Msps is the widest span, and the narrower ones are that decimated. Takes effect on Apply.
+settings-radio-rates-below-2-msps-run = Rates below 2 Msps run the ADC at 2 Msps and decimate in the service. Takes effect on Apply.
+settings-radio-reduced-adc-resolution = {"  "}(reduced ADC resolution)
+settings-radio-if-bandwidth = IF bandwidth
+settings-radio-tuner-s-analog-filter-auto = The tuner's analog filter. Auto picks the widest one that fits the sample rate. Takes effect on Apply.
+settings-radio-rsp-s-own-if-gain = The RSP's own IF-gain loop, run by the API service. Off hands the IF gain slider back to you — the setting for measurement and weak-signal digital modes.
+settings-radio-agc-set-point = AGC set point
+settings-radio-signal-level-loop-holds-adc = Signal level the loop holds the ADC at. Lower leaves more headroom for signals off-channel. How low it may go depends on the sample rate — above 8.064 Msps the converter has less headroom to give, and above 9.216 Msps less still.
+settings-radio-rsp-s-native-gain-unit = The RSP's native gain unit: 20 dB is maximum gain (0 with the extended range below), 59 dB minimum. Applies immediately. Ignored while the AGC is running — the loop owns this value then, and the S-meter shows what it settled on.
+settings-radio-extended-if-range = Extended IF range
+settings-radio-lets-if-gain-reduction-go = Lets the IF gain reduction go below 20 dB, down to 0 — the last 20 dB of gain the receiver has. Off is the API's own default and the right one for ordinary listening, because the bottom of the range is where an RSP is easiest to overload. Worth having on for weak signals with the LNA already at 0. It also lets the AGC set point go up to 0 dBFS. Applies immediately.
+settings-radio-allow-if-gain-reduction-below = Allow IF gain reduction below 20 dB
+settings-radio-front-end-attenuation-steps-0 = Front-end attenuation in steps: 0 is maximum gain, each step up switches more attenuation in. Some bands have fewer steps — the driver clamps and keeps your choice for when you tune back, and the rail here ends at what the band the radio is on will take. A higher choice made on another band is kept and still shown beside it. Applies immediately.
+settings-radio-t-0-max-gain = 0 = max gain
+settings-radio-reference-error-parts-per-million-2 = Reference error in parts per million, applied by the device itself. Applies immediately.
+settings-radio-radio-s-tuner = This radio's tuner
+settings-radio-tuner = Tuner
+settings-radio-which-rspduo-s-two-tuners = Which of the RSPduo's two tuners this radio listens on. The other one belongs to the radio configured for it — give that one the same receiver and the other tuner. Takes effect on Apply.
+settings-radio-which-rspduo-s-two-tuners-2 = Which of the RSPduo's two tuners carries the aerial you are listening to. The other one carries the second aerial. Takes effect on Apply.
+settings-radio-which-rspduo-s-two-tuners-3 = Which of the RSPduo's two tuners to run (one at a time). Takes effect on Apply.
+settings-radio-applies-immediately = Applies immediately.
+settings-radio-fm-broadcast-notch = FM broadcast notch
+settings-radio-hardware-notch-over-88-108 = Hardware notch over the 88–108 MHz broadcast band, for when a local transmitter overloads everything else. Applies immediately.
+settings-radio-dab-notch = DAB notch
+settings-radio-hardware-notch-over-165-230 = Hardware notch over the 165–230 MHz DAB band. Applies immediately.
+settings-radio-hdr-mode = HDR mode
+settings-radio-enable-below-2-mhz = Enable below 2 MHz
+settings-radio-rspdx-s-high-dynamic-range =
+    The RSPdx's high-dynamic-range path for LF/MF. Applies immediately.
+
+    It does not work yet: on the one RSPdx it has been tried against, switching it on silences the receiver — at every centre, filter, port, gain and rate tried. Whatever the mode needs is not on the documented API surface, and finding it is somebody's next job. Leave this off unless you are the one looking.
+
+    What is known: it is not a mode that follows the dial. The path has a fixed analog filter, built only at the centres listed under the filter below, so tuning anywhere else could not work even once the rest does.
+settings-radio-hdr-filter = HDR filter
+settings-radio-feed-4-7-v-dc = Feed ~4.7 V DC up the coax
+settings-radio-second-tuner = Second tuner
+settings-radio-rspduo-two-whole-tuners-one = An RSPduo is two whole tuners on one board, clocked from one reference. Run both and they hear their spans at the same instant from the same clock — which makes two aerials on them coherent, with a relative phase set by the feedlines rather than by chance, and lets the pair be combined. Or leave them apart: the tuners tune separately, so the other one can be a second radio on its own band.
+settings-radio-run-both-tuners = Run both tuners
+settings-radio-puts-rspduo-api-s-dual = Puts the RSPduo in the API's dual-tuner mode, where the ADC is fixed at 6 MHz and the widest span is 2 Msps. Takes effect on Apply, because the mode is chosen when the device is opened.
+settings-radio-used = Used for
+settings-radio-what-other-tuner-takes-effect = What the other tuner is for. Takes effect on Apply — like running both at all, this is chosen when the board is opened.
+settings-radio-add-second-radio-settings-radio = Add a second radio (Settings → Radio → +), give it this same receiver and the RSPduo's other tuner, and set it to run both tuners too — whichever radio opens the board puts it in dual-tuner mode, so both have to be expecting it. The two then tune independently: HF in one tab and VHF in the other, off one board. They share one ADC clock, so both run at the sample rate whichever radio opened the board asked for, and neither can transmit.
+settings-radio-what-do = What to do with it
+settings-radio-lna-state-2 = Its LNA state
+settings-radio-second-tuner-s-own-front = The second tuner's own front-end attenuation. Set so both aerials show about the same noise floor: this is the adjustment everything else rests on, because combining weights the two branches by their noise, and a second front end driven into overload hands the filter a distorted copy of the interference — which cannot be subtracted from an undistorted one. Applies immediately.
+settings-radio-if-gain-reduction-2 = Its IF gain reduction
+settings-radio-second-tuner-s-if-gain = The second tuner's IF gain, in the RSP's native unit: 20 dB is maximum gain. Ignored while the AGC is running — and a steady gain is what the filter wants, so switching the AGC off is worth it for a null you intend to hold.
+settings-radio-filter-length = Filter length
+settings-radio-one-tap-gain-phase-null-2 = One tap is a gain and a phase — a null at one frequency that gets worse either side of it, which is all an analogue phaser can do. Each further tap buys one sample period of the path difference between the two aerials that the filter can equalise, which is what turns that notch into a band quiet all the way across.
+settings-radio-adaptation-2 = Adaptation
+settings-radio-slow-steady-left-converging-inside = Slow and steady at the left, converging inside a fraction of a second and visibly hunting at the right. Start fast to find the null, then hold it.
+settings-radio-stop-filter-moving-reach-moment = Stop the filter moving. Reach for this the moment a null appears: a filter left adapting will re-aim itself at whatever becomes loudest, which on a quiet band is the station you are listening to.
+settings-radio-restart = Restart
+settings-radio-zero-filter-find-null-again = Zero the filter and find the null again.
+settings-radio-nothing-here-can-tell-wanted = Nothing here can tell a wanted signal from an unwanted one — the filter only knows what the two aerials have in common. In Cancel, the second aerial wants to hear the noise source and as little of the band as possible, or it will dutifully cancel the station too. In Combine, both want to hear the same station. How deep the null is going runs to the log every few seconds.
+settings-radio-not-yet-verified-against-rspduo = Not yet verified against an RSPduo: dual-tuner operation here is written from SDRplay's API rather than measured on the hardware.
+settings-radio-no-receiver-listed-check-against = No receiver is listed to check this against — press Rescan, or read the log for what actually opened.
+settings-radio-receive-only-1-khz-2 = Receive only, 1 kHz–2 GHz. Needs the vendor's SDRplay API service (sdrplay.com/api) — the RSPs after the original RSP1 have no open protocol. Device, sample rate, bandwidth and RSPduo tuner take effect on Apply; everything else applies as you change it.
+settings-radio-board = Board
+settings-radio-first-one-found-2 = First one found
+settings-radio-receive-chain = Receive chain
+settings-radio-both-chains-tune-together-they = Both chains tune together — they share one synthesiser — but they are separate front ends on separate sockets. Pick the one your aerial is on, which is the setting to reach for when one chain has had the HF matching modification and the other is stock.
+settings-radio-receive-gain = Receive gain
+settings-radio-one-combined-figure-which-limesuite = One combined figure, which LimeSuite distributes across the LNA, the TIA and the PGA itself. It takes whole decibels, so anything finer is truncated.
+settings-radio-receive-port = Receive port
+settings-radio-automatic-follows-frequency-lnal-low = Automatic follows the frequency: LNAL low, LNAH high — unless a LimeRFE is connected below, which is one cable into one socket, and then it is LNAW at every frequency. Name the socket yours is wired to if it is not that one. Which chain the socket belongs to is the picker above.
+settings-radio-t-0-follows-sample-rate-worth = 0 follows the sample rate. Worth leaving there: a filter narrower than a quarter of the span silently withdraws the zero-IF LO offset, which puts the LO leakage back on top of the signal you are listening to.
+settings-radio-following-rate = following the rate
+settings-radio-corrections = Corrections
+settings-radio-host-iq-dc-correction = Host IQ / DC correction
+settings-radio-adaptive-image-dc-removal-side = Adaptive image and DC removal on this side, on top of the chip's own calibration. Turning it off is the one-click way to tell a driver problem from a DSP one.
+settings-radio-calibrate-automatically = Calibrate automatically
+settings-radio-runs-chip-s-own-dc = Runs the chip's own DC-offset and image calibration when the radio is opened, and again once the dial has settled on a new band or a different socket. Those numbers are measured at one frequency and are wrong elsewhere, which is what a carrier sitting in the middle of the span usually is. Costs about a second each time.
+settings-radio-calibrate-now = Calibrate now
+settings-radio-stalls-receiver-better-part-second = Stalls the receiver for the better part of a second.
+settings-radio-second-aerial = Second aerial
+settings-radio-socket = Its socket
+settings-radio-same-first = Same as the first
+settings-radio-gain-2 = Its gain
+settings-radio-set-low-coupled-sample-your = Set this LOW. The coupled sample of your own transmitter is a strong signal, and a feedback chain driven into compression measures the amplifier's curve wrongly — it teaches the correction its own distortion. Start at the bottom and use the coupler's attenuator.
+settings-radio-set-so-both-aerials-show = Set so both aerials show about the same noise floor. This is the adjustment the whole thing rests on: combining weights the two branches by their noise, and a second chain driven into compression hands the filter a distorted copy of the interference — which cannot be subtracted from an undistorted one.
+settings-radio-table-steps-2 = Table steps
+settings-radio-how-finely-correction-follows-amplifier = How finely the correction follows the amplifier's curve. More steps track a sharper knee, but each one has to be learned from the samples that landed in it — and the top of a speech amplitude histogram is thin. Thirty-two is enough for the smooth curve an HF amplifier actually has. Changing it starts the correction again.
+settings-radio-how-hard-each-block-feedback = How hard each block of feedback moves the correction. An amplifier's curve does not change, so there is no need to hurry — the middle averages several overs' worth of noise out of it.
+settings-radio-keep-correction-curve-learned-clean = Keep the correction as it is. A curve learned on a clean over is worth holding, and the amplifier will not have changed by the next one.
+settings-radio-forget-correction-learn-again = Forget the correction and learn it again.
+settings-radio-directional-coupler-amplifier-s-output = A directional coupler on the amplifier's output goes into this chain, and the transmitter compares what came back with what it meant to send — then sends the inverse of the difference, so what leaves the amplifier is straight. Twenty-odd decibels less intermodulation on other people's QSOs, with the amplifier keeping its power. The correction stays at unity until the feedback lines up with the transmission, so a coupler that is not connected costs nothing; and it can never ask the converter for more than full scale, so a feedback path reading nonsense cannot over-drive anything. How it is getting on runs to the log while you transmit.
+settings-radio-transmit-not-armed-so-there = Transmit is not armed, so there is nothing here to correct.
+settings-radio-off-interface-publishes-no-transmit = With this off the interface publishes no transmit channel at all, so nothing can key the radio.
+settings-radio-transmit-gain = Transmit gain
+settings-radio-transmit-port = Transmit port
+settings-radio-board-s-two-transmit-sockets = The board's two transmit sockets are two different matching networks, not two jacks onto the same one: BAND1 (TX_1) carries 30 MHz to 1.9 GHz and BAND2 (TX_2) is the 13 cm port. Keying an amateur band below 23 cm out of BAND2 puts the over into a matching network that passes almost none of it — every setting reads correct, the drive is whatever you set, and the power meter stays at zero. Leave this on Automatic and it follows the dial.
+settings-radio-limesdr-transmits-about-100-khz = A LimeSDR transmits from about 100 kHz to 3.8 GHz with no filtering of its own. Use a low-pass filter, an appropriate LimeRFE channel, or a dummy load.
+settings-radio-limerfe-front-end = LimeRFE front end
+settings-radio-connected = Connected by
+settings-radio-limerfe-s-own-micro-usb = The LimeRFE's own micro-USB port, not the radio's. 9600 baud, fixed by its firmware.
+settings-radio-receive-connector = Receive connector
+settings-radio-transmit-connector = Transmit connector
+settings-radio-follow-dial = Follow the dial
+settings-radio-switch-filters-match-operating-frequency = Switch the filters to match the operating frequency, before any RF appears. Tuning within one band puts nothing on the control link.
+settings-radio-relays = Relays
+settings-radio-receive-attenuator = Receive attenuator
+settings-radio-notch-filter = Notch filter
+settings-radio-fan = Fan
+settings-radio-worth-having-any-sustained-transmitting = Worth having on for any sustained transmitting.
+settings-radio-automatic-board-receives-switched-transmit = On Automatic the board receives, and is switched to transmit at key-down and back at key-up — on either cabling. Its amateur channels have one filter with a transmit/receive switch either side of it, so a board asked for both at once puts that switch on the transmitter and stops hearing anything. The 30 MHz channel is reachable only through J5, which is one connector for both directions; above it, transmitting from J4 keeps the receive path off the connector the amplifier is driving.
+settings-radio-limesdr-support-has-not-been = LimeSDR support has not been verified against hardware. This is the last session's trace, for an issue report.
+settings-radio-gains-filters-corrections-antenna-sockets = Gains, filters, corrections, the antenna sockets and every LimeRFE control — its connectors, band, relays, attenuator, notch and fan — apply immediately. The board, the receive chain, the sample rate, arming transmit and the LimeRFE's connection take effect on Apply.
+
+## Settings window, Radio tab: messages with values
+
+settings-radio-fill-from = FILL FROM { $name }
+settings-radio-decimation-auto = Automatic (nearest { $khz } kHz)
+settings-radio-decimation-stage-server = Stage { $stage } — the server's rate ÷ { $divisor }
+settings-radio-decimation-stage = Stage { $stage } — rate ÷ { $divisor }
+settings-radio-kiwi-receive-only = Receive only — this is somebody else's antenna. The panadapter is the ~12 kHz the receiver sends as I/Q, which follows the dial; the band view above it is its own waterfall, and tuning across it retunes the receiver. About { $rate } kB/s while connected. Press "Apply / reconnect" to switch without a restart.
+settings-radio-connected-detail = Connected: { $detail }
+settings-radio-failed = Failed: { $error }
+settings-radio-pluto-buffer = ≈ { $ms } ms, { $kib } KiB per transfer
+settings-radio-driver-settings = { $driver } settings
+settings-radio-rx888-coverage = 0–{ $mhz } MHz coverage, { $mbytes } MB/s over USB
+settings-radio-rx888-digitised = of the { $mhz } MHz digitised
+settings-radio-elad-16-bit = { $khz } kHz (16-bit samples)
+settings-radio-elad-pad = { $db } dB pad in
+settings-radio-hackrf-rx-preamp = { $db } dB preamp on receive
+settings-radio-hackrf-tx-preamp = { $db } dB preamp on transmit
+settings-radio-device-not-found = { $device } (not found)
+settings-radio-lime-chain = Chain { $n } (RX{ $n }_*)
+settings-radio-lime-chain-tx = Chain { $n } (RX{ $n }_* / TX{ $n }_*)
+settings-radio-lime-second-chain = The board's other receive chain, on the { $sockets } sockets. It shares the synthesiser, so it hears the same span at the same instant as the first — which is what lets it carry a second aerial, or a sample of your own transmitter.
+settings-radio-tx-blocked = Transmit is blocked: { $reason }
+settings-radio-rfe-rx-fallback = Receiving on { $port }, these fall back to the unfiltered wideband path: { $bands }.
+settings-radio-rfe-tx-fallback = Transmitting on { $port }, these fall back to the wideband path — no band amplifier and no filtering: { $bands }.

@@ -8,6 +8,7 @@
 //! order an operator sets it up in — where it is, does it answer, where QSOs
 //! go, what is still owed.
 
+use crate::i18n::tr;
 use eframe::egui::{self, Color32, RichText};
 use sdroxide_types::{Command, LoginTarget, UploadTarget, WavelogStation, fingerprint_display};
 
@@ -50,16 +51,20 @@ fn http_over_internet(url: &str) -> bool {
 fn mismatch(station: &WavelogStation, call: &str, grid: &str) -> Option<String> {
     let call = call.trim();
     if !call.is_empty() && !station.callsign.eq_ignore_ascii_case(call) {
-        return Some(format!(
-            "Location \"{}\" is {}, but you log as {call} — Wavelog will refuse these QSOs.",
-            station.name, station.callsign
+        return Some(tr!(
+            "settings-wavelog-call-mismatch",
+            location = station.name.to_string(),
+            station_call = station.callsign.to_string(),
+            call = call
         ));
     }
     let (a, b) = (grid.trim().to_ascii_uppercase(), station.grid.trim().to_ascii_uppercase());
     if a.len() >= 4 && b.len() >= 4 && a[..4] != b[..4] {
-        return Some(format!(
-            "Location \"{}\" is at {}, but your grid is {a} — Wavelog will refuse these QSOs.",
-            station.name, station.grid
+        return Some(tr!(
+            "settings-wavelog-grid-mismatch",
+            location = station.name.to_string(),
+            station_grid = station.grid.to_string(),
+            grid = a
         ));
     }
     None
@@ -74,26 +79,17 @@ impl SdroxideApp {
         cmds: &mut Vec<Command>,
     ) {
         let wl = &mut io.net_edit.wavelog;
-        net_row(ui, "Address", &mut wl.url, 260.0);
-        net_secret(ui, "API key", &mut wl.api_key, 260.0);
-        hint(
-            ui,
-            "Your Wavelog's front-page address — https://log.example.org or \
-             http://192.168.1.10/wavelog — and a key from its API page. Uploading needs a \
-             read/write key.",
-        );
+        net_row(ui, &tr!("settings-wavelog-address"), &mut wl.url, 260.0);
+        net_secret(ui, &tr!("settings-wavelog-api-key"), &mut wl.api_key, 260.0);
+        hint(ui, tr!("settings-wavelog-your-wavelog-s-front-page"));
         if http_over_internet(&wl.url) {
-            warn(
-                ui,
-                "Plain http:// to an address on the internet: the API key travels unencrypted. \
-                 Fine inside your own network; use https:// across the internet.",
-            );
+            warn(ui, tr!("settings-wavelog-plain-http-address-internet-api"));
         }
 
         // The pinned certificate, when there is one.
         if !wl.cert_sha256.trim().is_empty() {
             ui.horizontal(|ui| {
-                ui.add_sized([96.0, 22.0], egui::Label::new("Trusted cert"));
+                ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-wavelog-trusted-cert")));
                 ui.label(
                     RichText::new(fingerprint_display(&wl.cert_sha256)).monospace().size(10.0),
                 );
@@ -101,11 +97,8 @@ impl SdroxideApp {
             ui.horizontal(|ui| {
                 ui.add_space(100.0);
                 if ui
-                    .small_button("Forget this certificate")
-                    .on_hover_text(
-                        "Go back to ordinary checking against the public certificate \
-                         authorities — for a server that now has a proper certificate.",
-                    )
+                    .small_button(tr!("settings-wavelog-forget-certificate"))
+                    .on_hover_text(tr!("settings-wavelog-go-back-ordinary-checking-against"))
                     .clicked()
                 {
                     wl.cert_sha256.clear();
@@ -115,11 +108,7 @@ impl SdroxideApp {
 
         ui.add_space(4.0);
         if self.ctrl.engine_is_remote() {
-            hint(
-                ui,
-                "The connection check runs on the machine the radio is attached to — use the \
-                 settings there to test it and list the station locations.",
-            );
+            hint(ui, tr!("settings-wavelog-connection-check-runs-machine-radio"));
         } else {
             self.login_test_row(ui, cmds, io.net_edit, LoginTarget::Wavelog);
         }
@@ -129,37 +118,35 @@ impl SdroxideApp {
         // A certificate nothing vouches for: show it, and offer to trust it.
         if let Some(fp) = probe.and_then(|p| p.untrusted_cert.as_ref()) {
             ui.add_space(4.0);
-            ui.label(RichText::new("The server presented this certificate (SHA-256):").size(11.0));
-            ui.label(RichText::new(fingerprint_display(fp)).monospace().size(10.0).strong());
-            hint(
-                ui,
-                "Compare it with your server's — e.g. `openssl x509 -noout -fingerprint -sha256 \
-                 -in cert.pem` — and trust it only if they match. From then on this exact \
-                 certificate is accepted and any other is refused.",
+            ui.label(
+                RichText::new(tr!("settings-wavelog-server-presented-certificate-sha-256"))
+                    .size(11.0),
             );
-            if ui.button("Trust this certificate").clicked() {
+            ui.label(RichText::new(fingerprint_display(fp)).monospace().size(10.0).strong());
+            hint(ui, tr!("settings-wavelog-compare-your-server-s-e"));
+            if ui.button(tr!("settings-wavelog-trust-certificate")).clicked() {
                 io.net_edit.wavelog.cert_sha256 = fp.clone();
                 cmds.push(Command::SetNetworkConfig(io.net_edit.clone()));
                 cmds.push(Command::TestLogin(LoginTarget::Wavelog));
             }
         }
 
-        crate::app::settings::net::net_heading(ui, "Station location");
+        crate::app::settings::net::net_heading(ui, &tr!("settings-wavelog-station-location"));
         let stations: &[WavelogStation] = probe.map(|p| p.stations.as_slice()).unwrap_or(&[]);
         let label_of = |id: u32| -> String {
             match stations.iter().find(|s| s.id == id) {
                 Some(s) => s.label(),
-                None if id == 0 => "— none —".into(),
+                None if id == 0 => tr!("settings-wavelog-none").into(),
                 // Chosen in an earlier session; the list arrives with a test.
-                None => format!("location #{id}"),
+                None => tr!("settings-wavelog-location-n", id = id),
             }
         };
         if stations.is_empty() {
-            hint(ui, "Press Test above to list the station locations defined in your Wavelog.");
+            hint(ui, tr!("settings-wavelog-press-test-above-list-station"));
         }
 
         ui.horizontal(|ui| {
-            ui.add_sized([96.0, 22.0], egui::Label::new("Default"));
+            ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-wavelog-default")));
             let cur = &mut io.net_edit.wavelog.station_id;
             egui::ComboBox::from_id_salt("wavelog_station_default")
                 .selected_text(label_of(*cur))
@@ -171,21 +158,22 @@ impl SdroxideApp {
                 });
         })
         .response
-        .on_hover_text("Where QSOs go when the operating profile does not name a location.");
+        .on_hover_text(tr!("settings-wavelog-where-qsos-go-when-operating"));
 
         // The profile's own choice lives with the callsign it must match, so
         // it is edited on the identity, which a profile saves and restores.
         if io.digi_seeded {
             let call = io.digi_edit.my_call.trim().to_string();
             ui.horizontal(|ui| {
-                ui.add_sized([96.0, 22.0], egui::Label::new("This profile"));
+                ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-wavelog-profile")));
                 let cur = &mut io.digi_edit.wavelog_station_id;
-                let shown = if *cur == 0 { "Use the default".to_string() } else { label_of(*cur) };
+                let shown =
+                    if *cur == 0 { tr!("settings-wavelog-use-default") } else { label_of(*cur) };
                 egui::ComboBox::from_id_salt("wavelog_station_profile")
                     .selected_text(shown)
                     .width(260.0)
                     .show_styled(ui, |ui| {
-                        ui.selectable_value(cur, 0, "Use the default");
+                        ui.selectable_value(cur, 0, tr!("settings-wavelog-use-default"));
                         for s in stations {
                             ui.selectable_value(cur, s.id, s.label());
                         }
@@ -193,10 +181,13 @@ impl SdroxideApp {
             });
             hint(
                 ui,
-                format!(
-                    "Saved with the callsign ({}) in Settings → Profiles, so a portable profile \
-                     can log to a portable location.",
-                    if call.is_empty() { "not set" } else { &call }
+                tr!(
+                    "settings-wavelog-saved-with-callsign",
+                    call = if call.is_empty() {
+                        tr!("settings-wavelog-not-set")
+                    } else {
+                        call.clone()
+                    }
                 ),
             );
             let effective = io.net_edit.wavelog.station_for(io.digi_edit.wavelog_station_id);
@@ -206,28 +197,21 @@ impl SdroxideApp {
                 warn(ui, why);
             }
             if effective == 0 && io.net_edit.wavelog.is_configured() {
-                warn(ui, "No station location chosen — uploads will fail until one is.");
+                warn(ui, tr!("settings-wavelog-no-station-location-chosen-uploads"));
             }
         }
 
         self.wavelog_download_settings(ui, io, cmds, stations);
         self.wavelog_radio_settings(ui, io);
 
-        crate::app::settings::net::net_heading(ui, "QSOs not in Wavelog");
+        crate::app::settings::net::net_heading(ui, &tr!("settings-wavelog-qsos-not-wavelog"));
         let owed = self.wavelog_owed().count();
         if owed > 0 {
-            ui.label(
-                RichText::new(format!(
-                    "{owed} QSO{} logged since auto-upload was switched on still to send — \
-                     retried every 5 minutes.",
-                    if owed == 1 { "" } else { "s" }
-                ))
-                .size(11.0),
-            );
+            ui.label(RichText::new(tr!("settings-wavelog-owed", n = owed)).size(11.0));
         }
         let unsent: Vec<_> = self.wavelog_unsent().collect();
         if unsent.is_empty() {
-            hint(ui, "Every QSO in the logbook is in Wavelog.");
+            hint(ui, tr!("settings-wavelog-every-qso-logbook-wavelog"));
             return;
         }
         let station = io.net_edit.wavelog.station_for(io.digi_edit.wavelog_station_id);
@@ -239,19 +223,11 @@ impl SdroxideApp {
         if !armed {
             let btn = ui.add_enabled(
                 ready,
-                egui::Button::new(format!(
-                    "Send {} QSO{} not yet in Wavelog…",
-                    unsent.len(),
-                    if unsent.len() == 1 { "" } else { "s" }
-                )),
+                egui::Button::new(tr!("settings-wavelog-send-unsent", n = unsent.len())),
             );
             if btn
-                .on_hover_text(
-                    "Everything in the logbook Wavelog has not acknowledged — including contacts \
-                     from before auto-upload. Ones it already has come back as duplicates and \
-                     are simply marked as sent.",
-                )
-                .on_disabled_hover_text("Set the address, key and a station location first.")
+                .on_hover_text(tr!("settings-wavelog-everything-logbook-wavelog-has-not"))
+                .on_disabled_hover_text(tr!("settings-wavelog-set-address-key-station-location"))
                 .clicked()
             {
                 ui.data_mut(|d| d.insert_temp(armed_id, true));
@@ -260,14 +236,10 @@ impl SdroxideApp {
         }
         warn(
             ui,
-            format!(
-                "Send {} QSOs to {}? Settings are applied first.",
-                unsent.len(),
-                label_of(station)
-            ),
+            tr!("settings-wavelog-send-confirm", n = unsent.len(), location = label_of(station)),
         );
         ui.horizontal(|ui| {
-            if ui.button("Yes, send them").clicked() {
+            if ui.button(tr!("settings-wavelog-yes-send-them")).clicked() {
                 // Applied first, so the engine uploads with what is on screen.
                 cmds.push(Command::SetNetworkConfig(io.net_edit.clone()));
                 for q in &unsent {
@@ -279,7 +251,7 @@ impl SdroxideApp {
                 }
                 ui.data_mut(|d| d.insert_temp(armed_id, false));
             }
-            if ui.button("Cancel").clicked() {
+            if ui.button(tr!("settings-wavelog-cancel")).clicked() {
                 ui.data_mut(|d| d.insert_temp(armed_id, false));
             }
         });
@@ -295,36 +267,32 @@ impl SdroxideApp {
         cmds: &mut Vec<Command>,
         stations: &[WavelogStation],
     ) {
-        crate::app::settings::net::net_heading(ui, "Download into this logbook");
+        crate::app::settings::net::net_heading(ui, &tr!("settings-wavelog-download-into-logbook"));
         if self.ctrl.engine_is_remote() {
-            hint(
-                ui,
-                "Downloading runs where the radio is attached, into that machine's logbook — \
-                 set it up there.",
-            );
+            hint(ui, tr!("settings-wavelog-downloading-runs-where-radio-attached"));
             return;
         }
         let wl = &mut io.net_edit.wavelog;
         ui.horizontal(|ui| {
-            crate::chrome::checkbox(ui, &mut wl.download, "Download QSOs at start and every");
+            crate::chrome::checkbox(
+                ui,
+                &mut wl.download,
+                tr!("settings-wavelog-download-qsos-start-every"),
+            );
             ui.add(egui::DragValue::new(&mut wl.sync_interval_min).range(5..=1440).suffix(" min"));
         });
-        hint(
-            ui,
-            "Downloaded QSOs join the logbook, so FT8 and the spot lists know what you have \
-             worked from other programs and rigs. Each download fetches only what is new.",
-        );
+        hint(ui, tr!("settings-wavelog-downloaded-qsos-join-logbook-so"));
 
         // The locations to read: Wavelog's list once a test has fetched it,
         // otherwise whatever is ticked already, so it can still be unticked.
         let mut listed: Vec<(u32, String)> = stations.iter().map(|s| (s.id, s.label())).collect();
         for id in &wl.download_station_ids {
             if !listed.iter().any(|(l, _)| l == id) {
-                listed.push((*id, format!("location #{id}")));
+                listed.push((*id, tr!("settings-wavelog-location-n", id = id)));
             }
         }
         if listed.is_empty() {
-            hint(ui, "Press Test above to choose which station locations to download.");
+            hint(ui, tr!("settings-wavelog-press-test-above-choose-which"));
         }
         for (id, label) in listed {
             let mut on = wl.download_station_ids.contains(&id);
@@ -340,24 +308,20 @@ impl SdroxideApp {
         let running = self.wavelog_sync_running.is_some();
         let ready = wl.is_configured() && !wl.download_station_ids.is_empty();
         ui.horizontal(|ui| {
-            let now = ui.add_enabled(ready && !running, egui::Button::new("Sync now"));
-            if now
-                .on_hover_text("Fetch what Wavelog has added since the last download. Applies the settings above first.")
-                .clicked()
-            {
+            let now = ui.add_enabled(
+                ready && !running,
+                egui::Button::new(tr!("settings-wavelog-sync-now")),
+            );
+            if now.on_hover_text(tr!("settings-wavelog-fetch-what-wavelog-has-added")).clicked() {
                 cmds.push(Command::SetNetworkConfig(io.net_edit.clone()));
                 self.wavelog_sync_request.set(Some(false));
             }
             let full = ui.add_enabled(
                 ready && !running && self.wavelog_resync.is_none(),
-                egui::Button::new("Full resync…"),
+                egui::Button::new(tr!("settings-wavelog-full-resync")),
             );
             if full
-                .on_hover_text(
-                    "Download the ticked locations whole and compare them with the log: QSOs \
-                     edited or deleted in Wavelog, or from a location no longer ticked, are \
-                     brought into line. You see the changes before anything happens.",
-                )
+                .on_hover_text(tr!("settings-wavelog-download-ticked-locations-whole-compare"))
                 .clicked()
             {
                 cmds.push(Command::SetNetworkConfig(io.net_edit.clone()));
@@ -374,24 +338,17 @@ impl SdroxideApp {
         if let Some((plan, _)) = &self.wavelog_resync {
             ui.add_space(4.0);
             ui.group(|ui| {
-                ui.label(RichText::new("Full resync — changes to make").strong());
-                ui.label(format!("• {} QSOs in Wavelog to add to the log", plan.add.len()));
-                ui.label(format!("• {} downloaded QSOs changed in Wavelog to update", plan.update.len()));
-                ui.label(format!(
-                    "• {} downloaded QSOs no longer in Wavelog (or from an unticked location) to remove",
-                    plan.remove.len()
-                ));
-                ui.label(format!("• {} of your own QSOs to mark as being in Wavelog", plan.mark.len()));
-                hint(
-                    ui,
-                    "QSOs logged here or imported from a file are never changed or removed — \
-                     only ones that were downloaded from Wavelog.",
-                );
+                ui.label(RichText::new(tr!("settings-wavelog-full-resync-changes-make")).strong());
+                ui.label(tr!("settings-wavelog-plan-add", n = plan.add.len()));
+                ui.label(tr!("settings-wavelog-plan-update", n = plan.update.len()));
+                ui.label(tr!("settings-wavelog-plan-remove", n = plan.remove.len()));
+                ui.label(tr!("settings-wavelog-plan-mark", n = plan.mark.len()));
+                hint(ui, tr!("settings-wavelog-qsos-logged-here-imported-file"));
                 ui.horizontal(|ui| {
-                    if ui.button("Apply").clicked() {
+                    if ui.button(tr!("settings-wavelog-apply")).clicked() {
                         self.wavelog_resync_answer.set(Some(true));
                     }
-                    if ui.button("Discard").clicked() {
+                    if ui.button(tr!("settings-wavelog-discard")).clicked() {
                         self.wavelog_resync_answer.set(Some(false));
                     }
                 });
@@ -401,19 +358,15 @@ impl SdroxideApp {
 
     /// The live radio status Wavelog's logging form and bandmap follow.
     fn wavelog_radio_settings(&self, ui: &mut egui::Ui, io: &mut SettingsIo) {
-        crate::app::settings::net::net_heading(ui, "Live radio status");
+        crate::app::settings::net::net_heading(ui, &tr!("settings-wavelog-live-radio-status"));
         let wl = &mut io.net_edit.wavelog;
         crate::chrome::checkbox(
             ui,
             &mut wl.radio_status,
-            "Send frequency and mode to Wavelog as they change",
+            tr!("settings-wavelog-send-frequency-mode-wavelog-they"),
         );
-        net_row(ui, "Radio name", &mut wl.radio_name, 160.0);
-        hint(
-            ui,
-            "Pick this radio in Wavelog's live logging and its form follows the dial. Needs a \
-             read/write key. From the station's main radio only.",
-        );
+        net_row(ui, &tr!("settings-wavelog-radio-name"), &mut wl.radio_name, 160.0);
+        hint(ui, tr!("settings-wavelog-pick-radio-wavelog-s-live"));
     }
 }
 

@@ -59,8 +59,18 @@ pub(crate) static LOADER: LazyLock<FluentLanguageLoader> = LazyLock::new(|| {
 /// The id and every argument are checked against the English file when the
 /// crate is compiled.
 macro_rules! tr {
-    ($($args:tt)*) => {
-        i18n_embed_fl::fl!($crate::i18n::LOADER, $($args)*)
+    ($id:literal $(, $attr:literal)?) => {
+        i18n_embed_fl::fl!($crate::i18n::LOADER, $id $(, $attr)?)
+    };
+    // Each argument is bound before it is handed over, so `n = count + 1`
+    // has its type settled by the arithmetic rather than left for the
+    // conversion into a Fluent value to guess.
+    ($id:literal $(, $attr:literal)?, $($name:ident = $value:expr),+ $(,)?) => {
+        match ($($value,)+) {
+            ($($name,)+) => {
+                i18n_embed_fl::fl!($crate::i18n::LOADER, $id $(, $attr)?, $($name = $name),+)
+            }
+        }
     };
 }
 pub(crate) use tr;
@@ -259,6 +269,9 @@ mod tests {
         for entry in res.body {
             if let ast::Entry::Message(m) = entry {
                 let id = m.id.name.to_string();
+                // Fluent keeps the first of two definitions and drops the
+                // second without a word, so a clash is a silent wrong text.
+                assert!(!out.contains_key(&id), "{path} defines {id} twice");
                 let mut v = BTreeSet::new();
                 if let Some(p) = &m.value {
                     vars(p, &mut v);
@@ -306,6 +319,31 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Every English message is asked for somewhere, so a translator is never
+    /// given text nobody will see. A message is used when its id appears as a
+    /// string in the source — through `tr!` or otherwise.
+    #[test]
+    fn every_english_message_is_used() {
+        fn sources(dir: &std::path::Path, out: &mut String) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    sources(&path, out);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    out.push_str(&std::fs::read_to_string(&path).unwrap());
+                }
+            }
+        }
+        let mut src = String::new();
+        sources(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut src);
+        let unused: Vec<_> = messages("en-US")
+            .into_keys()
+            .filter(|id| !id.contains('.') && id != "language-name")
+            .filter(|id| !src.contains(&format!("\"{id}\"")))
+            .collect();
+        assert!(unused.is_empty(), "messages nothing asks for: {unused:?}");
     }
 
     /// Every message formats without the bidirectional isolates egui would
