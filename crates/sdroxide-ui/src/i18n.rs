@@ -431,6 +431,11 @@ mod tests {
         assert_eq!(list[0].tag, "en-US");
         assert_eq!(list[0].name, "English");
         assert!(list.iter().all(|l| !l.name.is_empty() && l.name != "language-name"));
+        assert!(
+            list.iter().any(|l| l.tag == "es" && l.name == "Español"),
+            "{:?}",
+            list.iter().map(|l| &l.tag).collect::<Vec<_>>()
+        );
     }
 
     /// The pseudo-language stretches and accents the text it is given and
