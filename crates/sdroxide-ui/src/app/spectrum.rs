@@ -6,6 +6,7 @@
 //! — CW skimmer boxes, FT8 callsign labels, network spot flags — are rebuilt
 //! here each frame from state the rest of the app maintains.
 
+use crate::i18n::tr;
 use eframe::egui::Color32;
 use sdroxide_types::{Mode, SkimmerKind, SkimmerSpot, SpectrumConfig, Spot, SpotKind};
 
@@ -340,21 +341,17 @@ impl SdroxideApp {
         let ceiling =
             self.display_class.map_or(waterfall_gpu::DEFAULT_TEX_W, waterfall_gpu::manual_ceiling);
         let reason = match self.display_class {
-            None => "This window has no GPU renderer, so the waterfall stays at its                      standard width."
-                .to_string(),
+            None => tr!("spectrum-window-has-no-gpu-renderer").to_string(),
             Some(c) if c.device_type == crate::egui_wgpu::wgpu::DeviceType::Cpu => {
-                "This machine is drawing without a GPU — every column of the waterfall                  is the processor's work, and it is already sharing that with the radio."
-                    .to_string()
+                tr!("spectrum-machine-drawing-without-gpu-every").to_string()
             }
             Some(c) if c.backend == crate::egui_wgpu::wgpu::Backend::Gl => {
-                "This window renders through OpenGL, which is sdroxide's compatibility                  path — a Raspberry Pi, an older graphics chip, or a browser without                  WebGPU. A wider waterfall is not worth the frame rate there."
-                    .to_string()
+                tr!("spectrum-window-renders-through-opengl-which").to_string()
             }
-            Some(c) if c.max_texture_dim < waterfall_gpu::MAX_TEX_W => format!(
-                "This renderer will not hold a texture wider than {} pixels.",
-                c.max_texture_dim
-            ),
-            Some(_) => "Wider than this renderer can draw.".to_string(),
+            Some(c) if c.max_texture_dim < waterfall_gpu::MAX_TEX_W => {
+                tr!("spectrum-renderer-will-not-hold-texture", max_texture_dim = c.max_texture_dim)
+            }
+            Some(_) => tr!("spectrum-wider-than-renderer-can-draw").to_string(),
         };
         DetailReport { chosen: self.bins_for_detail(detail), ceiling, reason }
     }
@@ -688,8 +685,8 @@ impl SdroxideApp {
                     id: m.id,
                     freq_hz: m.freq_hz,
                     text: match folder {
-                        Some(f) => format!("Mem: {f} / {}", m.name),
-                        None => format!("Mem: {}", m.name),
+                        Some(f) => tr!("spectrum-mem", f = f, value = m.name),
+                        None => tr!("spectrum-mem-2", value = m.name),
                     },
                 }
             })

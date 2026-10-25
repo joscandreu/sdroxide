@@ -5,6 +5,7 @@
 //! back is applied to the in-progress QSO and appended to the rolling log the
 //! SPOTS window shows.
 
+use crate::i18n::tr;
 use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -206,8 +207,8 @@ impl SdroxideApp {
 
     /// Record an upload result and mark the QSO's sent flag on success.
     pub(in crate::app) fn on_upload_result(&mut self, r: UploadResult) {
-        let status = if r.ok { "OK" } else { "FAIL" };
-        let retry = if r.retryable { " (will retry)" } else { "" };
+        let status = if r.ok { "OK" } else { &tr!("net-fail") };
+        let retry = if r.retryable { tr!("net-will-retry") } else { String::from("") };
         self.push_net_log(format!("{} → {}: {}{retry}", r.target.label(), status, r.message));
         if r.target == UploadTarget::Wavelog && !r.ok && !r.retryable {
             self.wavelog_refused.insert(r.qso_id);
@@ -331,9 +332,9 @@ impl SdroxideApp {
         if full {
             self.wavelog_resync_rx = Some(Default::default());
             self.wavelog_resync = None;
-            self.wavelog_sync_status = Some("Full resync: downloading…".into());
+            self.wavelog_sync_status = Some(tr!("net-full-resync-downloading"));
         } else {
-            self.wavelog_sync_status = Some("Downloading…".into());
+            self.wavelog_sync_status = Some(tr!("net-downloading"));
         }
         cmds.push(Command::WavelogSync { stations, full });
     }
@@ -374,14 +375,19 @@ impl SdroxideApp {
             None => {
                 self.wavelog_sync.last_sync_utc = crate::time::now_unix();
                 crate::app::persist::persist_wavelog_sync(&self.wavelog_sync);
-                format!("Synced {when}Z: {} new, {} already in the log", t.added, t.matched)
+                tr!(
+                    "net-synced-z-new-already-log",
+                    when = when,
+                    added = t.added,
+                    matched = t.matched
+                )
             }
         };
         // The net log hears about a download that brought something or
         // failed; one that found nothing new every quarter of an hour is not
         // news.
         if t.added > 0 || failed {
-            self.push_net_log(format!("Wavelog: {line}"));
+            self.push_net_log(tr!("net-wavelog-2", line = line));
         }
         self.wavelog_sync_status = Some(line);
     }
@@ -406,7 +412,8 @@ impl SdroxideApp {
         self.wavelog_sync_running = None;
         let (records, last) = self.wavelog_resync_rx.take().unwrap_or_default();
         if let Some(e) = b.error {
-            self.wavelog_sync_status = Some(format!("Full resync stopped, nothing changed: {e}"));
+            self.wavelog_sync_status =
+                Some(tr!("net-full-resync-stopped-nothing-changed", error = e.to_string()));
             return;
         }
         if self.shared_log {
@@ -418,9 +425,9 @@ impl SdroxideApp {
                 self.wavelog_sync.advance(*station, *id);
             }
             crate::app::persist::persist_wavelog_sync(&self.wavelog_sync);
-            self.wavelog_sync_status = Some("Full resync: the log already matches Wavelog".into());
+            self.wavelog_sync_status = Some(tr!("net-full-resync-log-already-matches"));
         } else {
-            self.wavelog_sync_status = Some("Full resync: review the changes below".into());
+            self.wavelog_sync_status = Some(tr!("net-full-resync-review-changes-below"));
             self.wavelog_resync = Some((plan, last));
         }
     }
@@ -429,7 +436,7 @@ impl SdroxideApp {
     fn answer_wavelog_resync(&mut self, apply: bool) {
         let Some((plan, last)) = self.wavelog_resync.take() else { return };
         if !apply {
-            self.wavelog_sync_status = Some("Full resync discarded; nothing changed".into());
+            self.wavelog_sync_status = Some(tr!("net-full-resync-discarded-nothing-changed"));
             return;
         }
         // Another tab may have appended to the shared log while the plan sat
@@ -449,11 +456,14 @@ impl SdroxideApp {
             self.wavelog_sync.advance(*station, *id);
         }
         crate::app::persist::persist_wavelog_sync(&self.wavelog_sync);
-        let line = format!(
-            "Full resync applied: {add} added, {update} updated, {remove} removed, \
-             {mark} of yours marked as in Wavelog"
+        let line = tr!(
+            "net-full-resync-applied-added-updated",
+            add = add,
+            update = update,
+            remove = remove,
+            mark = mark
         );
-        self.push_net_log(format!("Wavelog: {line}"));
+        self.push_net_log(tr!("net-wavelog-3", line = line));
         self.wavelog_sync_status = Some(line);
     }
 
@@ -485,7 +495,7 @@ impl SdroxideApp {
         let loaded = match loaded {
             Ok(loaded) => loaded,
             Err(e) => {
-                self.push_net_log(format!("ADIF import failed: {e}"));
+                self.push_net_log(tr!("net-adif-import-failed", error = e.to_string()));
                 return;
             }
         };
@@ -493,7 +503,7 @@ impl SdroxideApp {
         let parsed =
             catch_unwind(AssertUnwindSafe(|| sdroxide_types::adif_to_qso_log_counting_swl(&text)));
         let Ok((records, swl)) = parsed else {
-            self.push_net_log("ADIF import failed: the file could not be parsed".to_string());
+            self.push_net_log(tr!("net-adif-import-failed-file-could").to_string());
             return;
         };
         // One pass to index the existing log by call and band, so the duplicate
@@ -533,17 +543,21 @@ impl SdroxideApp {
         // name that came out as nonsense is then a code page to report, not a
         // decoder to doubt.
         let assumed = match loaded.assumed {
-            Some(enc) => format!(" (not Unicode; read as {enc})"),
+            Some(enc) => tr!("net-not-unicode-read", enc = enc),
             None => String::new(),
         };
         // A file of received reports — the decode list's own ADIF export —
         // adds nothing, and saying why beats reporting an empty import.
         let reports = match swl {
             0 => String::new(),
-            n => format!(", {n} received reports (SWL) left out"),
+            n => tr!("net-received-reports-swl-left-out", n = n),
         };
-        self.push_net_log(format!(
-            "ADIF import: {added} added, {skipped} duplicates skipped{reports}{assumed}"
+        self.push_net_log(tr!(
+            "net-adif-import-added-duplicates-skipped",
+            added = added,
+            skipped = skipped,
+            reports = reports,
+            assumed = assumed
         ));
     }
 
@@ -563,7 +577,7 @@ impl SdroxideApp {
         let loaded = match loaded {
             Ok(loaded) => loaded,
             Err(e) => {
-                self.push_net_log(format!("Channel import failed: {e}"));
+                self.push_net_log(tr!("net-channel-import-failed", error = e.to_string()));
                 return;
             }
         };
@@ -571,30 +585,32 @@ impl SdroxideApp {
         let parsed =
             catch_unwind(AssertUnwindSafe(|| sdroxide_types::chirp_csv_to_memories(&text)));
         let Ok((channels, skipped)) = parsed else {
-            self.push_net_log("Channel import failed: the file could not be read".to_string());
+            self.push_net_log(tr!("net-channel-import-failed-file-could").to_string());
             return;
         };
         if channels.is_empty() {
             // The commonest way to get here is a file that is not a CHIRP
             // export at all, so say what was expected rather than "0 imported".
-            self.push_net_log(
-                "Channel import: nothing to read — a CHIRP CSV file starts with a header                  row naming its columns, one of which must be Frequency"
-                    .to_string(),
-            );
+            self.push_net_log(tr!("net-channel-import-nothing-read-chirp").to_string());
             return;
         }
         let n = channels.len();
         cmds.push(Command::ImportMemories(channels));
         let skipped = match skipped {
             0 => String::new(),
-            n => format!(", {n} line(s) skipped"),
+            n => tr!("net-line-s-skipped", n = n),
         };
         let assumed = match loaded.assumed {
-            Some(enc) => format!(" (not Unicode; read as {enc})"),
+            Some(enc) => tr!("net-not-unicode-read-2", enc = enc),
             None => String::new(),
         };
         // "read", not "added": the engine drops the channels already stored,
         // and the memory list itself is what shows the result.
-        self.push_net_log(format!("Channel import: {n} channel(s) read{skipped}{assumed}"));
+        self.push_net_log(tr!(
+            "net-channel-import-channel-s-read",
+            n = n,
+            skipped = skipped,
+            assumed = assumed
+        ));
     }
 }

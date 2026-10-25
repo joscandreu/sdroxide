@@ -1,6 +1,7 @@
 //! `RemoteController`: the same UI seam as `LocalController`, but over a
 //! WebSocket speaking `sdroxide-proto`. Compiles for wasm32 and native.
 
+use crate::i18n::tr;
 use std::collections::VecDeque;
 
 use ewebsock::{WsEvent, WsMessage, WsReceiver, WsSender};
@@ -406,7 +407,7 @@ impl RemoteController {
             }
             ServerMsg::Pong(_) => {}
             ServerMsg::Busy => self.pending.push_back(RadioEvent::ConnectionLost(
-                "server busy — another client is connected".into(),
+                tr!("remote-server-busy-another-client-connected").into(),
             )),
             ServerMsg::Error(e) => self.pending.push_back(RadioEvent::ConnectionLost(e)),
             ServerMsg::Notice(n) => self.pending.push_back(RadioEvent::Notice(n)),
@@ -650,10 +651,7 @@ impl RemoteController {
         }
         self.mic_over_reported = true;
         self.pending.push_back(RadioEvent::Notice(Some(
-            "Transmitting, but this client's microphone is producing no audio at all — \
-             nothing is being modulated. In a browser, check that the page was allowed \
-             the microphone and that no other application holds it."
-                .into(),
+            tr!("remote-transmitting-but-client-s-microphone").into(),
         )));
     }
 }
@@ -688,16 +686,19 @@ impl RadioController for RemoteController {
                 }
                 WsEvent::Message(WsMessage::Binary(bytes)) => match decode::<ServerMsg>(&bytes) {
                     Ok(msg) => self.on_server_msg(msg),
-                    Err(e) => self
-                        .pending
-                        .push_back(RadioEvent::ConnectionLost(format!("protocol error: {e}"))),
+                    Err(e) => self.pending.push_back(RadioEvent::ConnectionLost(tr!(
+                        "remote-protocol-error",
+                        error = e.to_string()
+                    ))),
                 },
                 WsEvent::Message(_) => {}
                 WsEvent::Error(e) => {
                     self.pending.push_back(RadioEvent::ConnectionLost(e));
                 }
                 WsEvent::Closed => {
-                    self.pending.push_back(RadioEvent::ConnectionLost("connection closed".into()));
+                    self.pending.push_back(RadioEvent::ConnectionLost(
+                        tr!("remote-connection-closed").into(),
+                    ));
                 }
             }
         }

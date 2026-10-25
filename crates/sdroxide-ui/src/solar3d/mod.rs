@@ -35,6 +35,8 @@ mod state;
 
 // Everything below is the native host's: the browser's is in `app.rs`.
 #[cfg(not(target_arch = "wasm32"))]
+use crate::i18n::tr;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::{Arc, Mutex, MutexGuard};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -285,7 +287,7 @@ impl Solar3d {
         // which is where the size and place come from. Every later frame leaves
         // the geometry alone, so a live resize is not fought by our own request.
         let mut builder = egui::ViewportBuilder::default()
-            .with_title("sdroxide — solar system")
+            .with_title(tr!("solarwin-sdroxide-solar-system"))
             .with_min_inner_size([520.0, 340.0])
             .with_clamp_size_to_monitor_size(true);
         if ctx.cumulative_pass_nr_for(vid) == 0 {

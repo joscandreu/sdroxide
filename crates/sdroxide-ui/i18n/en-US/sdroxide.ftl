@@ -80,7 +80,6 @@ settings-ui-theme = Theme
 settings-ui-button-style = Button style
 settings-ui-window-style = Window style
 settings-ui-frame-rate = Screen update rate
-settings-ui-fps = { $fps } fps
 settings-ui-palette = Waterfall palette
 settings-ui-tuning-buttons = Tuning buttons
 settings-ui-tuning-buttons-show = Show on phone and tablet
@@ -3233,3 +3232,1868 @@ sstv-rifp-session-idle = session { $session } · idle { $secs } s
 sstv-rifp-session-waiting = session { $session } · chunks held, still waiting for the manifest · idle { $secs } s
 sstv-store-on-radio = on the radio, in { $dir }
 sstv-store-in = in { $dir }
+
+## decodes (src/app/panels/decodes.rs)
+
+decodes-decodes = DECODES
+decodes-adif = ADIF
+decodes-sort = Sort
+decodes-single-list = Single list
+decodes-every-decode-one-list-newest = Every decode in one list, newest turn first, instead of odd/even turn blocks. The Sort chips then order the whole list rather than each turn, and each row carries its slot time — cyan for an even slot, gold for an odd one.
+decodes-cq-only = CQ only
+decodes-only-stations-calling-cq-only = Only stations calling CQ — and only the calls you may answer: a directed CQ (DX, EU, JA, POTA, TEST …) is listed when it names you and hidden when it names someone else.
+decodes-new-only = New only
+decodes-only-stations-would-new-entity = Only stations that would be new: entity, band-slot, grid, or call
+decodes-auto-tx-frq = Auto TX FRQ
+decodes-overridden-hold-tx-lift-hold = Overridden by Hold TX. Lift the hold to choose which way the transmit frequency moves.
+decodes-pick-our-transmit-frequency-automatically = Pick our transmit frequency automatically: the quietest spot in the period we transmit in, rather than the frequency of whoever we are answering — they transmit in the other period, so theirs says nothing about who is there when we key. Off does NOT hold the frequency: it answers on the frequency of the station being called. To hold, use Hold TX.
+decodes-hold-tx = Hold TX
+decodes-pin-transmit-tone-where-nothing =
+    Pin the transmit tone where it is. Nothing moves it: not answering a station, not the call queue, not calling CQ, not a click on a decode or on the waterfall. Turn it off to move, then on again.
+
+    Changing band is the one exception, and it is your own act: the offset you last set on the new band comes back with it, so a 60 m figure is not carried onto 20 m and 20 m's is not carried onto 60 m.
+
+    For where the licence is narrower than the band plan — on a UK 60 m dial of 5357 kHz the allocation ends at 5358.0, so the tone has to stay under 1000 Hz, and either automatic mover will walk out of the band between one over and the next.
+decodes-type-transmit-offset-hz-then = Type the transmit offset in Hz, then press Enter. Where your licence is narrower than the band plan the whole range below the edge is yours to pick from, so nothing is suggested here.
+decodes-clear-rx = {" "}CLEAR RX{" "}
+decodes-empty-decode-list-nothing-air = Empty the decode list. Nothing that is on the air stops.
+decodes-even = EVEN
+decodes-text = TEXT
+decodes-dxcc = DXCC
+decodes-band = BAND
+decodes-grid = GRID
+decodes-dupe = DUPE
+decodes-reply = REPLY
+decodes-queued-click-remove = Queued — click to remove
+decodes-work-station-after-current-one = Work this station after the current one
+decodes-qsos-worked-since-sdroxide-was = QSOs worked since sdroxide was started
+decodes-setup = ⚙ SETUP
+decodes-qso-complete = ✓ QSO COMPLETE
+decodes-contact-complete-log-held-here = The contact is complete and in the log. It is held here for a few minutes so the final message can be re-sent if the other station repeats theirs — nothing more is owed.
+decodes-tx = ● TX
+decodes-dxpedition-mode-transmit-frequency-held = DXpedition mode. The transmit frequency is held out of the Fox's half of the passband (below 1000 Hz) until the Fox answers.
+decodes-watchdog = WATCHDOG
+decodes-transmitting-stopped-no-reply-no = Transmitting stopped: no reply and no action for the watchdog period. Call CQ or pick a message to resume.
+decodes-well-inside-tolerance = Well inside tolerance.
+decodes-no-active-qso-pick-decode = no active QSO — pick a decode to reply, or Call CQ
+decodes-ft8-engine-idle = FT8 engine idle
+decodes-being-worked = being worked
+decodes-clear = CLEAR
+decodes-no-messages = — no messages —
+decodes-call-cq = {"  "}CALL CQ{"  "}
+decodes-stop-qso = {" "}STOP QSO{" "}
+decodes-stop-tx = {" "}STOP TX{" "}
+decodes-free-text-13-chars = free text (13 chars)
+decodes-send = SEND
+
+## sat (src/app/sat.rs)
+
+sat-pass-profile = PASS PROFILE
+sat-satellite = SATELLITE
+sat-satellites = SATELLITES
+sat-passes = PASSES
+sat-set-your-grid-passes-settings = Set your grid for passes (Settings ▸ General).
+sat-next = NEXT
+sat-peak = PEAK ≥
+sat-all-satellites = all satellites
+sat-off-only-satellites-frequencies-file = Off: only satellites with frequencies on file — the ones you can work — and any you pasted in yourself. On: every satellite in the list, which can be thousands with a subscription and takes a while to search.
+sat-no-passes-window-lower-peak = No passes in this window. Lower the peak, or widen the window.
+sat-length = LENGTH
+sat-peak-2 = PEAK
+sat-from-to = FROM → TO
+sat-up-now = ● up now
+sat-unlock = UNLOCK
+sat-release-lock-dial-stays-where = Release the lock; the dial stays where it is
+sat-azimuth = AZIMUTH
+sat-elevation = ELEVATION
+sat-range = RANGE
+sat-rate = RATE
+sat-downlink = DOWNLINK
+sat-doppler-rx = DOPPLER RX
+sat-uplink = UPLINK
+sat-doppler-tx = DOPPLER TX
+sat-no-pass-inside-next-48 = No pass inside the next 48 hours from your QTH.
+sat-elements-stale-corrections-suspended-until = ⚠ Elements stale — corrections suspended until a TLE refresh
+sat-doppler-correction-needs-iq-front = Doppler correction needs an IQ front end — a CAT rig tracks only
+sat-rotator-not-connected = Rotator: not connected
+sat-doppler = DOPPLER
+sat-apply-computed-correction-rx-tx = Apply the computed correction to RX and TX
+sat-rotator = ROTATOR
+sat-steer-antenna-through-rotctld-client = Steer the antenna through the rotctld client (Settings ▸ Servers)
+sat-name-norad = name or NORAD
+sat-set-your-grid-passes-settings-2 = set your grid for passes (Settings ▸ General)
+sat-norad = NORAD
+sat-pass = PASS
+sat-always-visible = always visible
+sat-not-here = not from here
+sat-no-elements = no elements
+sat-pick-satellite-see-links-lock = Pick a satellite to see its links and lock on.
+sat-no-frequencies-file-one-add = No frequencies on file for this one — add them in Settings ▸ TLE.
+sat-link = LINK
+sat-downlink-mhz = DOWNLINK (MHz)
+sat-uplink-mhz = UPLINK (MHz)
+sat-mode = MODE
+sat-tune = TUNE
+sat-set-dial-mode-link-no = Set the dial and mode to this link — no lock, no correction
+sat-locked = {" "}LOCKED{" "}
+sat-lock = {" "}LOCK ON{" "}
+sat-track-satellite-doppler-correction-rx = Track this satellite: Doppler correction on RX and TX, transponder-mapped uplink, and the 3D view follows it
+
+## wefax (src/app/panels/wefax.rs)
+
+wefax-wefax = WEFAX
+wefax-stop = {" "}■ STOP{" "}
+wefax-end-chart-now-save-what = End the chart now and save what has arrived
+wefax-start = {" "}● START{" "}
+wefax-start-chart-now-without-waiting = Start a chart now, without waiting for a start tone
+wefax-phasing = phasing…
+wefax-subcarrier-offset-1900-hz-tune = Subcarrier offset from 1900 Hz. Tune for roughly zero: the fax carrier is 1500 Hz black to 2300 Hz white, and a receiver a few hundred hertz off clips the picture to solid black or solid white.
+wefax-auto-start = AUTO START
+wefax-begin-chart-when-300-hz = Begin a chart when the 300 Hz (IOC 576) or 675 Hz start tone is heard — and end the one in progress and phase the new one when the next transmission arrives, whether or not a stop tone came first.
+wefax-auto-stop = AUTO STOP
+wefax-end-450-hz-stop-tone = End it on the 450 Hz stop tone. Turn off to keep recording through a station that sends several charts back to back.
+wefax-phase = PHASE
+wefax-slant = SLANT
+wefax-sample-clock-trim-if-chart = Sample-clock trim. If the chart leans to the left, increase this; to the right, decrease it. A sound card a hundred ppm off walks a quarter-hour chart most of a line sideways.
+wefax-view = VIEW
+wefax-scale-chart-panel-width = Scale the chart to the panel width
+wefax-whole = WHOLE
+wefax-shrink-chart-until-all-view = Shrink the chart until all of it is in view at once
+wefax-half-size = Half size
+wefax-one-screen-pixel-per-fax = One screen pixel per fax pixel — scroll for detail
+wefax-twice-size-scroll-move-around = Twice size; scroll to move around the chart
+wefax-height = HEIGHT
+wefax-stretch-picture-vertically-chart-came = Stretch the picture vertically. A chart that came out squashed or stretched is usually being decoded at the wrong line rate — this makes it readable, and the LPM chips fix it properly. Double-click to type a value.
+wefax-reset = RESET
+wefax-back-picture-s-own-proportions = Back to the picture's own proportions
+wefax-follow = FOLLOW
+wefax-keep-newest-lines-view-scrolling = Keep the newest lines in view. Scrolling up turns this off so you can read what has already arrived; scrolling back to the bottom turns it on again.
+wefax-tune-fax-schedule-usb-wait = Tune a fax schedule in USB and wait for a start tone, or press START to begin mid-chart.
+wefax-saved = SAVED
+wefax-path = PATH
+wefax-reading-radio-s-charts = Reading the radio's charts…
+wefax-finished-charts-collect-here = Finished charts collect here.
+wefax-delete-chart = Delete this chart
+wefax-loading = loading…
+wefax-stations = STATIONS
+wefax-broadcast-radiofax-schedules-picking-one = Broadcast radiofax schedules — picking one tunes the dial
+wefax-frequencies-are-published-carrier-dial = Frequencies are the published carrier; the dial goes 1.9 kHz below it, which is done for you. Schedules change and stations close — treat this as where to start looking, not a timetable.
+wefax-delete-chart-store = Delete this chart from the store
+wefax-newer = ◀ NEWER
+wefax-chart-received-after-one = The chart received after this one
+wefax-older = OLDER ▶
+wefax-chart-received-before-one = The chart received before this one
+wefax-no-longer-store = no longer in the store
+wefax-loading-full-size = loading full size…
+wefax-save = SAVE
+wefax-save-copy-chart-computer = Save a copy of this chart on this computer
+wefax-sure = SURE?
+wefax-click-again-delete-chart-good = Click again to delete this chart for good
+wefax-delete = DELETE
+wefax-file-chart-was-saved = The file this chart was saved as
+
+## aprs (src/app/panels/aprs.rs)
+
+aprs-starting-aprs-modem = starting the APRS modem…
+aprs-aprs = APRS
+aprs-no-callsign = no callsign
+aprs-nothing-will-transmitted-no-beacon = Nothing will be transmitted — no beacon, no message, not even an acknowledgement — until this station has a callsign. Set one under Settings → General, or an APRS-specific one with its SSID under SETUP.
+aprs-no-position = no position
+aprs-beacon-needs-somewhere-report-fill = A beacon needs somewhere to report. Fill in your locator under Settings → General, or give coordinates under SETUP.
+aprs-setup = SETUP
+aprs-callsign-symbol-digipeater-path-position = Callsign, symbol, digipeater path, position and beacon
+aprs-how-often-beacon-your-position = How often to beacon your position, unattended. `off` — the default — never beacons: selecting a mode must not put a station on the air. Thirty minutes is the convention for a fixed station, oftener for a moving one, and every beacon is somebody else's channel time.
+aprs-beacon = {" "}BEACON{" "}
+aprs-station-has-no-callsign-see = This station has no callsign — see the warning to the left.
+aprs-station-has-no-position-report = This station has no position to report — see the warning to the left.
+aprs-send-one-position-report-now = Send one position report now, without waiting for the interval. It waits for the channel to be clear like everything else.
+aprs-stations = STATIONS
+aprs-nothing-heard-yet = nothing heard yet
+aprs-heard-direct = heard direct
+aprs-two-characters-station-sent-say = The two characters the station sent to say what it is
+aprs-killed = KILLED
+aprs-station-put-object-here-has = The station that put this object here has cancelled it
+aprs-sender-deliberately-reported-square-rather = The sender deliberately reported a square rather than a point. The map draws the square.
+aprs-digipeaters-last-frame-came-through = The digipeaters the last frame came through. A `*` marks one that actually repeated it.
+aprs-message = {" "}MESSAGE{" "}
+aprs-address-message-box-station = Address the message box to this station
+aprs-center = {" "}CENTER{" "}
+aprs-put-station-middle-map-double = Put this station in the middle of the map. Double-click the map to hand the view back to the automatic fit.
+aprs-channel = CHANNEL
+aprs-messages = MESSAGES
+aprs-frames-arrived-failed-their-check = Frames that arrived and failed their check sequence — a collision, a fade, or a signal too weak to read. A count rising with nothing decoding means the modem *is* hearing the channel: check the level meter, and open the radio's squelch.
+aprs-frames-read-cleanly-off-channel = Frames read cleanly off the channel that were not APRS — somebody else's packet session, or a format this build does not decode.
+aprs-every-frame-channel-arrived-other = Every frame on the channel, as it arrived — other people's traffic included, and anything the decoder could not read.
+aprs-nothing-channel-yet = nothing on the channel yet
+aprs-no-messages = No messages.
+aprs-waiting-channel = waiting for the channel
+aprs-sent-retried-still-waiting-acknowledged = sent and retried, still waiting to be acknowledged
+aprs-air-waiting-acknowledged = on the air, waiting to be acknowledged
+aprs-acknowledged-far-end = acknowledged by the far end
+aprs-refused-far-end-not-retried = refused by the far end — not retried
+aprs-no-ack = no ack
+aprs-no-answer-after-every-retry = no answer after every retry
+aprs-send = {" "}SEND{" "}
+aprs-station-has-no-callsign-so = This station has no callsign, so nothing can be transmitted. Set one under Settings → General, or an APRS-specific one with its SSID under SETUP.
+aprs-needs-station-address-something-say = Needs a station to address and something to say.
+aprs-send-keep-retrying-until-far = Send it, and keep retrying until the far end acknowledges. Messages are the one thing on this channel that is answered.
+aprs-busy = BUSY
+aprs-stations-heard-still-inside-window = Stations heard and still inside the window set in APRS Setup, and whether another station is on the channel right now. Nothing will key while it is busy.
+aprs-tx = ● TX
+aprs-over-progress-frames-waiting-channel = The over in progress, the frames waiting for the channel to clear, or the time until the next scheduled beacon.
+aprs-audio-reaching-modem-flat-means = Audio reaching the modem. Flat means nothing is arriving at all — check that the radio's data output is the one sdroxide is listening to. It lights up green while the modem hears a carrier.
+
+## vdl2 (src/app/panels/vdl2.rs)
+
+vdl2-starting-vdl2-decoder = starting the VDL2 decoder…
+vdl2-aircraft-datalink = aircraft datalink
+vdl2-tune-middle-vdl2-group-decoder = Tune to the middle of the VDL2 group. The decoder's own window slides from there to take in as many of the fourteen channels as the receiver can reach.
+vdl2-setup = SETUP
+vdl2-which-channels-listen-how-hard = Which channels to listen on, how hard a burst has to be, and how much log to keep
+vdl2-save-vdl2-message-log-file = Save the VDL2 message log to a file
+vdl2-vdl2-channel = VDL2 channel
+vdl2-messages = MESSAGES
+vdl2-address-flight-registration-label = address, flight, registration or label
+vdl2-held = HELD
+vdl2-hold = HOLD
+vdl2-hold-message-log-where-so = Hold the message log where it is, so one can be read without the next transmission pushing it up the screen. The decoder keeps running and the counters keep moving; letting go shows everything that arrived meanwhile.
+vdl2-nothing-decoded-yet = nothing decoded yet
+vdl2-nothing-matches-filter = nothing matches the filter
+vdl2-stations = STATIONS
+vdl2-nobody-heard-yet = nobody heard yet
+vdl2-vdl2-setup = VDL2 Setup
+vdl2-channels = Channels
+vdl2-every-25-khz-slot-136 = Every 25 kHz slot from 136.650 to 136.975 MHz. One downconverter each, all inside the same receiver window. Switching one off saves a little processor time; it does not make the others any more sensitive.
+vdl2-burst-threshold = Burst threshold
+vdl2-above-each-channel-s-own = above each channel's own noise floor
+vdl2-lower-catches-weaker-transmissions-costs = Lower catches weaker transmissions and costs processor time on noise; higher misses them. The floor is learned per channel and a change here does not throw it away.
+vdl2-keep-log = Keep in the log
+vdl2-messages-2 = {" "}messages
+vdl2-track-most = Track at most
+vdl2-stations-2 = {" "}stations
+vdl2-longest-silent-go-first = the longest silent go first
+vdl2-forget-station-after = Forget a station after
+vdl2-nothing-heard = with nothing heard from it
+vdl2-show-unread-payloads = Show unread payloads
+vdl2-hex = as hex
+vdl2-frames-carrying-x-25-clnp = Frames carrying X.25, CLNP or the datalink applications above them. SDRoxide names them and shows the bytes rather than reading them, and hiding them would hide how much of the traffic that is.
+vdl2-registration = Registration
+vdl2-flight = Flight
+vdl2-label = Label
+vdl2-block = Block
+vdl2-sequence = Sequence
+vdl2-mode = Mode
+vdl2-more-blocks-follow = more blocks follow
+vdl2-check = Check
+vdl2-message-crc-good = message CRC good
+vdl2-message-crc-not-checked = message CRC not checked
+vdl2-parity = Parity
+vdl2-link-control-no-payload = link control, no payload
+vdl2-name = NAME
+vdl2-addr = ADDR
+vdl2-type = TYPE
+vdl2-msgs = MSGS
+
+## cw (src/app/panels/cw.rs)
+
+cw-tone-being-copied-tone-transmitted = The tone being copied, and the tone transmitted — in CW they are the same frequency. Click the waterfall to move it onto a signal.
+cw-down-10-hz = Down 10 Hz
+cw-up-10-hz = Up 10 Hz
+cw-qrg-main-readout-tuning-line = QRG: the main readout and the tuning line are on the frequency being worked. Click for the dial instead, a sidetone pitch below it — what most radios show.
+cw-put-main-readout-tuning-line =
+    Put the main readout and the tuning line on the signal rather than on the dial, so the frequency shown is the one both operators would quote and the tuning line sits in the middle of the passband. Tuning is unchanged; only the numbers move.
+
+    Clicking a signal lands it on the cursor only as closely as the click step allows — Controls → click-to-tune rounding, 10 Hz by default. A coarse step leaves the signal off the pitch by up to half of it, and the readout will say so.
+cw-sending-speed-read-off-signal = Sending speed read off the signal
+cw-signal-noise-500-hz-same = Signal to noise in 500 Hz — the same figure a report quotes
+cw-how-far-off-cursor-signal = How far off the cursor the signal actually is. The decoder follows it; the passband does not, so nudge the cursor if it grows.
+cw-listening = — listening —
+cw-tx = ● TX
+cw-trainer = TRAINER
+cw-learn-morse-read-characters-words = Learn Morse: read characters and words, play them at your own speed, and a Koch drill that adds a character at a time. It plays here, through this computer's speakers — nothing keys the radio.
+cw-nothing-copied-yet = — nothing copied yet —
+cw-key-send-characters-you-send = Key to send — the characters you send appear here.
+cw-type-line-return-sends = Type a line, Return sends it…
+cw-type-here-send = Type here to send…
+cw-key = {" "}KEY ●{" "}
+cw-key-2 = {" "}KEY{" "}
+cw-hold-key-bound-cw-straight = Hold the key bound to CW straight key — Space by default, and any key you like in Settings → Controls — as a straight key: down while it is held, up on release, instead of typing text. The transmit box is locked while it is on, and the whole keyer is handed to the key: whatever text was queued is dropped.
+cw-radio-sends-own-keyer-text =
+    This radio sends from its own keyer: the text goes over the control port and the rig times the elements, so there is nothing between the straight key and the air for a hand to drive.
+
+    To hand-key it, set CW keying to "Sound card (MCW)" in Settings → Radio. The rig is then held on a sideband and the keyer's own sidetone is transmitted as audio, which is the route the straight key drives.
+cw-watchdog = WATCHDOG
+cw-straight-key-was-held-down = The straight key was held down too long — a lost key-up rather than a hand — so the carrier was dropped and transmit switched off. Press the key again to carry on.
+cw-tx-2 = {"  "}TX ON{"  "}
+cw-tx-3 = {"   "}TX{"   "}
+cw-send-what-box-now-without = Send what is in the box now, without waiting for Return
+cw-hold-key-down-between-characters = Hold the key down between characters, so nothing typed waits
+cw-call-cq = {" "}CALL CQ{" "}
+cw-nocall = NOCALL
+cw-clear = {" "}CLEAR{" "}
+cw-stop-sending-drop-whatever-has = Stop sending and drop whatever has not gone out. With the straight key on, the read-back over what you keyed goes with it.
+cw-sidetone = SIDETONE
+cw-play-keyed-tone-through-computer = Play the keyed tone through this computer's speakers as well as sending it, so you hear what you are sending. On `Sound card (MCW)` the tone goes out to the rig and nowhere else, so without this you send in silence. Off where the rig's own monitor or an off-air copy already does the job.
+cw-hold-what-typed-until-return = Hold what is typed until Return, then send the line in one piece instead of keying each character as it is typed. Worth having on a transceiver that keys itself from text, where every hand-off to its keyer is another transmit-receive cycle.
+cw-your-own-message-buttons-contest = Your own message buttons — a contest exchange, a name-and-QTH reply, TNX 73 GL. Each sends its whole text in one go, and F2–F10 press the first nine. They travel with the station's configuration, so a remote client has them too.
+cw-cw-messages = CW MESSAGES
+cw-clear-rx = {" "}CLEAR RX{" "}
+cw-empty-receive-window-straight-key = Empty the receive window and the straight key's read-back. Nothing that is on the air stops.
+cw-lock = LOCK
+cw-decode-speed-set-here-instead = Decode at the speed set here instead of reading it off the signal. Helps a signal too weak for the speed search to settle.
+cw-farnsworth-send-characters-full-speed = Farnsworth: send the characters at full speed and stretch only the gaps between them, so they are heard at the right rhythm but arrive slowly enough to write down.
+cw-off-normal-spacing = Off — normal spacing
+cw-keying-speed = Keying speed
+cw-idle-0 = IDLE 0
+cw-how-long-transmit-held-after = How long transmit is held after the last character, or after the straight key is let go, before the carrier drops. Longer bridges a slow typist's pauses; shorter gets off the frequency sooner; Off drops it as soon as everything queued has gone out.
+cw-off-drop-once = Off — drop at once
+
+## textmodem (src/app/panels/text_modem.rs)
+
+textmodem-tune-down-10-hz = Tune down 10 Hz
+textmodem-tune-up-10-hz = Tune up 10 Hz
+textmodem-tx = ● TX
+textmodem-listening = — listening —
+textmodem-type-line-return-sends = Type a line, Return sends it…
+textmodem-type-here-transmit = Type here to transmit…
+textmodem-tx-2 = {"  "}TX ON{"  "}
+textmodem-tx-3 = {"   "}TX{"   "}
+textmodem-call-cq = {" "}CALL CQ{" "}
+textmodem-nocall = NOCALL
+textmodem-clear = {" "}CLEAR{" "}
+textmodem-hold-what-typed-until-return = Hold what is typed until Return, then send the line in one piece instead of streaming each character onto the air as it is typed. Lets a line be read back and corrected before any of it goes out.
+textmodem-your-own-message-buttons-working = Your own message buttons — working conditions, the weather, a standard reply. Each sends its whole text in one go, and F2–F10 press the first nine. They travel with the station's configuration, so a remote client has them too.
+textmodem-messages = MESSAGES
+textmodem-hell = HELL
+textmodem-contrast = Contrast
+textmodem-harder-softer-dots-redraws-whole = Harder or softer dots — redraws the whole strip
+textmodem-width = Width
+textmodem-t-2row = {" "}2ROW{" "}
+textmodem-draw-every-column-twice-stacked = Draw every column twice, stacked. Hell has no vertical sync, so this keeps one complete copy of the text readable whatever the phase.
+textmodem-rev = {" "}REV{" "}
+textmodem-reverse-video-light-dots-dark = Reverse video — light dots on dark paper
+textmodem-clear-rx = {" "}CLEAR RX{" "}
+textmodem-hold-channel-idle-sends-blank = Hold the channel: idle sends blank paper, so the strip keeps scrolling
+textmodem-hold-what-typed-until-return-2 = Hold what is typed until Return, then send the line in one piece instead of painting each character onto the strip as it is typed. A correction typed live is already on the paper; one made before Return never was.
+textmodem-shift = Shift
+textmodem-shift-5-hz = Shift −5 Hz
+textmodem-shift-5-hz-2 = Shift +5 Hz
+textmodem-baud = Baud
+textmodem-reverse-swap-mark-space-needed = Reverse: swap mark and space. Needed when the signal is received on the opposite sideband to the one it was sent on, which inverts the tones.
+textmodem-track-tuning-error-automatically-instead = Track tuning error automatically instead of staying pinned to the cursor.
+textmodem-tones = Tones
+textmodem-mode = Mode
+textmodem-off-keyed = on/off keyed
+
+## ais (src/app/panels/ais.rs)
+
+ais-starting-ais-decoder = starting the AIS decoder…
+ais-tune-between-two-ais-channels = Tune between the two AIS channels — 161.975 (AIS 1, marine 87B) and 162.025 (AIS 2, 88B). The dial goes in the middle because nothing transmits there, so a zero-IF receiver's DC spike lands on neither.
+ais-setup = SETUP
+ais-channels-timeouts-trail-length-how = Channels, timeouts, trail length and how far ahead the vectors reach
+ais-vessels = VESSELS
+ais-nothing-heard-yet = nothing heard yet
+ais-virtual-nothing-there = virtual — nothing is there
+ais-position-stale = position stale
+ais-search-rescue-transmitter-man-overboard = a search-and-rescue transmitter, man-overboard beacon or AIS EPIRB
+ais-call-sign = call sign
+ais-station-time = station time
+ais-dgnss = {" "}(DGNSS)
+ais-first-heard = first heard
+ais-center = CENTER
+ais-put-vessel-middle-chart = Put this vessel in the middle of the chart
+ais-last-message-station-nmea-sentences = The last message from this station, as the NMEA sentences a receiver would put on the wire. Paste it into any other AIS decoder to check what sdroxide made of it.
+ais-ais-setup = AIS Setup
+ais-channels = Channels
+ais-drop-chart-after = Drop from chart after
+ais-without-position-report = without a position report
+ais-five-minutes-default-not-ads = Five minutes by default, not ADS-B's ten seconds: a vessel at anchor reports once every three minutes, and a shorter window would blank most of a harbour between two perfectly good reports. Past it the ship comes off the chart and its row greys — it is not faded, because a dim symbol at a stale position is still a claim about where a ship is, in the same ink as the true ones.
+ais-drop-list-after = Drop from list after
+ais-nothing-heard-all = with nothing heard at all
+ais-message-carrying-ship-s-name = The message carrying a ship's name comes round every six minutes, so a short list window keeps throwing vessels away just before they say what they are called.
+ais-trail-length = Trail length
+ais-history-behind-each-target = of history behind each target
+ais-minutes-rather-than-points-because = In minutes rather than in points, because AIS reporting rates span two orders of magnitude: a fixed count would be eighty seconds of a ferry and two hours of an anchored tanker, drawn identically. Zero switches trails off.
+ais-speed-vector = Speed vector
+ais-how-far-ahead-vector-reaches = how far ahead the vector reaches
+ais-slot-threshold = Slot threshold
+ais-above-channel-s-learned-noise = above the channel's learned noise floor
+ais-track-most = Track at most
+ais-vessels-2 = {" "}vessels
+ais-ais-receive-only-here-always = AIS is receive-only here and always will be: it is a safety-of-life service, and putting false vessel traffic on it is not something a licence covers.
+ais-fill-my-grid-digimode-setup = Fill in My grid in the digimode setup for ranges and bearings, and so the chart frames itself around where you are rather than around whatever is furthest away.
+ais-name = NAME
+ais-mmsi = MMSI
+ais-type = TYPE
+
+## qo100 (src/app/qo100.rs)
+
+qo100-receiver-cannot-reach-10489-750 = This receiver cannot reach 10489.750 MHz on its own — set up an LNB/converter offset first (Settings ▸ Radio)
+qo100-run-fast-spectral-tracker-every = Run the fast spectral tracker: every second, look in the parking window for the beacon's two symmetric lobes and report where the carrier sits
+qo100-telemetry = TELEMETRY
+qo100-also-run-ao-40-uncoded = Also run the AO-40 uncoded frame decoder — sync word, CRC and the telemetry text — with a step-by-step readout (carrier → sync → CRC) of how far each pass gets
+qo100-auto = AUTO
+qo100-auto-correct-let-tracker-adjust = Auto-correct: let the tracker adjust the converter/LNB offset by itself — a slow closed loop that, on a clean and steady estimate, nudges the beacon back onto 10489.750 MHz and holds it there as the LNB drifts. Reopens the front end each time it acts.
+qo100-narrower-search-smaller-slice = Narrower — search a smaller slice
+qo100-wider-when-beacon-isn-t = Wider — for when the beacon isn't found at the current width
+qo100-clear-mark = clear mark
+qo100-drop-hand-placed-beacon-mark = Drop the hand-placed beacon mark and go back to the decoder's own reading
+qo100-lo = lo −
+qo100-lo-2 = lo +
+qo100-hi = hi −
+qo100-hi-2 = hi +
+qo100-radio-s-own-tuning-range = This radio's own tuning range doesn't reach 10489.750 MHz — it needs an LNB/converter offset (Settings ▸ Radio ▸ Converter) before this window can do anything.
+qo100-open-settings-radio = Open Settings ▸ Radio
+qo100-tune-10489-750-mhz = Tune to 10489.750 MHz
+qo100-tip-if-you-can-see = tip: if you can see the beacon in the strip but it won't lock, double-click it — that marks it as 10489.750 MHz and lets APPLY correct to it
+qo100-tracker = TRACKER
+qo100-no-twin-lobe-shape-parking = no twin-lobe shape in the parking window
+qo100-shape = SHAPE
+qo100-drift = DRIFT
+qo100-need-longer-run-estimates = — (need a longer run of estimates)
+qo100-cycles = CYCLES
+qo100-receiver = RECEIVER
+qo100-target = TARGET
+qo100-measured = MEASURED
+qo100-clicked = {"  "}(clicked)
+qo100-tracker-2 = {"  "}(tracker)
+qo100-not-locked-yet = not locked yet
+qo100-converter-offset = CONVERTER OFFSET
+qo100-decode = DECODE
+qo100-decode-filling-first-frame-buffer = DECODE — filling the first frame buffer…
+qo100-decode-off-turn-telemetry-chip = DECODE — off. Turn on the TELEMETRY chip (top row) for the carrier → sync → CRC readout.
+qo100-apply-correction = {" "}APPLY CORRECTION{" "}
+qo100-write-converter-lnb-offset-puts = Write the converter/LNB offset that puts the beacon where you clicked onto 10489.750 MHz, and reopen the receiver — the same brief interruption Settings ▸ Radio ▸ Apply makes
+qo100-write-converter-lnb-offset-puts-2 = Write the converter/LNB offset that puts the tracker's estimate onto 10489.750 MHz, and reopen the receiver — the same brief interruption Settings ▸ Radio ▸ Apply makes
+qo100-waiting-second-crc-valid-frame = Waiting for a second CRC-valid frame before offering to write this — one lock alone could be a chance match
+qo100-write-corrected-converter-lnb-offset = Write the corrected converter/LNB offset and reopen the receiver — a brief interruption, the same one Settings ▸ Radio ▸ Apply makes
+qo100-decoder-runs-receiving-station-readout = decoder runs on the receiving station — its readout is not sent to remote clients
+qo100-starting = starting…
+qo100-searching-first-window-fills-after = searching — the first window fills after about 24 s, then repeats
+
+## js8 (src/app/panels/js8.rs)
+
+js8-multi = MULTI
+js8-decode-every-js8-speed-not = Decode every JS8 speed, not only the one you transmit at. The four speeds share the sub-band and are four different waveforms, so without this a station on another speed is invisible — and an exchange between two speeds cannot happen at all. Costs about four times the receive CPU.
+js8-hb-auto = HB AUTO
+js8-turbo-does-not-beacon-local = Turbo does not beacon — it is the local and VHF speed
+js8-beacon-your-callsign-grid-every = Beacon your callsign and grid every 15 minutes
+js8-until-next-heartbeat = Until the next heartbeat
+js8-setup = ⚙ SETUP
+js8-tx = ● TX
+js8-heard = HEARD
+js8-nothing-heard-yet = — nothing heard yet —
+js8-dxcc = DXCC
+js8-band = BAND
+js8-grid = GRID
+js8-dupe = DUPE
+js8-reply = REPLY
+js8-no-messages = — no messages —
+js8-cq = {" "}CQ{" "}
+js8-hb = {" "}HB{" "}
+js8-clear = {" "}CLEAR TO{" "}
+js8-forget-selected-station-composer-goes = Forget the selected station — the composer goes back to @ALLCALL
+js8-already-addressing-allcall = Already addressing @ALLCALL
+js8-stop = {" "}STOP{" "}
+js8-send = {" "}SEND{" "}
+js8-message = Message…
+
+## logbook (src/app/logbook.rs)
+
+logbook-logbook = LOGBOOK
+logbook-new-entry = + NEW ENTRY
+logbook-adif = ADIF
+logbook-import = IMPORT
+logbook-import-qsos-adif-adi-adif = Import QSOs from an ADIF (.adi or .adif) file
+logbook-new-qso = NEW QSO
+logbook-edit-qso = EDIT QSO
+logbook-call = Call
+logbook-lookup = LOOKUP
+logbook-look-up-name-qth-grid = Look up name / QTH / grid
+logbook-grid = Grid
+logbook-freq-mhz = Freq MHz
+logbook-mode = Mode
+logbook-rst-sent = RST sent
+logbook-rst-rcvd = RST rcvd
+logbook-name = Name
+logbook-state = State
+logbook-country = Country
+logbook-date-utc = Date UTC
+logbook-time = Time
+logbook-pwr-w = Pwr W
+logbook-contest = Contest
+logbook-s-sent = S# sent
+logbook-s-rcvd = S# rcvd
+logbook-comment = Comment
+logbook-save = {" "}SAVE{" "}
+logbook-cancel = CANCEL
+logbook-lotw = LoTW ✓
+logbook-eqsl = eQSL ✓
+logbook-card = card ✓
+logbook-lotw-2 = LoTW ↑
+logbook-eqsl-2 = eQSL ↑
+logbook-qrz = QRZ ↑
+logbook-hamqth = HamQTH ↑
+logbook-club-log = Club Log ↑
+logbook-wavelog = Wavelog ↑
+logbook-delete-entry = Delete this entry
+logbook-edit = EDIT
+logbook-upload-qso-configured-logs = Upload this QSO to configured logs
+logbook-no-qsos-yet-run-ft8 = no QSOs yet — run FT8/FT4 or add a manual entry
+
+## scanner (src/app/scanner.rs)
+
+scanner-scanner = Scanner
+scanner-work-through-stored-memory-channels = Work through the stored memory channels
+scanner-work-through-slice-band-channel = Work through a slice of a band on a channel grid
+scanner-stop = STOP
+scanner-start = START
+scanner-from = From
+scanner-step = Step
+scanner-mode = Mode
+scanner-range-empty-high-edge-has = That range is empty — the high edge has to be at least one channel above the low one.
+scanner-skip-while-holding-pass-over = SKIP while it is holding to pass over that channel from now on
+scanner-skipping = Skipping
+scanner-clear = CLEAR
+scanner-stop-passing-over-any-them = Stop passing over any of them
+scanner-stop-passing-over-channel = Stop passing over this channel
+scanner-no-memory-channels-stored-yet = No memory channels stored yet — store some in the MEM window.
+scanner-skip-channel-pass-over = SKIP a channel to pass over it
+scanner-skip = SKIP
+scanner-look-all-channels-fall-inside = Look for all the channels that fall inside one receiver window on the same transform the panadapter is made from, and only tune to the ones something is on. A list on one band then costs one tune a lap however long it is, instead of a settling time per channel. The scan still listens on each candidate before stopping, so what stops it is unchanged — but the sweep measures through the FFT rather than through the receiver's filter, so check the threshold if it starts stopping on nothing.
+scanner-radio-hands-over-demodulated-audio = This radio hands over demodulated audio and has no spectrum of its own to search, so its memory scan visits every channel either way.
+scanner-fast = FAST
+scanner-read-list-off-spectrum-instead = read the list off the spectrum instead of visiting every channel
+scanner-folders = Folders
+scanner-scan-every-folder-every-folder = Scan every folder, and every folder made from now on. Pick folders instead to scan only those.
+scanner-unfiled = Unfiled
+scanner-nothing-filed-under-folders-you = Nothing is filed under the folders you picked.
+scanner-stops = Stops at
+scanner-use-receiver-s-own-squelch = Use the receiver's own squelch, so the scan stops exactly where the audio would open
+scanner-squelch-off-scan-will-stop = squelch is off — the scan will stop on the first thing it looks at
+scanner-channel-power-signal-has-reach = Channel power a signal has to reach to stop the scan
+scanner-listens = Listens for
+scanner-how-long-stay-candidate-before = How long to stay on a candidate before judging it. Below about a tenth of a second the level meter has not settled and weak signals get missed
+scanner-resumes = Resumes
+scanner-carry-once-signal-drops = Carry on once the signal drops
+scanner-carry-after-fixed-time-regardless = Carry on after a fixed time, regardless
+scanner-stay-until-you-press-next = Stay until you press NEXT
+scanner-how-long-stay = How long to stay
+scanner-how-long-wait-after-signal = How long to wait after the signal drops
+scanner-move-don-t-stop-channel = Move on, and don't stop on this channel again
+scanner-next = NEXT
+scanner-move-now = Move on now
+
+## adsb (src/app/panels/adsb.rs)
+
+adsb-starting-ads-b-decoder = starting the ADS-B decoder…
+adsb-ads-b = ADS-B
+adsb-t-1090-mhz-mode-s = 1090 MHz Mode S
+adsb-tune-receiver-1090-000-mhz = Tune the receiver to 1090.000 MHz, the worldwide ADS-B downlink. There is only one channel.
+adsb-setup = SETUP
+adsb-timeouts-trail-length-how-far = Timeouts, trail length and how far ahead the speed vectors reach
+adsb-aircraft = AIRCRAFT
+adsb-nothing-heard-yet = nothing heard yet
+adsb-ground = on ground
+adsb-position-stale = position stale
+adsb-gnss-altitude = GNSS altitude
+adsb-ground-speed = ground speed
+adsb-vertical-rate = vertical rate
+adsb-first-heard = first heard
+adsb-center = CENTER
+adsb-put-aircraft-middle-map = Put this aircraft in the middle of the map
+adsb-last-frame-accepted-aircraft = The last frame accepted from this aircraft
+adsb-ads-b-setup = ADS-B Setup
+adsb-drop-map-after = Drop from map after
+adsb-without-position-report = without a position report
+adsb-past-aircraft-comes-off-map = Past this the aircraft comes off the map and its row greys. It is not faded: a dim square at a stale position is still a claim about where an aeroplane is, in the same ink as the true ones.
+adsb-drop-list-after = Drop from list after
+adsb-nothing-heard-all = with nothing heard at all
+adsb-trail-length = Trail length
+adsb-points = {" "}points
+adsb-history-dots-behind-each-target = history dots behind each target
+adsb-speed-vector = Speed vector
+adsb-how-far-ahead-leader-line = how far ahead the leader line reaches
+adsb-one-minute-usual-radar-convention = One minute is the usual radar convention: the line is exactly as long as the distance the aircraft covers in that time, so two equal leaders are two equal speeds at any zoom. Zero switches them off.
+adsb-track-most = Track at most
+adsb-aircraft-2 = {" "}aircraft
+adsb-aircraft-ground-are-placed-against = Aircraft on the ground are placed against the station's own position — a surface squitter has no unambiguous decode of its own — so fill in My grid in the digimode setup if the airport nearby shows nothing.
+adsb-call = CALL
+adsb-icao = ICAO
+adsb-v-s = V/S
+
+## drm (src/app/drm.rs)
+
+drm-waiting-receiver = waiting for the receiver…
+drm-not-drm-set-mode-drm = Not in DRM. Set the mode to DRM on a digital shortwave broadcast — the dial goes on the channel centre, not on a sideband.
+drm-no-drm-signal-locked-decoder = No DRM signal locked. The decoder needs a few seconds on a clean carrier: DRM interleaves over 400 ms or 2 s before any of it can be read.
+drm-station-s-audio-codec-not = This station's audio codec is not decoding here. xHE-AAC needs libfdk-aac on the system — it cannot be built in, because its licence and this program's are incompatible. Install it (Debian/Ubuntu: libfdk-aac2, Arch: libfdk-aac, macOS: brew install fdk-aac, Windows: libfdk-aac-2.dll beside sdroxide.exe) and restart. Everything else on this screen is decoding normally.
+drm-quality = QUALITY
+drm-last-minute = last minute
+drm-waiting-locked-signal = waiting for a locked signal
+drm-audio-frames-decoding-but-station = Audio frames decoding — but this station's codec cannot be decoded here
+drm-audio-frames-decoding = Audio frames decoding
+drm-samples-reaching-decoder = Samples reaching the decoder
+drm-time = TIME
+drm-symbol-timing-recovered = Symbol timing recovered
+drm-frame = FRAME
+drm-transmission-frames-found = Transmission frames found
+drm-fast-access-channel-what-transmission = Fast Access Channel — what the transmission is
+drm-service-description-channel-what-services = Service Description Channel — what the services are
+drm-audio = AUDIO
+drm-constellation = CONSTELLATION
+drm-waiting-decoded-symbols = waiting for decoded symbols
+drm-sampled-across-frame = sampled across the frame
+drm-whole-frame = whole frame
+drm-mode = MODE
+drm-robustness-mode-channel-width-ground = Robustness mode and channel width. A is for a ground-wave path and carries the most; D is for a badly scattered sky-wave one and carries the least.
+drm-interleave = INTERLEAVE
+drm-how-far-transmission-spreads-each = How far the transmission spreads each frame in time. Long rides out deeper fades and takes correspondingly longer to acquire.
+drm-protection = PROTECTION
+drm-offset = OFFSET
+drm-residual-sample-clock-error-against = Residual sample-clock error against the transmitter. Large and steady means the receiver's reference is off, not the broadcast.
+drm-doppler = DOPPLER
+drm-delay = DELAY
+drm-doppler-delay-spread-path-how = Doppler and delay spread of the path — how fast it is moving and how far apart its echoes arrive.
+drm-service = SERVICE
+drm-decode-service-multiplex = Decode this service of the multiplex
+
+## atchat (src/app/panels/atchat.rs)
+
+atchat-starting-atchat-net-station = starting the AtCHAT NET station…
+atchat-atchat = ATCHAT
+atchat-net-multi-station-keyboard-file = NET — multi-station keyboard & file
+atchat-net = {" "}ON NET{" "}
+atchat-net-click-leave-state-kept = On the net — click to leave (state is kept; click again to rejoin)
+atchat-rejoin = {" "}REJOIN{" "}
+atchat-off-net-click-rejoin = Off the net — click to rejoin
+atchat-off-net = off net
+atchat-carrier = ● CARRIER
+atchat-another-station-transmitting-channel-busy = Another station is transmitting — the channel is busy.
+atchat-tx = ● TX
+atchat-setup = ⚙ SETUP
+atchat-station-callsign-virtual-channel-address = Station callsign and the virtual-channel address
+atchat-virtual-channel = VIRTUAL CHANNEL
+atchat-work-net-over-tcp-endpoint = Work the net over a TCP endpoint instead of the radio — a channel_server-compatible loopback for radio-less development. Off puts the station on the air.
+atchat-roster = ROSTER
+atchat-nobody-heard-yet = nobody heard yet
+atchat-chat = {" "}CHAT{" "}
+atchat-common-channel-lines-here-go = The common channel — lines here go to everyone (ALL)
+atchat-log = {" "}LOG{" "}
+atchat-station-s-own-air-activity = The station's own on-air activity — master election, roster ageing, ARQ retries
+atchat-no-activity-logged-yet = No activity logged yet.
+atchat-no-messages-yet = No messages yet.
+atchat-message-everyone-all = message to everyone (ALL)
+atchat-send = {" "}SEND{" "}
+atchat-transfers = TRANSFERS
+atchat-all = → ALL
+atchat-sent-file-follows-active-chat = A sent file follows the active chat tab
+atchat-send-file = {" "}SEND FILE{" "}
+atchat-send-file-image-over-air = Send a file or image over the air, block-CRC-ARQ
+atchat-nothing-flight = nothing in flight
+atchat-images = IMAGES
+atchat-no-images-received = No images received.
+
+
+## rds (src/app/rds.rs)
+
+rds-station = STATION
+rds-diagnostics = DIAGNOSTICS
+rds-which-programme-type-table-read = Which programme-type table to read this station against. RDS is used everywhere outside North America; RBDS adds the call sign a US station's identity code spells out. Auto follows the extended country code the station sends, and until one arrives it will not spell out a call sign — the identity ranges it would read are shared with nine countries' RDS codes, so select RBDS to name a station that sends no country code.
+rds-waiting-receiver = waiting for the receiver…
+rds-no-rds-station-not-every = No RDS on this station. Not every transmitter carries it, and a weak one may carry it without it arriving.
+rds-rds-only-carried-wfm-broadcast = RDS is only carried on WFM broadcast stations.
+rds-holding = HOLDING
+rds-block-sync-has-dropped-last = Block sync has dropped — this is the last station read.
+rds-identity = IDENTITY
+rds-programme = PROGRAMME
+rds-described = DESCRIBED AS
+rds-content = CONTENT
+rds-music = Music
+rds-speech = Speech
+rds-traffic = TRAFFIC
+rds-announcement-air-now = announcement on air now
+rds-carried-station = carried by this station
+rds-not-carried = not carried
+rds-radio-text = RADIO TEXT
+rds-station-clock = STATION CLOCK
+rds-country-code = COUNTRY CODE
+rds-also = ALSO ON
+rds-also-tagged = ALSO TAGGED
+rds-sync = SYNC
+rds-no-sync = NO SYNC
+rds-blocks-failed-their-check-plus = Blocks that failed their check, plus those the error corrector had to repair. Corrections count as errors on purpose: a rising figure is the first sign a station is about to stop decoding.
+rds-front-end-overloading = FRONT END OVERLOADING
+rds-converter-clipping-which-puts-distortion = The converter is clipping, which puts distortion right across the multiplex — including on the 57 kHz data subcarrier. Turn the RF gain down, or switch in an attenuator: RDS goes about a decibel before anything is audible, so a station that sounds perfect can still be far too strong for its data to survive.
+rds-group-types = GROUP TYPES
+rds-recent-groups-newest-last = RECENT GROUPS — newest last
+rds-nothing-decoded-yet = nothing decoded yet
+
+## winlink (src/app/winlink.rs)
+
+winlink-mail = MAIL
+winlink-abort = ABORT
+winlink-stop-session-progress = Stop the session in progress
+winlink-connect = CONNECT
+winlink-compose = COMPOSE
+winlink-connecting = connecting…
+winlink-not-connected-yet = not connected yet
+winlink-loading = loading…
+winlink-date = DATE
+winlink-from = FROM
+winlink-subject = SUBJECT
+winlink-no-subject = (no subject)
+winlink-delete-message = Delete this message
+winlink-arch = ARCH
+winlink-move-archive = Move to the archive
+winlink-select-message = select a message
+winlink-reply = REPLY
+winlink-delete = DELETE
+winlink-to = To
+winlink-cc = Cc
+winlink-subject-2 = Subject
+winlink-callsign-smtp-someone-example-org = A callsign, or SMTP:someone@example.org for internet mail. Separate several with commas.
+winlink-file-outbox = FILE IN OUTBOX
+winlink-discard = DISCARD
+winlink-filed-messages-go-out-next = filed messages go out on the next session
+winlink-mail-log = MAIL LOG
+winlink-session-running = session running…
+winlink-no-session-yet = no session yet
+
+## wspr (src/app/panels/wspr.rs)
+
+wspr-receptions = RECEPTIONS
+wspr-save-wspr-reception-list-csv = Save the WSPR reception list as CSV
+wspr-wspr = WSPR
+wspr-weak-signal-propagation-beacon = weak-signal propagation beacon
+wspr-time-left-two-minute-slot = Time left in this two-minute slot. At the end of it the recording goes to the decoder and the next transmit decision lands.
+wspr-tx = ● TX
+wspr-decoding = decoding…
+wspr-band = Band
+wspr-last-slot = Last slot
+wspr-nothing-heard = nothing heard
+wspr-receive-only = receive only
+wspr-next-slot = Next slot
+wspr-waiting-radio-take-change = waiting for the radio to take the change…
+wspr-hop-next = Hop next
+wspr-transmit = TRANSMIT
+wspr-receive-only-2 = Receive only.
+wspr-power = POWER
+wspr-what-you-actually-radiate = what you actually radiate
+wspr-goes-out-message-everyone-who = This goes out in the message, and everyone who hears you judges the path by it — so an optimistic figure here makes their measurements wrong as well as yours.
+wspr-roam = ROAM
+wspr-pick-different-offset-inside-200 = Pick a different offset inside the 200 Hz window for every transmission. This is the convention: two hundred hertz shared by everyone only works if nobody parks in the middle of it. Off holds where the cursor is.
+wspr-band-hop = BAND HOP
+wspr-move-dial-band-band-between = Move the dial from band to band between slots, so one receiver samples the whole spectrum instead of one slice of it. Turning the VFO yourself pauses it — press this twice to resume.
+wspr-upload = UPLOAD
+wspr-send-what-station-decodes-wsprnet = Send what this station decodes to wsprnet.org. Reporting what you hear is what makes a WSPR receiver part of the network; it puts nothing on the air.
+wspr-who-heard-me = WHO HEARD ME
+wspr-ask-wsprnet-org-every-few = Ask wsprnet.org every few minutes which stations decoded this one. WSPR has no acknowledgement of any kind, so this is the only way a beacon learns anything about its own reach.
+wspr-bands = BANDS
+wspr-none-selected-hopping-has-nowhere = none selected — hopping has nowhere to go
+wspr-set-your-callsign-grid-general = Set your callsign and grid on the General tab of Settings before transmitting.
+
+## packet (src/app/panels/packet.rs)
+
+packet-monitor = MONITOR
+packet-busy = BUSY
+packet-frames-arrived-but-failed-their = Frames that arrived but failed their check sequence — a collision, a fade, or a signal too weak to read.
+packet-setup = ⚙ SETUP
+packet-station-callsign-speed-tx-delay = Station callsign, speed, TX delay, the digipeater path, the beacon and the KISS server
+packet-starting-packet-modem = starting the packet modem…
+packet-nothing-heard-yet = nothing heard yet
+packet-terminal = TERMINAL
+packet-connected = {" "}CONNECTED{" "}
+packet-calling = {" "}CALLING{" "}
+packet-idle = {" "}IDLE{" "}
+packet-extended-sequence-numbers-window-up = Extended sequence numbers — a window of up to 127 frames.
+packet-frames-sent-not-yet-acknowledged = Frames sent and not yet acknowledged by the far end.
+packet-retries-against-link-s-limit = Retries against this link's limit. A count climbing while the unacknowledged frames stay put is what a fading path looks like from this side.
+packet-mail-window-using-link = The MAIL window is using the link.
+packet-one-radio-one-channel-one = One radio, one channel, one link. A Winlink session and this terminal are two ways to use it, and whichever asks first gets it.
+packet-digipeaters-nearest-first-separated-commas = Digipeaters, nearest first, separated by commas — OE3XLR-1,OE3XMS-1. Leave it empty for a station you can hear directly, or to use the default path from the packet settings.
+packet-disconnect = {" "}DISCONNECT{" "}
+packet-hang-up-properly-wait-far = Hang up properly, and wait for the far end to agree. Changing mode instead ends the session without telling anybody.
+packet-connect = {" "}CONNECT{" "}
+packet-mail-window-has-link-finish = The MAIL window has the link. Finish or stop that session first.
+packet-station-has-no-callsign-yet = This station has no callsign yet — set one under SETUP, above the monitor pane. Nothing transmits until it is set.
+packet-call-station-connected-mode-node = Call this station in connected mode — a node, a BBS, or another operator.
+packet-needs-callsign-call = Needs a callsign to call.
+packet-clear = {" "}CLEAR{" "}
+packet-empty-transcript-link-untouched-connected = Empty the transcript. The link is untouched — a connected station stays connected.
+packet-not-connected-type-callsign-above = Not connected. Type a callsign above and press CONNECT to call a node or a BBS.
+packet-type-here = type here
+packet-not-connected = not connected
+packet-send = {" "}SEND{" "}
+packet-send-line-node-bbs-reads = Send the line. A node or a BBS reads one line at a time.
+
+## fsq (src/app/panels/fsq.rs)
+
+fsq-speed = Speed
+fsq-call = Call
+fsq-callsign-directed-fsqcall-messages-defaults = Callsign for directed (FSQCALL) messages; defaults to your callsign
+fsq-tx = ● TX
+fsq-contacts = CONTACTS
+fsq-heard = HEARD
+fsq-none = — none —
+fsq-allcall = ALLCALL
+fsq-image = IMAGE
+fsq-clear = CLEAR
+fsq-forget-pictures-received-so-far = Forget the pictures received so far
+fsq-send-image = Send image…
+fsq-right-click-remove = Right-click to remove
+fsq-remove-picture = Remove this picture
+fsq-listening = — listening —
+fsq-message = Message…
+fsq-send = {" "}SEND{" "}
+fsq-call-cq = {" "}CALL CQ{" "}
+fsq-heard-2 = {" "}? heard{" "}
+fsq-clear-2 = {" "}CLEAR{" "}
+fsq-fsq-contacts = FSQ Contacts
+fsq-add = Add
+
+## publicsdr (src/app/publicsdr.rs)
+
+publicsdr-tab = + TAB
+publicsdr-open-receiver-new-radio-own = Open this receiver as a new radio, in its own tab
+publicsdr-point-radio-receiver-replacing-whatever = Point *this* radio at the receiver, replacing whatever interface it is on now — asked again first, because that is a whole radio's worth of setting up
+publicsdr-not-stated = not stated
+publicsdr-replace = REPLACE
+publicsdr-point-radio-you-are-receiver = Point the radio you are on at this receiver
+publicsdr-tab-instead = + TAB INSTEAD
+publicsdr-open-receiver-another-radio-leave = Open the receiver as another radio and leave this one alone
+publicsdr-cancel = CANCEL
+publicsdr-public-sdrs = PUBLIC SDRS
+publicsdr-available = AVAILABLE
+publicsdr-hide-receivers-are-full-ones = Hide receivers that are full, and the ones whose operator has not opened any channels to apps other than a browser
+publicsdr-band = IN BAND
+publicsdr-only-receivers-cover-current-dial = Only receivers that cover the current dial frequency
+publicsdr-low-bw = LOW BW
+publicsdr-take-spyserver-low-bandwidth-shape = Take a SpyServer in its low-bandwidth shape: a narrow I/Q window that follows the dial plus the server's own band view, instead of megabits of wideband I/Q. No effect on a KiwiSDR, which has only the one shape.
+publicsdr-refresh = ⟳ REFRESH
+publicsdr-fetch-both-directories-again = Fetch both directories again
+publicsdr-name-place-antenna-band = name, place, antenna, band
+publicsdr-clear-search = Clear the search
+publicsdr-fetching-receiver-lists = Fetching the receiver lists…
+publicsdr-machine-radio-attached-does-not = The machine this radio is attached to does not answer device questions, so it cannot fetch the lists either.
+publicsdr-no-match = no match
+publicsdr-nothing-matches-try-turning-filter = nothing matches — try turning a filter chip back on
+publicsdr-radio = this radio
+publicsdr-radio-s-configuration-has-not = This radio's configuration has not arrived from the machine it is on yet, so there is nothing to point at the receiver — take it with + TAB instead.
+publicsdr-position-not-published-so-nothing = {" "}Its position is not published, so nothing it hears will be reported.
+
+## hd (src/app/hd.rs)
+
+hd-hd-radio = HD Radio
+hd-waiting-receiver = waiting for the receiver…
+hd-not-hd-radio-set-mode = Not in HD Radio. Set the mode to HD Radio on an FM broadcast carrying the digital sidecars — the dial goes on the analog carrier's centre, not beside it.
+hd-no-hd-radio-lock-digital = No HD Radio lock. The digital sidebands are transmitted about 20 dB below the analog carrier, so a listenable station can still be too noisy to decode: the decoder needs a few seconds on a clean one.
+hd-sync = SYNC
+hd-ofdm-frame-timing-recovered = OFDM frame timing recovered
+hd-audio = AUDIO
+hd-audio-frames-decoding = Audio frames decoding
+hd-quality = QUALITY
+hd-lower = LOWER
+hd-upper = UPPER
+hd-last-minute = last minute
+hd-waiting-locked-signal = waiting for a locked signal
+hd-mer-l = MER L
+hd-modulation-error-ratio-lower-digital = Modulation error ratio of the lower digital sideband.
+hd-mer-u = MER U
+hd-modulation-error-ratio-upper-digital = Modulation error ratio of the upper digital sideband.
+hd-cber = CBER
+hd-channel-bit-error-ratio-after = Channel bit-error ratio after the inner code. Below about 1e-3 the outer code can correct it; above that the audio starts to break up.
+hd-offset = OFFSET
+hd-residual-carrier-frequency-offset-large = Residual carrier frequency offset. Large and steady means the receiver's reference is off, not the broadcast.
+hd-psmi = PSMI
+hd-primary-service-mode-indicator-which = Primary Service Mode Indicator: which of the FM hybrid service modes the station is transmitting.
+hd-programme = PROGRAMME
+hd-restricted-access = {" "}— restricted access
+
+## bands (src/app/bands.rs)
+
+bands-bands = BANDS
+bands-daylight = ☀ DAYLIGHT
+bands-night = ☾ NIGHT
+bands-no-forecast-yet-fetching-hamqsl = · no forecast yet — fetching from HAMQSL.com
+bands-band = BAND
+bands-condx = CONDX
+bands-paths = PATHS
+bands-reach = REACH
+bands-best = BEST
+bands-condx-global-forecast-rest-what = CONDX is a global forecast; the rest is what has actually been heard. An empty row means nothing was decoded — which may mean the band was shut, or only that nobody was on it.
+bands-ibp-beacons = IBP BEACONS
+bands-meteor-showers = METEOR SHOWERS
+bands-peak = PEAK
+
+## spots (src/app/spots.rs)
+
+spots-pota = POTA
+spots-sota = SOTA
+spots-freedv = FREEDV
+spots-spots = SPOTS
+spots-longwave-shortwave-broadcast-stations-air = Longwave & shortwave broadcast stations on air now
+spots-view = IN VIEW
+spots-only-spots-inside-panadapter-span = Only spots inside the panadapter span
+spots-setup = ⚙ SETUP
+spots-feeds-lookup-upload-settings = Feeds, lookup & upload settings
+spots-call-station-site-frequency = call, station, site, frequency
+spots-clear-search = Clear the search
+spots-no-match = no match
+spots-no-spots-enable-feed-setup = no spots — enable a feed in ⚙ SETUP
+spots-nothing-matches-search = nothing matches the search
+
+## ism (src/app/ism.rs)
+
+ism-ism-devices = ISM DEVICES
+ism-decoding = DECODING
+ism-needs-wideband-iq-source-cat = Needs a wideband IQ source; a CAT rig sends only audio
+ism-how-far-burst-must-stand = How far a burst must stand above the channel's own noise floor before it is decoded
+ism-give-each-band-width-normally = Give each band the width it normally needs — a quarter of a megahertz for the OOK bands at 315, 345 and 433 MHz, a full one for 868 and 915.
+ism-several-hundred-more-device-decoders = Several hundred more device decoders, from the rtl_433 project, built in. Reads the 433 MHz OOK devices sdroxide's own decoders do not reach at all. Where both can read a device, rtl_433 knows far more variants and takes over.
+ism-t-1-your-own = 1 of your own
+ism-device-decoders-registered-how-many = Device decoders registered, how many came from your rtl433_flex.conf, and how many transmissions have been decoded since it started.
+ism-reload-decoders = RELOAD DECODERS
+ism-re-read-rtl433-flex-conf = Re-read rtl433_flex.conf after editing it. The devices already heard stay in the list.
+ism-rtl-433-knows-more-variants = rtl_433 knows more variants of these than sdroxide's own decoders do, so it reads them while it is listening here. Select another band and sdroxide's own take over again.
+ism-decoder-your-rtl433-flex-conf = A decoder in your rtl433_flex.conf was refused. The others still loaded. Fix the line, then press RELOAD DECODERS.
+ism-waiting-decoder = waiting for the decoder…
+ism-where-decoder-actually-listening-follows = Where the decoder is actually listening. This follows the receiver's hardware centre, not the VFO — on a wide front end the two can be a long way apart, and it is the window that decides which channels are reachable.
+ism-transmissions-gate-opened-how-many = Transmissions the gate opened on, and how many produced a valid frame. Many bursts and no decodes means the band is busy with devices sdroxide cannot read yet. None at all means nothing is reaching the threshold — lower it, or check that the dial is on the band.
+ism-nothing-heard-yet = nothing heard yet
+ism-click-tune-receiver =
+
+
+    Click to tune the receiver to it
+
+## app (src/app/mod.rs)
+
+app-hpsdr = HPSDR
+app-rtl-sdr = RTL-SDR
+app-rtl-sdr-rtl-tcp = RTL-SDR (rtl_tcp)
+app-spyserver-vfo = SpyServer (VFO)
+app-airspy-hf = Airspy HF+
+app-sdrplay = SDRplay
+app-elad = ELAD
+app-airspy = Airspy
+app-sxceiver = SXceiver
+app-usrp = USRP
+
+## navtex (src/app/panels/navtex.rs)
+
+navtex-messages = MESSAGES
+navtex-sync = SYNC
+navtex-character-phase-locked-signal-being = The character phase is locked — a signal is being read.
+navtex-no-character-phase-yet-no = No character phase yet: no signal, or not this one.
+navtex-characters-whose-first-copy-was = Characters whose first copy was corrupt and were taken from the repeat five slots later, and those where both were bad. A NAVTEX character is sent twice; that is the whole of its error correction.
+navtex-swap-mark-space-tones-signal = Swap the mark and space tones, for a signal received on the other sideband. Off is upper sideband on the channel frequency, which is what every published tuning instruction for the service says.
+navtex-starting-navtex-receiver = starting the NAVTEX receiver…
+navtex-nothing-yet-station-transmits-ten = nothing yet — a station transmits for ten minutes every four hours
+navtex-cut-short = cut short
+navtex-message = MESSAGE
+navtex-time-day-stated-message-utc = Time of day stated in the message (UTC): display only
+navtex-receiving = RECEIVING
+navtex-monitor = MONITOR
+navtex-everything-decoded-message-not = everything decoded, message or not
+
+## rfpaint (src/app/panels/rf_paint.rs)
+
+rfpaint-rf-paint = RF PAINT
+rfpaint-scan-speed = Scan speed
+rfpaint-how-fast-text-image-scanned = How fast the text/image is scanned onto the waterfall. Lower is slower and more legible; 100% = base rate, 25% (centre) is the default.
+rfpaint-abort = Abort
+rfpaint-text-paint = TEXT PAINT
+rfpaint-type-text-paint = Type text to paint…
+rfpaint-preview-waterfall = PREVIEW WATERFALL
+rfpaint-type-text-preview = type text to preview
+rfpaint-transmit = {"  "}TRANSMIT{"  "}
+rfpaint-image-paint = IMAGE PAINT
+rfpaint-no-image-loaded = no image loaded
+rfpaint-load-image = Load image…
+rfpaint-load-image-preview = load an image to preview
+
+## hfdl (src/app/hfdl.rs)
+
+hfdl-listen = LISTEN
+hfdl-switches-engine-s-hfdl-downconverter = Switches the engine's HFDL downconverter and decoder on or off. Decoding costs a 24 kHz lane and a worker thread whether the window is open or not.
+hfdl-channel-assigned-frequency-listen-anything = The channel (the assigned frequency) to listen on. Anything in the band works — HFDL stations transmit on 2.8 to 22 MHz — against a fixed 24 kHz lane centred here.
+hfdl-save-hfdl-decode-log-file = Save the HFDL decode log to a file
+hfdl-riverhead-northern-atlantic-north-america = Riverhead (northern Atlantic/north America) — the default, and the channel the decoder was validated on.
+hfdl-hfdl-assigned-frequency = An HFDL assigned frequency.
+hfdl-one-your-saved-channels-click = One of your saved channels — click to tune, right-click to remove.
+hfdl-hfdl-selected-but-decoding-off = HFDL is selected but decoding is off — press LISTEN above
+hfdl-decodes = DECODES
+hfdl-nothing-decoded-yet-ground-station = Nothing decoded yet — a ground station's squitter repeats every ~32 s once one is in the channel.
+hfdl-no-decode-matches-filter = No decode matches the filter.
+hfdl-decoding = DECODING
+hfdl-decoding-off = DECODING OFF
+hfdl-dbfs = — dBFS
+
+## rade (src/app/panels/rade.rs)
+
+rade-rade = RADE
+rade-freedv-v1-digital-voice = FreeDV V1 digital voice
+rade-tx = ● TX
+rade-mute-analog = MUTE ANALOG
+rade-mute-demodulated-audio-so-only = Mute the demodulated audio, so only decoded speech is heard. The raw signal is otherwise passed through whenever the modem has nothing to play — that hiss is how you find an over before it syncs, so leave this off while tuning.
+rade-sync = SYNC
+rade-how-far-received-signal-sits = How far the received signal sits from where the modem expects it. Large values still decode — the acquisition loop tracks them — but nudging the dial to bring this near zero gives the best margin.
+rade-snr = SNR —
+rade-callsign-station-put-end-over =
+    The callsign the station put in its End-of-Over frame — the only point in a RADE over at which one is sent. It is also what is reported to FreeDV Reporter, so a station you hear appears on qso.freedv.org as heard by you.
+
+    Held for a minute after the signal goes, and dropped when you start an over of your own: it names the station on frequency, not every station the receiver has ever heard.
+rade-stop-talking = STOP TALKING
+rade-talk-ptt = TALK (PTT)
+rade-open-close-rade-over-modem = Open or close a RADE over. The modem needs ~120 ms of speech before the first frame goes out, and sends an end-of-over frame when you stop, so transmit runs on a little past the button.
+rade-rade-v1-occupies-roughly-1060 = RADE V1 occupies roughly 1060–1880 Hz of the passband — upper sideband, or lower on 160, 80 and 40 m, where RADE keeps phone practice and sdroxide switches for you. Put the signal inside the shaded band on the waterfall; the modem finds it from there.
+
+## frame (src/app/frame.rs)
+
+frame-acknowledge = Acknowledge
+frame-dismiss = Dismiss
+frame-get-sdroxide-com = Get it at sdroxide.com
+frame-reconnecting = Reconnecting…
+frame-not-connected = Not connected.
+frame-reconnect-now = Reconnect now
+frame-transmit-lockout-disabled = ⚠ TRANSMIT LOCKOUT DISABLED
+frame-engine-was-started-oob-tx = This engine was started with --oob-tx. The amateur-band lockout is off: it will key the transmitter on any frequency the hardware supports.
+frame-transmitting-outside-your-licence-offence = Transmitting outside your licence is an offence in every country that issues one. Only continue if you are authorised to use the frequencies you are about to key on — a MARS/CAP or commercial licence, an experimental permit, or a dummy load.
+frame-i-understand = {"  "}I UNDERSTAND{"  "}
+frame-restart-without-oob-tx-put = Restart without --oob-tx to put the lockout back.
+
+## smeter (src/widgets/smeter.rs)
+
+smeter-alc-how-hard-transmitter-being = ALC — how hard the transmitter is being driven, as a percentage of the most it can put out. 100 % is full scale, not full power in watts: what that is worth at the antenna depends on the radio and on Drive.
+smeter-radio-reports-no-forward-power =
+
+
+    This radio reports no forward power, so the figure beside ALC is the ALC reading again rather than watts.
+smeter-no-swr-radio-has-no =
+
+
+    No SWR: this radio has no bridge to measure it with, and sdroxide will not invent one — it can only show what the radio itself reports. A rig with an SWR meter (over CAT, TCI or a LAN link) and an HPSDR board both fill this in; a plain SDR transmitter cannot.
+smeter-no-signal-report-yet-receiver = No signal report yet — the receiver has not delivered a meter reading.
+smeter-s9-73-dbm-each-s =
+
+
+    S9 is −73 dBm and each S-unit below it is 6 dB. The dBm figure is only as honest as the front end's calibration — an uncalibrated receiver reports dBFS with a dBm label.
+smeter-ovld-converter-into-rails-so =
+
+
+    OVLD: the converter is into its rails, so the level shown understates the signal. Wind the front-end gain back.
+smeter-table-held = , table held
+smeter-ps = PS --
+
+## multi (src/multi.rs)
+
+multi-tx = ● TX
+multi-link = LINK
+multi-mute-radio-s-audio = Mute this radio's audio
+multi-close-radio-s-split-view = Close this radio's split view
+multi-open-radio-split-view-own = Open this radio in a split view of its own
+multi-already-open-another-split-view = Already open in another split view
+multi-show-radio-here = Show this radio here
+multi-add-radio-computer-settings-radio = Add a radio on this computer (Settings → Radio to add one at a station)
+multi-add-radio = Add a radio
+multi-asked-station-another-radio = Asked the station for another radio…
+multi-client-cannot-open-connection = This client cannot open a connection.
+
+## net (src/app/net.rs)
+
+net-fail = FAIL
+net-will-retry = {" "}(will retry)
+net-full-resync-downloading = Full resync: downloading…
+net-downloading = Downloading…
+net-full-resync-log-already-matches = Full resync: the log already matches Wavelog
+net-full-resync-review-changes-below = Full resync: review the changes below
+net-full-resync-discarded-nothing-changed = Full resync discarded; nothing changed
+net-adif-import-failed-file-could = ADIF import failed: the file could not be parsed
+net-channel-import-failed-file-could = Channel import failed: the file could not be read
+net-channel-import-nothing-read-chirp = Channel import: nothing to read — a CHIRP CSV file starts with a header row naming its columns, one of which must be Frequency
+
+## widgets (src/app/panels/widgets.rs)
+
+widgets-free-text = free text
+widgets-hashed-callsign-not-yet-heard = hashed callsign, not yet heard in full
+widgets-entity-unknown = entity unknown
+widgets-band = this band
+widgets-new-entity-never-worked-any = New entity — never worked, on any band
+widgets-new-grid-square = New grid square
+widgets-not-worked-before = Not worked before
+widgets-worked-before-but-not-band = Worked before, but not on this band
+widgets-call-queue = In the call queue
+widgets-image = Image
+
+## pi4 (src/app/panels/pi4.rs)
+
+pi4-receptions = RECEPTIONS
+pi4-save-pi4-reception-list-csv = Save the PI4 reception list as CSV
+pi4-next-generation-beacon = Next Generation Beacon
+pi4-time-left-one-minute-beacon = Time left in this one-minute beacon cycle. The PI4 message is searched for once the window has had time to fill past where it would end.
+pi4-decoding = decoding…
+pi4-band = Band
+pi4-last-cycle = Last cycle
+pi4-nothing-heard = nothing heard
+pi4-receive-only-tune-so-beacon = Receive only. Tune so the beacon's CW identification sits at 800 Hz audio — the network's own convention — and the four PI4 tones fall where this decoder searches for them by default.
+
+## awards (src/app/awards.rs)
+
+awards-awards = AWARDS
+awards-band = Band
+awards-all = All
+awards-dxcc = DXCC
+awards-grids = Grids
+awards-worked-all-states = Worked All States
+awards-cq-zones-waz = CQ Zones (WAZ)
+awards-dxcc-entities = DXCC entities
+
+## acars (src/app/panels/acars.rs)
+
+acars-acars = ACARS
+acars-audio-decoder-s-passband = Audio in the decoder's passband.
+acars-blocks-framed-blocks-whose-check = Blocks that framed, and blocks whose check sequence failed.
+acars-starting-acars-receiver = starting the ACARS receiver…
+acars-channel = CHANNEL
+acars-tune-dial-here = Tune the dial here.
+acars-nothing-yet-acars-quiet-between = Nothing yet. ACARS is quiet between aircraft — leave it on a channel and wait for a burst.
+acars-check-failed = check failed
+acars-block-check-sequence-did-not = The block-check sequence did not match — text may be wrong.
+acars-no-text = (no text)
+
+## login (src/login.rs)
+
+login-sdr-oxide = SDR OXIDE
+login-username = Username
+login-password = Password
+login-remember-device = Remember on this device
+login-signs-without-asking-next-time = Signs in without asking next time, and lets the 3D view's tab in without asking at all. The password is kept in the clear, so leave this off on a machine other people use.
+login-keeps-password-device-clear = Keeps the password on this device, in the clear.
+login-checking = {" "}CHECKING…{" "}
+login-sign = {" "}SIGN IN{" "}
+login-wrong-password-shuts-server-s = A wrong password shuts the server's door for a few seconds, so this can take a moment.
+
+## help (src/help.rs)
+
+help-find = FIND
+help-find-manual = find in manual
+help-previous-match-shift-enter-shift = Previous match (Shift+Enter, Shift+F3)
+help-next-match-enter-f3 = Next match (Enter, F3)
+help-no-matches = no matches
+help-clear-search-esc = Clear the search (Esc)
+help-sdroxide-manual = SDROXIDE MANUAL
+help-contents = CONTENTS
+
+## aismap (src/ais_map.rs)
+
+aismap-t-1-station-heard-waiting-report = 1 station heard — waiting for it to report a position
+aismap-double-click-reframe = double-click to reframe
+aismap-zoom-out-wheel-pinch-do = Zoom out — the wheel or a pinch do this too
+aismap-zoom-about-middle-chart = Zoom in about the middle of the chart
+aismap-frame-everything-being-tracked-again = Frame everything being tracked again — a double-click does too
+
+## specview (src/widgets/spectrum_view.rs)
+
+specview-waiting-spectrum = waiting for spectrum…
+specview-hounds = HOUNDS
+
+## spectrum (src/app/spectrum.rs)
+
+spectrum-window-has-no-gpu-renderer = This window has no GPU renderer, so the waterfall stays at its standard width.
+spectrum-machine-drawing-without-gpu-every = This machine is drawing without a GPU — every column of the waterfall is the processor's work, and it is already sharing that with the radio.
+spectrum-window-renders-through-opengl-which = This window renders through OpenGL, which is sdroxide's compatibility path — a Raspberry Pi, an older graphics chip, or a browser without WebGPU. A wider waterfall is not worth the frame rate there.
+spectrum-wider-than-renderer-can-draw = Wider than this renderer can draw.
+
+## macros (src/app/panels/macros.rs)
+
+macros-nocall = NOCALL
+macros-each-button-sends-whole-text = Each button sends its whole text in one go. F2–F10 press the first nine, so long as nothing on screen has the keyboard.
+macros-remove-button = Remove this button
+
+## gridtracker (src/app/grid_tracker.rs)
+
+gridtracker-grid-tracker = GRID TRACKER
+gridtracker-shade-squares-heard-live-decode = Shade the squares heard on the live decode list, not only the ones in the log — what is on the air now, in cyan under the worked squares.
+gridtracker-drag-pan-wheel-zoom-amber = Drag to pan, wheel to zoom. Amber = worked, green = confirmed, cyan = heard.
+
+## remote (src/remote.rs)
+
+remote-server-busy-another-client-connected = server busy — another client is connected
+remote-transmitting-but-client-s-microphone = Transmitting, but this client's microphone is producing no audio at all — nothing is being modulated. In a browser, check that the page was allowed the microphone and that no other application holds it.
+remote-connection-closed = connection closed
+
+## solarwin (src/solar3d/mod.rs)
+
+solarwin-sdroxide-solar-system = sdroxide — solar system
+
+## solarbtn (src/app/solar.rs)
+
+solarbtn-solar-system-3d-view-sun = Solar system 3D view — Sun, Earth, Moon, sunspots and CMEs (separate window)
+solarbtn-solar-system-3d-view-sun-2 = Solar system 3D view — Sun, Earth, Moon, sunspots and CMEs (new browser tab)
+
+## widespec (src/widgets/wide_spectrum.rs)
+
+
+## speech (src/app/speech.rs)
+
+speech-loading-voice = Loading the voice…
+speech-browser-client-cannot-speak-yet = the browser client cannot speak yet
+
+## freqdisplay (src/widgets/freq_display.rs)
+
+freqdisplay-double-click-type-frequency = Double-click to type a frequency
+freqdisplay-tap-type-frequency = Tap to type a frequency
+
+## solarstate (src/solar3d/state.rs)
+
+solarstate-home = HOME
+solarstate-dwarf-planets = DWARF PLANETS
+
+## adsbmap (src/adsb_map.rs)
+
+adsbmap-double-click-reframe = double-click to reframe
+
+## aprsmap (src/aprs_map.rs)
+
+aprsmap-double-click-reframe = double-click to reframe
+
+## solarnet (src/solar3d/net.rs)
+
+solarnet-connection-closed = connection closed
+
+## alerts (src/app/alerts.rs)
+
+alerts-could-not-start-alert-thread = could not start the alert thread
+
+## hfdlmap (src/hfdl_map.rs)
+
+hfdlmap-no-aircraft-located-yet = no aircraft located yet
+
+## worldmap (src/widgets/worldmap.rs)
+
+worldmap-double-click-reframe = DOUBLE-CLICK TO REFRAME
+
+## chrome (src/chrome.rs)
+
+
+
+## duopower (src/app/duo_power.rs)
+
+duopower-sets-fdm-duo-s-own = Sets the FDM-DUO's own power setting (menu 34 TX POWER). Drive and Tune then set the power within it, and SDRoxide sends the setting again each time it connects.
+
+## Band conditions window: a peak date.
+
+# $month is 1–12.
+bands-peak-date = { $day } { $month ->
+        [1] Jan
+        [2] Feb
+        [3] Mar
+        [4] Apr
+        [5] May
+        [6] Jun
+        [7] Jul
+        [8] Aug
+        [9] Sep
+        [10] Oct
+        [11] Nov
+       *[12] Dec
+    }
+
+## download (src/download.rs)
+
+download-browser-could-not-read-file = the browser could not read that file
+
+## morse (src/app/morse.rs)
+
+morse-translate = TRANSLATE
+morse-practice = PRACTICE
+morse-learn = LEARN
+morse-morse = MORSE
+morse-text-morse = Text → Morse
+morse-morse-text = Morse → Text
+morse-per-character-space-between-characters = `.` and `-` per character, a space between characters, ` / ` between words. The ITU alphabet, digits, punctuation and the common prosigns.
+morse-reference-translator-available-desktop-build = The reference translator is available in the desktop build.
+morse-play-what-you-type-your = Play what you type, to your own speakers
+morse-play = PLAY
+morse-stop = STOP
+morse-every-character-learned-well-done = Every character learned — well done.
+morse-drill-needs-sound-which-desktop = The drill needs sound, which the desktop build has.
+morse-reveal = REVEAL
+morse-reset = RESET
+morse-replay = REPLAY
+morse-what-did-you-hear = What did you hear?
+morse-check = CHECK
+morse-press-new-hear-character = Press NEW to hear a character.
+morse-tone = Tone
+morse-speed = Speed
+morse-spacing = Spacing
+morse-characters-go-out-speed-above = Characters go out at the speed above; this is the speed the *gaps* are sent at, so a beginner hears the letter as a whole before they can send it that fast.
+morse-playback-available-desktop-build = Playback is available in the desktop build.
+
+## ADS-B panel: aircraft detail rows.
+
+adsb-row-altitude = altitude
+adsb-row-track = track
+adsb-row-turning = turning
+adsb-row-squawk = squawk
+adsb-row-range = range
+adsb-row-position = position
+adsb-row-signal = signal
+adsb-row-frames = frames
+rade-transmitting = transmitting
+decodes-odd = ODD
+decodes-new = NEW
+js8-new = NEW
+
+## AIS panel: vessel detail rows.
+
+ais-row-status = status
+ais-row-speed = speed
+ais-row-course = course
+ais-row-heading = heading
+ais-row-turning = turning
+ais-row-altitude = altitude
+ais-row-size = size
+ais-row-draught = draught
+ais-row-destination = destination
+ais-row-range = range
+ais-row-signal = signal
+ais-row-type = type
+ais-row-position = position
+ais-row-messages = messages
+ism-off = OFF
+textmodem-frequency-shifted = frequency-shifted
+winlink-to-heading = TO
+
+## adsbmap: messages with values (src/adsb_map.rs)
+
+adsbmap-ft-min =
+    {""}
+    { $vr } ft/min
+
+## aismap: messages with values (src/ais_map.rs)
+
+aismap-heard-no-position-newer-than = { $heard } heard — no position newer than { $drop_map_s }s
+aismap-stations-heard-waiting-position-report = { $heard } stations heard — waiting for a position report
+aismap-km-across = { $lon_span }° · ~{ $km } km across
+
+## alerts: messages with values (src/app/alerts.rs)
+
+alerts-alarming = alarming on { $device }
+alerts-alarm-device-unavailable = alarm device unavailable: { $error }
+
+## awards: messages with values (src/app/awards.rs)
+
+awards-worked = { $w } worked
+awards-confirmed = { $value } confirmed
+
+## bands: messages with values (src/app/bands.rs)
+
+bands-forecast-hamqsl-com-old = · forecast from HAMQSL.com, { $value } old
+bands-ncdxf-iaru-next-beacon-s = NCDXF/IARU · next beacon in { $now } s
+bands-hearing-means-path-open-each = { $callsign } at { $location } — hearing it means the { $band } path is open. Each beacon steps up a band every 10 s, so this row changes every slot.
+bands-radiants-placed = radiants placed for { $lat }°, { $lon }°
+bands-zhr = ZHR { $zhr }
+bands-radiant = radiant { $alt_deg }° { $az_deg }
+bands-radiant-down = radiant down ({ $alt_deg }°)
+bands-km-s-parent-peak-rate =
+    { $value } ({ $code }) — { $velocity_kms } km/s, parent { $parent }. Peak rate ZHR { $zhr } around { $peak }.
+
+    A radiant above the horizon means the trails can reach you; a fast shower leaves longer-lived ionised trails for meteor scatter on 6 m and 2 m, and the brief 10 m openings.
+
+## drm: messages with values (src/app/drm.rs)
+
+drm-not-decoding = { $channel } not decoding
+drm-symbols = { $value } symbols · { $frame }
+drm-not-decodable = { $value } — not decodable
+drm-broadcaster-s-clock-utc = broadcaster's clock { $year }-{ $month }-{ $day } { $hour }:{ $minute } UTC
+
+## duopower: messages with values (src/app/duo_power.rs)
+
+duopower-max-fdm-duo-s-full =
+    MAX: the FDM-DUO's full output, about 8 W. The setting to use with the HR500 in line.
+
+    { $base }
+duopower-t-5-w-hr500-line-will =
+    5 W. With the HR500 in line it will not reach full output on most bands at this setting: use MAX, and Drive to bring it down.
+
+    { $base }
+duopower-w-running-barefoot-qrp =
+    { $code } W, for running barefoot or QRP.
+
+    { $base }
+
+## frame: messages with values (src/app/frame.rs)
+
+frame-re-enables-transmit-after-1 = Re-enables transmit after { $swr }:1. Check the antenna first: if the fault is still there, the next transmission stops too.
+frame-sdroxide-has-been-released = SDRoxide { $version } has been released — this is { $sdroxide_version }.
+frame-reconnecting-s = Reconnecting in { $value }s…
+
+## gridtracker: messages with values (src/app/grid_tracker.rs)
+
+gridtracker-worked = { $worked } worked
+gridtracker-confirmed = { $confirmed } confirmed
+gridtracker-heard = { $heard } heard
+
+## hd: messages with values (src/app/hd.rs)
+
+hd-decode = Decode { $value } ({ $codec_label })
+
+## hfdl: messages with values (src/app/hfdl.rs)
+
+hfdl-khz-already-has-chip = { $cur_khz } kHz already has a chip
+hfdl-save-current-channel-khz-one = Save the current channel ({ $cur_khz } kHz) as one of your own chips
+hfdl-aircraft = { $aircraft } aircraft
+hfdl-bursts = { $bursts } bursts
+hfdl-decodes-2 = { $decodes } decodes
+hfdl-fixed = { $fec } fixed
+
+## ism: messages with values (src/app/ism.rs)
+
+ism-not-decoded-yet = { $hint } — not decoded yet
+ism-listen-tunes-radio-there-one = Listen on { $value } — tunes the radio there. One band at a time: they are too far apart for any receiver to cover two at once.
+ism-watch-hz-around-band-centre = Watch { $value }Hz around the band centre, whatever the band would have asked for. Narrower fits a receiver that cannot deliver the band's own width; wider reaches devices sitting further off centre. Your receiver has to hand over about a third more than this.
+ism-rtl-433 = rtl_433 — { $why }
+ism-rtl-433-khz = rtl_433 { $value } · { $khz } kHz
+ism-your-own = { $flex } of your own
+ism-decoders-decoded = { $decoders } decoders ({ $flex }), { $decodes } decoded
+ism-handled-rtl-433 = handled by rtl_433: { $names }
+ism-flex = flex: { $error }
+ism-window-mhz-mhz-wide = window { $mhz } MHz, { $e62 } MHz wide
+ism-bursts-decoded = { $bursts } bursts, { $decodes } decoded
+ism-devices = { $ism_reports } devices
+ism-id-mhz-db-heard-first =
+    { $protocol } id { $device }
+    { $e6 } MHz { $snr_db } dB heard { $value }×
+    first heard { $first_at } ago
+
+## logbook: messages with values (src/app/logbook.rs)
+
+logbook-confirmations-downloaded-newly-confirmed = Confirmations: { $recs } downloaded, { $matched } newly confirmed
+logbook-qso = { $qso_log } QSO
+logbook-worked-before = ⚠ WORKED BEFORE ({ $dupe_band })
+logbook-utc-qso = { $oldest }–{ $newest } UTC · { $value } QSO
+
+## app: messages with values (src/app/mod.rs)
+
+app-radio = radio { $id }
+
+## morse: messages with values (src/app/morse.rs)
+
+morse-could-not-start-morse-audio = could not start the Morse audio thread: { $error }
+morse-no-audio-output = no audio output: { $error }
+morse-about-s = about { $farnsworth_wpm } s
+morse-characters-play = Characters in play: { $set }
+morse-score-run = Score: { $correct } / { $total }. Run: { $streak } of { $value }.
+morse-correct = correct — { $value }
+morse-was = that was { $value }
+
+## net: messages with values (src/app/net.rs)
+
+net-synced-z-new-already-log = Synced { $when }Z: { $added } new, { $matched } already in the log
+net-wavelog-2 = Wavelog: { $line }
+net-full-resync-stopped-nothing-changed = Full resync stopped, nothing changed: { $error }
+net-full-resync-applied-added-updated = Full resync applied: { $add } added, { $update } updated, { $remove } removed, { $mark } of yours marked as in Wavelog
+net-wavelog-3 = Wavelog: { $line }
+net-adif-import-failed = ADIF import failed: { $error }
+net-not-unicode-read = {" "}(not Unicode; read as { $enc })
+net-received-reports-swl-left-out = , { $n } received reports (SWL) left out
+net-adif-import-added-duplicates-skipped = ADIF import: { $added } added, { $skipped } duplicates skipped{ $reports }{ $assumed }
+net-channel-import-failed = Channel import failed: { $error }
+net-line-s-skipped = , { $n } line(s) skipped
+net-not-unicode-read-2 = {" "}(not Unicode; read as { $enc })
+net-channel-import-channel-s-read = Channel import: { $n } channel(s) read{ $skipped }{ $assumed }
+
+## acars: messages with values (src/app/panels/acars.rs)
+
+acars-frames-bad = { $frames } frames · { $bad } bad
+acars-mode = mode { $mode }
+
+## adsb: messages with values (src/app/panels/adsb.rs)
+
+adsb-aircraft-3 = { $aircraft } aircraft
+adsb-frames = { $frames } frames
+adsb-preambles = { $preambles } preambles
+adsb-bad-crc = { $bad_crc } bad CRC
+adsb-tune = TUNE { $mhz }
+adsb-ft-barometric = { $ft } ft barometric
+
+## ais: messages with values (src/app/panels/ais.rs)
+
+ais-vessels-3 = { $vessels } vessels
+ais-messages = { $messages } messages
+ais-slots = { $bursts } slots
+ais-bad-fcs = { $bad_fcs } bad FCS
+ais-ais-mhz = AIS { $value } ({ $mhz } MHz) — { $value2 }
+ais-ais-mhz-slots-messages-floor = AIS { $value } ({ $mhz } MHz) — { $bursts } slots, { $messages } messages, floor { $floor_dbfs } dBFS
+ais-ais = AIS { $value }
+ais-tune = TUNE { $mhz }
+ais-ships-heard-are-khz-off = the ships heard are { $khz } kHz off frequency ({ $mhz } ppm at 162 MHz) — set the front end's frequency correction, or transmissions past about 5 kHz will stop decoding
+ais-over-ground = { $value }° over ground
+ais-dbfs-db-snr = { $rssi_dbfs } dBFS, { $snr_db } dB SNR
+ais-last-type-ais = { $messages } (last type { $last_type }, AIS { $channel })
+ais-ais-2 = AIS { $ch }
+ais-mhz-marine-channel-ship-alternates = { $mhz } MHz — marine channel { $ch }. A ship alternates between the two, so switching one off halves how often every vessel is heard.
+
+## aprs: messages with values (src/app/panels/aprs.rs)
+
+aprs-object = object from { $reported_by }
+aprs-via = via { $via }
+aprs-object-reported = object reported by { $reported_by }
+aprs-digit-s-blanked = ± { $ambiguity } digit(s) blanked
+aprs-wind-m-s = wind { $value }° { $value2 } m/s
+aprs-gust = gust { $value }
+aprs-rain-mm-h = rain { $value } mm/h
+aprs-frame-s-last-ago = { $packets } frame(s), last { $last_heard } ago
+aprs-via-2 = via { $via }
+aprs-bad = { $bad_frames } bad
+aprs-other = { $non_aprs } other
+aprs-sent = sent ×{ $tries }
+aprs-stn = { $stations } stn
+aprs-queued = { $tx_queue } queued
+
+## atchat: messages with values (src/app/panels/atchat.rs)
+
+atchat-master = master { $value }
+atchat-last-heard-s-ago-click = { $status } — last heard { $age_s }s ago · click to open a direct-message tab
+atchat-close-tab = close the { $peer } tab
+atchat-direct-message = direct message to { $value }
+atchat-cannot-display = cannot display { $path }
+
+## cw: messages with values (src/app/panels/cw.rs)
+
+cw-click-decoder-neural-one-copies =
+    { $hint }
+
+    Click for the { $neural } decoder. The neural one copies further down and reads hand-sent CW a timing fit will not accept; the timing one is the only one that copies the accented letters — Ä, Ö, Å, Ü, É — because the model has no output class for them.
+cw-idle-s = IDLE { $idle }s
+
+## decodes: messages with values (src/app/panels/decodes.rs)
+
+decodes-save-decodes-list-adif-received = Save the { $n } decodes in the list as ADIF — received reports, not contacts. Decodes that name no sender are left out.
+decodes-save-decodes-list-csv-one = Save the { $n } decodes in the list as CSV, one row each
+decodes-session-qso = Session: { $session } QSO
+decodes-save-whole-logbook-qso-adif = Save the whole logbook ({ $logged } QSO) as ADIF
+decodes-save-whole-logbook-qso-text = Save the whole logbook ({ $logged } QSO) as text
+decodes-hz-slots = { $audio_hz } Hz · { $odd } slots
+decodes-your-slot-timing-against-stations =
+    Your slot timing against the stations you are hearing.
+    { $after }
+
+    It covers the whole receive path, so a slow audio or network chain counts the same as a wrong clock. Under 0.5 s is comfortable.
+decodes-pile-up = PILE-UP { $fox_queue }
+decodes-queue = QUEUE { $call_queue }
+decodes-db-hz-click-remove =
+    { $waiting } · { $snr_db } dB · { $audio_hz } Hz{ $unwrap_or_default }
+    Click to remove
+
+## js8: messages with values (src/app/panels/js8.rs)
+
+js8-every-speed-being-decoded-marks = Every speed is being decoded; ▸ marks { $speed }, the one you transmit at
+js8-every-speed-being-decoded-click = Every speed is being decoded. Click to transmit at { $speed } instead
+js8-transmit-decode = Transmit and decode at { $speed }
+js8-beaconing-every-min-click-stop = Beaconing every { $hb_min } min — click to stop
+js8-last-beacon-went-out-hz = The last beacon went out at { $hz } Hz — a free slot in the { $value }–{ $value2 } Hz heartbeat sub-band, chosen so it lands clear of the signals being decoded.
+js8-frames-s = { $tx_frames_pending }/{ $tx_frames_total } frames · { $left }s
+js8-decoded = Decoded at { $speed }
+js8-frames = … ({ $frames } frames)
+js8-reply-2 = Reply to { $value }: “{ $value2 }”
+js8-address-composer = Address the composer at { $value }
+
+## macros: messages with values (src/app/panels/macros.rs)
+
+macros-f-sends = F{ $i }: sends “{ $text }”
+macros-sends = Sends “{ $text }”
+macros-most = { $value } is the most
+
+## navtex: messages with values (src/app/panels/navtex.rs)
+
+navtex-repaired-lost = { $repaired } repaired · { $lost } lost
+navtex-characters-lost = { $lost } characters lost
+
+## packet: messages with values (src/app/panels/packet.rs)
+
+packet-bad = { $bad_frames } bad
+packet-link-layer = The link layer is in { $link }
+packet-via = {" "}via { $via }
+packet-unacked = { $unacked } unacked
+packet-retry = retry { $retries }
+
+## pi4: messages with values (src/app/panels/pi4.rs)
+
+pi4-beacon = { $last_slot_spots } { $last_slot_spots ->
+        [one] beacon
+       *[other] beacons
+    }
+pi4-utc-ago = { $t }:{ $t2 } UTC — { $slot_utc } ago
+
+## rade: messages with values (src/app/panels/rade.rs)
+
+rade-snr-db = SNR { $snr_db } dB
+rade-offset-hz = offset { $freq_offset_hz } Hz
+rade-heard = heard { $call }
+rade-samples-dropped-between-receiver-decoder = ⚠ { $dropped } samples dropped between the receiver and the decoder — this machine is not keeping up with the neural decode.
+
+## textmodem: messages with values (src/app/panels/text_modem.rs)
+
+textmodem-char-s = { $chars_per_sec } char/s
+textmodem-char-s-hz-wide = { $value } — { $chars_per_sec } char/s, { $bandwidth_hz } Hz wide, { $keyed }
+
+## vdl2: messages with values (src/app/panels/vdl2.rs)
+
+vdl2-frames = { $frames } frames
+vdl2-bursts = { $bursts } bursts
+vdl2-sync = { $syncs } sync
+vdl2-hdlc-bad = { $hdlc_bad } HDLC bad
+vdl2-bad-fcs = { $fcs_bad } bad FCS
+vdl2-mhz-bursts-frames-noise-floor = { $mhz } MHz, { $what } — { $bursts } bursts, { $frames } frames, noise floor { $floor_dbfs } dBFS
+vdl2-tune = TUNE { $mhz }
+vdl2-held-2 = HELD +{ $since }
+vdl2-use-worldwide-where-every-link = { $what } — in use worldwide, and where every link starts. The one to keep if you keep only one.
+vdl2-assigned-which-channels-carry-anything = Assigned to an { $what }. Which channels carry anything depends on where you are: leave them all on unless you know otherwise.
+vdl2-mhz-db-snr-dbfs-evm = { $mhz } MHz · { $snr_db } dB SNR · { $rssi_dbfs } dBFS · EVM { $evm_deg }° · { $freq_err_hz } Hz · { $rs_corrected } RS symbols fixed
+vdl2-characters = { $parity_errors } characters
+vdl2-parameter-sdroxide-does-not-read = { $unknown } { $unknown ->
+        [one] parameter
+       *[other] parameters
+    } SDRoxide does not read — shown above as identifier and bytes
+
+## wefax: messages with values (src/app/panels/wefax.rs)
+
+wefax-lines = { $lines } lines
+wefax-lines-held = { $live_size } lines held
+wefax-pixels-per-line = { $width } pixels per line
+wefax-shift-picture-pixels = Shift the picture { $px } pixels
+wefax-charts-are-saved-click-copy =
+    Charts are saved { $place }
+
+    Click to copy the path
+wefax-finished-charts-are-saved-collect = Finished charts are saved { $place } and collect here.
+wefax-pixels-right-click-delete =
+    { $when_full }
+    { $size } × { $size2 } pixels
+    { $value }
+
+    Right-click to delete
+wefax-older-store = { $older } older in the store
+wefax-older-load-more = { $older } older — load more
+wefax-published-carrier-khz-dial-khz = Published carrier { $f } kHz → dial { $value } kHz USB
+wefax-delete-chart-2 = Delete this chart { $dir }
+
+## widgets: messages with values (src/app/panels/widgets.rs)
+
+widgets-cq-zone-itu-zone = { $continent } · CQ zone { $cq_zone } · ITU zone { $itu_zone }
+widgets-new-entity = New entity on { $band_label }
+widgets-worked-before = Worked before on { $band_label }
+widgets-calling-cq-includes-you = Calling CQ { $target } — that includes you
+widgets-calling-cq-not-aimed-you = Calling CQ { $target } — not aimed at you
+
+## wspr: messages with values (src/app/panels/wspr.rs)
+
+wspr-rx-heard-us = { $heard_us } rx · { $heard_us2 } heard us
+wspr-beacon = { $last_slot_spots } { $last_slot_spots ->
+        [one] beacon
+       *[other] beacons
+    }
+wspr-beaconing-duty = beaconing — { $wspr_power_dbm }, { $wspr_tx_percent }% duty
+wspr-listening-duty = listening ({ $wspr_tx_percent }% duty)
+wspr-beacon-one-two-minute-slot = Beacon in one two-minute slot out of every { $pct } — { $pct2 }% of them, evenly spaced — at { $wspr_power_dbm }. Which slot the cycle starts on is drawn from your callsign, so two stations running this program do not start together.
+wspr-transmitting-set-general-tab-settings = Transmitting as { $call } in { $sent } — set on the General tab of Settings.
+wspr-utc-ago = { $t }:{ $t2 } UTC — { $slot_utc } ago
+
+## publicsdr: messages with values (src/app/publicsdr.rs)
+
+publicsdr-antenna =
+    { $address }
+    { $device }
+    antenna: { $antenna }
+    { $e3 }
+publicsdr-receivers-fetched-ago = { $entries } receivers · { $per_net } · fetched { $age } ago
+publicsdr-showing-search-narrow = showing { $shown } of { $n } — search to narrow it
+publicsdr-match = { $n } match
+publicsdr-replace-taking-receiver-points-same =
+    Replace { $this } with { $entry }?
+
+    { $this2 } is on { $iface }. Taking this receiver points the same tab at { $address } instead, renames it “{ $entry2 }”, and holds the dial to the { $range_label } the receiver publishes — nothing here transmits.
+
+    The { $iface2 } settings stay where they are, and so do the ranges stated for them: switching the interface back in Settings → Radio brings the radio back as it was.
+publicsdr-receptions-will-reported = {" "}Receptions will be reported from { $value }.
+publicsdr-pointing-radio = Pointing this radio at { $entry }…{ $site }
+publicsdr-opening-another-radio = Opening { $entry } as another radio…
+
+## qo100: messages with values (src/app/qo100.rs)
+
+qo100-khz-3 = +{ $park_lo_hz } … +{ $park_hi_hz } kHz
+qo100-before-switching-tune-so-beacon = Before switching ON: tune so the beacon's two lobes sit between +{ $park_lo_hz } and +{ $park_hi_hz } kHz in the strip (the shaded lane).
+qo100-receiver-currently-listening-around-mhz = The receiver is currently listening around { $mhz } MHz — nowhere near the 10489.750 MHz beacon, so there is nothing here to draw. The decoder keeps searching regardless.
+qo100-receiver-currently-covers-only-khz = receiver currently covers only ±{ $khz } kHz here — the rest of the strip stays blank
+qo100-null-db-sym-snr-db = null { $est_null_depth_db } dB sym { $est_symmetry } snr { $est_snr_db } dB
+qo100-hz-s-hz-s-de = { $est_drift_hz_s } Hz/s { $est_drift_accel_hz_s2 } Hz/s² (de-rotated before decode)
+qo100-hz-s-de-rotated-before = { $est_drift_hz_s } Hz/s (de-rotated before decode)
+qo100-found-empty = { $est_updates } found, { $est_misses } empty
+qo100-last-s-ago = {"   "}last { $auto_last_hz } ({ $auto_last_unix }s ago)
+qo100-over-correction = { $auto_total_hz } over { $auto_applies } { $auto_applies ->
+        [one] correction
+       *[other] corrections
+    }{ $last }
+qo100-sync-32-err = sync { $sync_bit_errors } / 32 err ×{ $sync_matches }
+qo100-frame-buffer = frame buffer { $frame_fill }%
+qo100-blocks-tried-decoded = { $blocks_tried } blocks tried, { $blocks_locked } decoded
+qo100-last-applied-s-ago-hz = last applied { $ago }s ago: { $old } → { $new } Hz ({ $old2 } Hz)
+qo100-locked-block-tried-locked = locked — { $blocks_tried } { $blocks_tried ->
+        [one] block
+       *[other] blocks
+    } tried, { $blocks_locked } locked
+qo100-searching-block-tried-none-locked = searching — { $blocks_tried } { $blocks_tried ->
+        [one] block
+       *[other] blocks
+    } tried, none locked yet
+
+## rds: messages with values (src/app/rds.rs)
+
+rds-auto = Auto ({ $standard })
+rds-type = type { $class }
+rds-groups = · { $groups } groups
+rds-blocks-error = · { $ber } % of blocks in error
+rds-clean-corrected-lost = { $blocks_ok } clean · { $blocks_corrected } corrected · { $blocks_bad } lost
+
+## sat: messages with values (src/app/sat.rs)
+
+sat-utc-local = { $unix } UTC ({ $offset } local)
+sat-aos = AOS { $rise_unix } { $rise_unix2 }
+sat-los = LOS { $set_unix } { $set_unix2 }
+sat-above-horizon = { $rise_unix } above the horizon
+sat-min = in { $value } min
+sat-h-min = in { $value } h { $value2 } min
+sat-searching = searching… { $next } of { $entries }
+sat-locked-2 = ● LOCKED — { $t }
+sat-pass-until-max = Pass until { $set_unix } · max { $max_el }°
+sat-next-pass-rises-max = Next pass { $rise_unix } { $rise_unix2 } ({ $now }) · rises { $rise_az }° { $rise_az2 } · max { $max_el }°
+sat-rigctld-client-connected-satellite-software = ⚠ { $clients } rigctld { $clients ->
+        [one] client
+       *[other] clients
+    } connected — satellite software steering the dial there would correct Doppler twice
+sat-rotator-antenna-az-el = Rotator: antenna at { $az }° az { $el }° el
+sat-rotator-2 = Rotator: { $error }
+sat-up-now-2 = ● up now, { $el }°
+sat-inv = { $mode } · inv
+sat-norad-2 = NORAD { $norad_id }
+
+## scanner: messages with values (src/app/scanner.rs)
+
+scanner-holding-mhz = holding { $here } MHz
+scanner-scanning-mhz = scanning · { $here } MHz
+
+## spectrum: messages with values (src/app/spectrum.rs)
+
+spectrum-renderer-will-not-hold-texture = This renderer will not hold a texture wider than { $max_texture_dim } pixels.
+spectrum-mem = Mem: { $f } / { $value }
+spectrum-mem-2 = Mem: { $value }
+
+## speech: messages with values (src/app/speech.rs)
+
+speech-voice-2 = Voice: { $voice }
+speech-speech-unavailable = Speech is unavailable: { $error }
+
+## spots: messages with values (src/app/spots.rs)
+
+spots-transmissions = { $stations } transmissions
+
+## winlink: messages with values (src/app/winlink.rs)
+
+winlink-last-session-failed = last session failed — { $err }
+winlink-last-session-received-sent = last session: { $last_received } received, { $last_sent } sent
+winlink-empty = { $to_lowercase } is empty
+winlink-showing = showing { $entries } of { $total }
+winlink-fetching = fetching { $mid }…
+winlink-from-2 = from { $msg } { $date }
+winlink-attachment-bytes = attachment: { $att } ({ $data } bytes)
+
+## aprsmap: messages with values (src/aprs_map.rs)
+
+aprsmap-object =
+    {""}
+    object from { $reported_by }
+aprsmap-heard-ago =
+    {""}
+    heard { $age } ago
+
+## download: messages with values (src/download.rs)
+
+download-reading = reading { $path }: { $error }
+
+## help: messages with values (src/help.rs)
+
+help-missing-image = {"["}missing image: { $path }]
+
+## hfdlmap: messages with values (src/hfdl_map.rs)
+
+hfdlmap-mhz =
+    {""}
+    { $e3 } MHz
+hfdlmap-fix =
+    {""}
+    { $fixes } fix{ $es }
+hfdlmap-heard-ago =
+    {""}
+    heard { $last_at } ago
+
+## multi: messages with values (src/multi.rs)
+
+multi-radio = Radio { $n }
+multi-could-not-add-radio = Could not add a radio: { $error }
+multi-was-closed-station = { $value } was closed at the station.
+multi-could-not-open = Could not open { $peer }: { $error }
+multi-has-tab-own-now = { $value } has a tab of its own now.
+
+## remote: messages with values (src/remote.rs)
+
+remote-protocol-error = protocol error: { $error }
+
+## solarnet: messages with values (src/solar3d/net.rs)
+
+solarnet-bad-message = bad message: { $error }
+solarnet-solar-protocol-mismatch-server-client = solar protocol mismatch: server { $proto }, client { $value }
+
+## smeter: messages with values (src/widgets/smeter.rs)
+
+smeter-forward-power-w-measured-radio =
+    {""}
+
+    Forward power — { $w } W, measured by the radio's own sensor.
+smeter-po-radio-s-own-power =
+    {""}
+
+    PO — the radio's own power-output meter, at { $clamp } % of its full scale. A needle position as the radio reports it, not a calibrated wattage; what to watch is whether it falls while Drive stays put.
+smeter-swr-1-match-antenna-presenting =
+    {""}
+
+    SWR — { $swr }:1, the match the antenna is presenting, as the radio measures it. Under 2:1 is unremarkable; past 3:1 the scale turns red.
+smeter-received-signal-strength-s9-db = Received signal strength: S9 + { $over } dB ({ $s_dbm } dBm in the passband).
+smeter-received-signal-strength-s-dbm = Received signal strength: S{ $value } ({ $s_dbm } dBm in the passband).
+smeter-radio-reports-c =
+    {""}
+
+    The radio reports { $t } °C.
+smeter-ps-puresignal-correcting-db-compression =
+    {""}
+
+    PS — PureSignal is correcting { $correction_db } dB of compression{ $held } (the feedback matched the transmission at { $score }).
+smeter-ps-puresignal-switched-but-has =
+    {""}
+
+    PS −− — PureSignal is switched on but has not found the transmission in the feedback path (best match { $score }), so the transmitter is going out uncorrected. Check that a sample of the amplifier's output really reaches a receive input the T/R switch does not take away on transmit, and that its attenuator is not swallowing it. The loop listens on this receiver only — a coupler wired to a second receiver (RX2, ADC2) is never read as the feedback.
+
+## specview: messages with values (src/widgets/spectrum_view.rs)
+
+specview-rit-hz = RIT { $hz } Hz
+specview-xit-hz = XIT { $hz } Hz
+
+## decodes: nested messages
+
+decodes-you-transmit-s-everyone-else = You transmit { $off } s { $after } everyone else — the usual reason calls go unanswered. Sync your computer clock.
+
+## publicsdr: nested messages
+
+publicsdr-noise-floor-score = noise-floor score { $snr }
+publicsdr-up-khz-i-q = up to { $khz } kHz of I/Q

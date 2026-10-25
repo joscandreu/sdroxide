@@ -62,14 +62,10 @@ pub(in crate::app) fn settings_ui_tab(
 
         ui.label(tr!("settings-ui-frame-rate"));
         ComboBox::from_id_salt("ui-fps")
-            .selected_text(tr!("settings-ui-fps", fps = cfg.frame_rate_fps))
+            .selected_text(format!("{fps} fps", fps = cfg.frame_rate_fps))
             .show_styled(ui, |ui| {
                 for f in UiSettings::FPS_OPTIONS {
-                    ui.selectable_value(
-                        &mut cfg.frame_rate_fps,
-                        f,
-                        tr!("settings-ui-fps", fps = f),
-                    );
+                    ui.selectable_value(&mut cfg.frame_rate_fps, f, format!("{fps} fps", fps = f));
                 }
             });
         ui.end_row();

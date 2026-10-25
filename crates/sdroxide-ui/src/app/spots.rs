@@ -5,6 +5,7 @@
 //! one list filtered by kind, by the current view span, and by a fuzzy search.
 //! Clicking one tunes the radio and pre-fills the logbook.
 
+use crate::i18n::tr;
 use eframe::egui::{self, RichText};
 use sdroxide_types::{Command, Mode, RxId, Spot, SpotKind};
 
@@ -179,7 +180,7 @@ impl SdroxideApp {
             self.broadcast_fetch = None;
             self.broadcast_fetch_status = Some(match result {
                 Ok(stations) => {
-                    let msg = format!("{} transmissions", stations.len());
+                    let msg = tr!("spots-transmissions", stations = stations.len());
                     self.broadcast = stations;
                     // Force the on-air list to be rebuilt from the new schedule
                     // rather than waiting up to a minute for the tick.
@@ -283,13 +284,13 @@ impl SdroxideApp {
         // `spot_kinds_shown` positionally.
         let labels = [
             (SpotKind::DxCluster, "DX"),
-            (SpotKind::Pota, "POTA"),
-            (SpotKind::Sota, "SOTA"),
+            (SpotKind::Pota, &tr!("spots-pota")),
+            (SpotKind::Sota, &tr!("spots-sota")),
             (SpotKind::PskReporter, "PSK"),
-            (SpotKind::FreeDv, "FREEDV"),
+            (SpotKind::FreeDv, &tr!("spots-freedv")),
             (SpotKind::Broadcast, "BC"),
         ];
-        let resp = egui::Window::new("SPOTS")
+        let resp = egui::Window::new(tr!("spots-spots"))
             .id(crate::layout::salted_id(ctx, "SPOTS"))
             .open(&mut open)
             .frame(crate::chrome::window_frame())
@@ -302,7 +303,9 @@ impl SdroxideApp {
                     for (i, (kind, label)) in labels.iter().enumerate() {
                         let chip = crate::chrome::chip(ui, self.view.spot_kinds_shown[i], *label);
                         let chip = if *kind == SpotKind::Broadcast {
-                            chip.on_hover_text("Longwave & shortwave broadcast stations on air now")
+                            chip.on_hover_text(tr!(
+                                "spots-longwave-shortwave-broadcast-stations-air"
+                            ))
                         } else {
                             chip
                         };
@@ -310,15 +313,15 @@ impl SdroxideApp {
                             self.view.spot_kinds_shown[i] = !self.view.spot_kinds_shown[i];
                         }
                     }
-                    if crate::chrome::chip(ui, self.spot_in_view_only, "IN VIEW")
-                        .on_hover_text("Only spots inside the panadapter span")
+                    if crate::chrome::chip(ui, self.spot_in_view_only, tr!("spots-view"))
+                        .on_hover_text(tr!("spots-only-spots-inside-panadapter-span"))
                         .clicked()
                     {
                         self.spot_in_view_only = !self.spot_in_view_only;
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if crate::chrome::chip(ui, false, "⚙ SETUP")
-                            .on_hover_text("Feeds, lookup & upload settings")
+                        if crate::chrome::chip(ui, false, tr!("spots-setup"))
+                            .on_hover_text(tr!("spots-feeds-lookup-upload-settings"))
                             .clicked()
                         {
                             open_setup = true;
@@ -332,11 +335,11 @@ impl SdroxideApp {
                         ui,
                         egui::TextEdit::singleline(&mut self.spot_search)
                             .desired_width(200.0)
-                            .hint_text("call, station, site, frequency")
+                            .hint_text(tr!("spots-call-station-site-frequency"))
                             .text_color(crate::theme::TEXT_STRONG()),
                     );
                     if !self.spot_search.trim().is_empty()
-                        && ui.button("✕").on_hover_text("Clear the search").clicked()
+                        && ui.button("✕").on_hover_text(tr!("spots-clear-search")).clicked()
                     {
                         self.spot_search.clear();
                     }
@@ -363,7 +366,7 @@ impl SdroxideApp {
                     // every spot held — "3 of 5" when three categories are off
                     // would look like the search had lost the rest.
                     let (text, colour) = match rows.len() {
-                        0 => ("no match".to_string(), crate::theme::ALERT()),
+                        0 => (tr!("spots-no-match").to_string(), crate::theme::ALERT()),
                         n => (format!("{n} of {}", visible.len()), crate::theme::YELLOW()),
                     };
                     ui.label(RichText::new(text).color(colour).size(10.0));
@@ -381,9 +384,9 @@ impl SdroxideApp {
                     if rows.is_empty() {
                         ui.add_space(8.0);
                         let msg = if query.is_empty() {
-                            "no spots — enable a feed in ⚙ SETUP"
+                            tr!("spots-no-spots-enable-feed-setup")
                         } else {
-                            "nothing matches the search"
+                            tr!("spots-nothing-matches-search")
                         };
                         ui.label(RichText::new(msg).color(crate::theme::gray(120)));
                     }

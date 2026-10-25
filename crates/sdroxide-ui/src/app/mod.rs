@@ -52,6 +52,7 @@ pub(crate) mod util;
 pub(in crate::app) mod windows;
 pub(in crate::app) mod winlink;
 
+use crate::i18n::tr;
 use std::sync::{Arc, Mutex};
 
 use eframe::egui;
@@ -1231,7 +1232,7 @@ pub(crate) fn radio_name(roster: &[RadioChip], id: u32) -> String {
     roster
         .iter()
         .find(|c| c.id == id)
-        .map_or_else(|| format!("radio {}", id + 1), |c| c.display_name().to_string())
+        .map_or_else(|| tr!("app-radio", id = id + 1), |c| c.display_name().to_string())
 }
 
 /// A radio-management action requested from inside a tab (the settings
@@ -2237,36 +2238,36 @@ impl SdroxideApp {
         Some(match caps.driver.as_str() {
             "none" => return None,
             "cat" => "CAT".into(),
-            "hpsdr" => "HPSDR".into(),
+            "hpsdr" => tr!("app-hpsdr"),
             "tci" => "TCI".into(),
             "smartsdr" => "SmartSDR".into(),
             "pluto" => "PlutoSDR".into(),
-            "rtlsdr" => "RTL-SDR".into(),
+            "rtlsdr" => tr!("app-rtl-sdr"),
             // Named apart from the USB one: on a station with both, which tab
             // is the dongle on the mast is exactly what needs telling apart.
-            "rtltcp" => "RTL-SDR (rtl_tcp)".into(),
+            "rtltcp" => tr!("app-rtl-sdr-rtl-tcp"),
             // The two SpyServer interfaces are named apart for the same
             // reason: which tab is the low-bandwidth one is the thing an
             // operator running both needs to see at a glance.
             "spyserver" => "SpyServer".into(),
-            "spyserver-vfo" => "SpyServer (VFO)".into(),
+            "spyserver-vfo" => tr!("app-spyserver-vfo"),
             "rx888" => "RX-888".into(),
             // Distinct from the `"airspy"` arm below, which is SoapySDR's
             // driver for the R2 and Mini — a different radio entirely.
-            "airspyhf" => "Airspy HF+".into(),
-            "sdrplay" => "SDRplay".into(),
+            "airspyhf" => tr!("app-airspy-hf"),
+            "sdrplay" => tr!("app-sdrplay"),
             // One tab for the whole radio on an FDM-DUO: the USB receiver, the
             // CAT link and the transmit sound card.
-            "elad" => "ELAD".into(),
+            "elad" => tr!("app-elad"),
             // A SoapySDR device reports its Soapy driver name — the most
             // specific interface name there is. The common ones get their
             // proper spelling; the list is open-ended, so anything else is
             // capitalised as-is.
             "hackrf" => "HackRF".into(),
             "lime" => "LimeSDR".into(),
-            "airspy" => "Airspy".into(),
-            "sx" => "SXceiver".into(),
-            "uhd" => "USRP".into(),
+            "airspy" => tr!("app-airspy"),
+            "sx" => tr!("app-sxceiver"),
+            "uhd" => tr!("app-usrp"),
             other => {
                 let mut c = other.chars();
                 match c.next() {

@@ -11,6 +11,7 @@
 //! and the heard layer is drawn under the worked one so a square that is both
 //! reads as worked.
 
+use crate::i18n::tr;
 use eframe::egui::{self, Rect, Sense, Ui, pos2, vec2};
 use std::collections::HashSet;
 
@@ -217,7 +218,7 @@ impl SdroxideApp {
 
         let mut open = self.show_grid;
         let tracker = &mut self.grid_tracker;
-        egui::Window::new("GRID TRACKER")
+        egui::Window::new(tr!("gridtracker-grid-tracker"))
             .id(crate::layout::salted_id(ctx, "GRID TRACKER"))
             .open(&mut open)
             .frame(crate::chrome::window_frame())
@@ -228,27 +229,23 @@ impl SdroxideApp {
                 crate::chrome::window_body_bg(ui);
                 ui.horizontal(|ui| {
                     ui.label(
-                        egui::RichText::new(format!("{} worked", worked.len()))
+                        egui::RichText::new(tr!("gridtracker-worked", worked = worked.len()))
                             .color(theme::YELLOW())
                             .monospace(),
                     );
                     ui.label(
-                        egui::RichText::new(format!("{confirmed} confirmed"))
+                        egui::RichText::new(tr!("gridtracker-confirmed", confirmed = confirmed))
                             .color(theme::GREEN())
                             .monospace(),
                     );
                     if ui
                         .selectable_label(
                             tracker.show_heard,
-                            egui::RichText::new(format!("{} heard", heard.len()))
+                            egui::RichText::new(tr!("gridtracker-heard", heard = heard.len()))
                                 .color(theme::CYAN())
                                 .monospace(),
                         )
-                        .on_hover_text(
-                            "Shade the squares heard on the live decode list, not only the \
-                             ones in the log — what is on the air now, in cyan under the \
-                             worked squares.",
-                        )
+                        .on_hover_text(tr!("gridtracker-shade-squares-heard-live-decode"))
                         .clicked()
                     {
                         tracker.show_heard = !tracker.show_heard;
@@ -261,12 +258,9 @@ impl SdroxideApp {
                 draw(ui, tracker, &worked, shade, home, h);
                 ui.separator();
                 ui.label(
-                    egui::RichText::new(
-                        "Drag to pan, wheel to zoom. Amber = worked, green = confirmed, \
-                         cyan = heard.",
-                    )
-                    .size(10.0)
-                    .color(theme::gray(150)),
+                    egui::RichText::new(tr!("gridtracker-drag-pan-wheel-zoom-amber"))
+                        .size(10.0)
+                        .color(theme::gray(150)),
                 );
             });
         self.show_grid = open;

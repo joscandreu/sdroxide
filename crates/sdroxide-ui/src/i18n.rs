@@ -29,6 +29,7 @@
 use std::borrow::Cow;
 use std::sync::LazyLock;
 
+use fluent::FluentValue;
 use i18n_embed::LanguageLoader;
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed::unic_langid::LanguageIdentifier;
@@ -65,8 +66,11 @@ macro_rules! tr {
     // Each argument is bound before it is handed over, so `n = count + 1`
     // has its type settled by the arithmetic rather than left for the
     // conversion into a Fluent value to guess.
+    //
+    // Borrowed, like `format!` borrows: `name = entry.name` does not move the
+    // name out of the entry. See [`Arg`].
     ($id:literal $(, $attr:literal)?, $($name:ident = $value:expr),+ $(,)?) => {
-        match ($($value,)+) {
+        match ($($crate::i18n::arg(&$value),)+) {
             ($($name,)+) => {
                 i18n_embed_fl::fl!($crate::i18n::LOADER, $id $(, $attr)?, $($name = $name),+)
             }
@@ -74,6 +78,59 @@ macro_rules! tr {
     };
 }
 pub(crate) use tr;
+
+/// A value a message can be given: text, or a number (which Fluent can
+/// choose a plural form by). Implemented for references too, so [`tr!`] can
+/// take every argument by reference and never move it.
+pub(crate) trait Arg {
+    fn fluent(&self) -> FluentValue<'_>;
+}
+
+impl Arg for str {
+    fn fluent(&self) -> FluentValue<'_> {
+        FluentValue::from(self)
+    }
+}
+
+impl Arg for String {
+    fn fluent(&self) -> FluentValue<'_> {
+        FluentValue::from(self.as_str())
+    }
+}
+
+impl Arg for Cow<'_, str> {
+    fn fluent(&self) -> FluentValue<'_> {
+        FluentValue::from(self.as_ref())
+    }
+}
+
+impl<T: Arg + ?Sized> Arg for &T {
+    fn fluent(&self) -> FluentValue<'_> {
+        (**self).fluent()
+    }
+}
+
+macro_rules! number_arg {
+    ($($t:ty)*) => {$(
+        impl Arg for $t {
+            fn fluent(&self) -> FluentValue<'_> {
+                FluentValue::from(*self)
+            }
+        }
+    )*};
+}
+number_arg!(u8 u16 u32 u64 usize i8 i16 i32 i64 isize f32 f64);
+
+impl Arg for char {
+    fn fluent(&self) -> FluentValue<'_> {
+        FluentValue::from(self.to_string())
+    }
+}
+
+/// The [`Arg`] behind a reference, for [`tr!`].
+pub(crate) fn arg<T: Arg + ?Sized>(value: &T) -> FluentValue<'_> {
+    value.fluent()
+}
 
 /// The tag picked to draw every message as an accented, lengthened English —
 /// a layout test: text that is not going through [`tr!`] stays plain and

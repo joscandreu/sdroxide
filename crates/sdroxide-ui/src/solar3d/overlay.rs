@@ -256,7 +256,7 @@ fn view_controls(ui: &mut egui::Ui, st: &mut SolarUi) {
 
     let mut chosen = None;
     for (caption, targets) in Focus::groups() {
-        chrome::menu_caption(ui, caption);
+        chrome::menu_caption(ui, &caption);
         ui.horizontal_wrapped(|ui| {
             for f in targets {
                 // Moons are dimmer, so a row reads as "this planet, and the

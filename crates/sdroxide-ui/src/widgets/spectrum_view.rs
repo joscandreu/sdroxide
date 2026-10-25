@@ -5,6 +5,7 @@
 //! tunes by dragging inside its own passband, and a shift+drag bandwidth
 //! measurement ruler.
 
+use crate::i18n::tr;
 use std::sync::Arc;
 
 use eframe::egui::{
@@ -1271,7 +1272,7 @@ pub fn show_ext(
         painter.text(
             rect.center(),
             Align2::CENTER_CENTER,
-            "waiting for spectrum…",
+            tr!("specview-waiting-spectrum"),
             FontId::proportional(16.0),
             Color32::GRAY,
         );
@@ -2383,7 +2384,7 @@ pub fn show_ext(
             (
                 sdroxide_types::FOX_ZONE_MAX_HZ as f64,
                 sdroxide_types::HOUND_ZONE_MAX_HZ as f64,
-                "HOUNDS",
+                &tr!("specview-hounds"),
                 crate::theme::scope().accent,
                 mine(sdroxide_types::DxpedMode::Hound),
             ),
@@ -2502,7 +2503,7 @@ pub fn show_ext(
                 view.freq_to_x(state.rx_freq_hz(), &rect),
                 top_y + row * 16.0,
                 rit_col,
-                &format!("RIT {:+} Hz", state.rit.hz),
+                &tr!("specview-rit-hz", hz = format!("{:+}", state.rit.hz)),
             );
             row += 1.0;
         }
@@ -2527,7 +2528,7 @@ pub fn show_ext(
                 view.freq_to_x(tx, &rect),
                 top_y + row * 16.0,
                 xit_col,
-                &format!("XIT {:+} Hz", state.xit.hz),
+                &tr!("specview-xit-hz", hz = format!("{:+}", state.xit.hz)),
             );
             row += 1.0;
         }
@@ -2940,7 +2941,7 @@ fn zoom_about(view: &mut ViewState, x: f32, rect: &Rect, factor: f64, dev_span: 
 
 /// A frequency in Hz as `xx.xxxxx MHz`.
 fn fmt_mhz(hz: f64) -> String {
-    format!("{:.5} MHz", hz / 1e6)
+    format!("{e6:.5} MHz", e6 = hz / 1e6)
 }
 
 /// Draw `text` in a small box centred on `cx`, top at `y`, clamped to `rect`,
@@ -2977,11 +2978,11 @@ fn format_bandwidth(hz: f64) -> String {
         // The ruler also runs over the full-band strip, where a span of several
         // megahertz is the ordinary case and four digits of kilohertz is not a
         // number anyone reads.
-        format!("{:.3} MHz", hz / 1e6)
+        format!("{e6:.3} MHz", e6 = hz / 1e6)
     } else if hz >= 10_000.0 {
-        format!("{:.1} kHz", hz / 1000.0)
+        format!("{hz:.1} kHz", hz = hz / 1000.0)
     } else if hz >= 1_000.0 {
-        format!("{:.2} kHz", hz / 1000.0)
+        format!("{hz:.2} kHz", hz = hz / 1000.0)
     } else {
         format!("{:.0} Hz", hz)
     }
@@ -3067,7 +3068,7 @@ fn click_tune_label(
         // The label is the frequency of the *signal*, which in CW is a pitch
         // above the dial the click will actually set.
         let tuned = (hz / CLICK_TUNE_STEP).round() * CLICK_TUNE_STEP;
-        format!("{:.5} MHz", tuned / 1e6)
+        format!("{e6:.5} MHz", e6 = tuned / 1e6)
     }
 }
 
