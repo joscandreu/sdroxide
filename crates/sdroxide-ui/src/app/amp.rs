@@ -10,6 +10,7 @@
 //!
 //! [`RadioEvent::AmpStatus`]: sdroxide_types::RadioEvent::AmpStatus
 
+use crate::i18n::tr;
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Stroke, Vec2};
 use sdroxide_types::{
     AmpAction, AmpGauge, AmpLevel, AmpLimits, AmpModel, AmpReadings, AmpStatus, AtuNetwork,
@@ -394,19 +395,19 @@ impl AmpMeter {
 
 /// The legend's word on a meter's scale. RFL is on a fifth of FWD's range, so
 /// it names its own full scale, not the range's.
-fn scale_note(m: AmpMeter, ranged: Option<PowerRange>, rescaled: bool) -> &'static str {
+fn scale_note(m: AmpMeter, ranged: Option<PowerRange>, rescaled: bool) -> String {
     let rfl = m == AmpMeter::Rfl;
     match (ranged, rfl, rescaled) {
-        (Some(PowerRange::Ten), false, true) => ", 10 W scale, rescaled",
-        (Some(PowerRange::Ten), false, false) => ", 10 W scale",
-        (Some(PowerRange::Ten), true, true) => ", 2 W scale, rescaled",
-        (Some(PowerRange::Ten), true, false) => ", 2 W scale",
-        (Some(PowerRange::Hundred), false, true) => ", 100 W scale, rescaled",
-        (Some(PowerRange::Hundred), false, false) => ", 100 W scale",
-        (Some(PowerRange::Hundred), true, true) => ", 20 W scale, rescaled",
-        (Some(PowerRange::Hundred), true, false) => ", 20 W scale",
-        (_, _, true) => ", rescaled",
-        (_, _, false) => "",
+        (Some(PowerRange::Ten), false, true) => tr!("amp-t-10-w-scale-rescaled"),
+        (Some(PowerRange::Ten), false, false) => tr!("amp-t-10-w-scale"),
+        (Some(PowerRange::Ten), true, true) => tr!("amp-t-2-w-scale-rescaled"),
+        (Some(PowerRange::Ten), true, false) => tr!("amp-t-2-w-scale"),
+        (Some(PowerRange::Hundred), false, true) => tr!("amp-t-100-w-scale-rescaled"),
+        (Some(PowerRange::Hundred), false, false) => tr!("amp-t-100-w-scale"),
+        (Some(PowerRange::Hundred), true, true) => tr!("amp-t-20-w-scale-rescaled"),
+        (Some(PowerRange::Hundred), true, false) => tr!("amp-t-20-w-scale"),
+        (_, _, true) => tr!("amp-rescaled"),
+        (_, _, false) => "".into(),
     }
 }
 
@@ -431,7 +432,7 @@ fn legend_size(width: f32, room: f32, s: f32) -> f32 {
 fn unsure_warning(top: &Dial, bottom: Option<&Dial>) -> Option<String> {
     let names: Vec<&str> =
         std::iter::once(top).chain(bottom).filter(|d| d.unsure).map(|d| d.name).collect();
-    (!names.is_empty()).then(|| format!("{} UNRELIABLE AT THIS SWR", names.join(" AND ")))
+    (!names.is_empty()).then(|| tr!("amp-unreliable-at-swr", meters = names.join(&tr!("amp-and"))))
 }
 
 /// Power in whole watts, or tenths below 10 W: barefoot, a whole watt is a
@@ -526,8 +527,9 @@ fn performance(r: &AmpReadings) -> Option<[f32; 3]> {
 
 /// Why a relay button is greyed: shown to the operator on hover. See
 /// docs/hardrock/safety-interlocks.md.
-const NOT_WHILE_TX: &str =
-    "Not while transmitting: switching a relay with RF on it can damage it. Unkey first.";
+fn not_while_tx() -> String {
+    tr!("amp-not-while-transmitting-switching-relay")
+}
 
 /// Whether there is RF in the amplifier now, going in or coming out: while
 /// there is, no relay in its path may be switched (safety interlock #2).
@@ -900,11 +902,8 @@ fn amp_panel_inner(
 ) -> bool {
     let actions = &mut out.actions;
     if !st.configured {
-        ui.label(
-            RichText::new("No amplifier is set up. Choose its port under Settings → Amplifier.")
-                .weak(),
-        );
-        return chrome::chip(ui, false, "SETTINGS").clicked();
+        ui.label(RichText::new(tr!("amp-no-amplifier-set-up-choose")).weak());
+        return chrome::chip(ui, false, tr!("amp-settings")).clicked();
     }
 
     let limits = st.model.limits();
@@ -938,14 +937,11 @@ fn amp_panel_inner(
         if let Some(popped) = pop {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let (text, hover) = if popped {
-                    ("DOCK", "Put the AMP window back inside the main window")
+                    (tr!("amp-dock"), tr!("amp-put-amp-window-back-inside"))
                 } else {
-                    (
-                        "POP OUT",
-                        "Give the AMP window a window of its own, to move to another screen",
-                    )
+                    (tr!("amp-pop-out"), tr!("amp-give-amp-window-window-own"))
                 };
-                if button(ui, s, false, text, None).on_hover_text(hover).clicked() {
+                if button(ui, s, false, &text, None).on_hover_text(hover).clicked() {
                     out.pop = true;
                 }
             });
@@ -984,13 +980,13 @@ fn amp_panel_inner(
                     _ => false,
                 },
             source: match m {
-                AmpMeter::Fwd if rig.fwd == Some("rig") => ", from the rig",
-                AmpMeter::Fwd if rig.fwd == Some("flagged") => ", the rig flagged its reading",
-                AmpMeter::Rfl if rig.rfl == Some("flagged") => ", the rig flagged its reading",
-                AmpMeter::Fwd if rig.fwd.is_some() => ", from DRV",
-                AmpMeter::Rfl if rig.rfl == Some("rig") => ", from the rig",
-                AmpMeter::Rfl if rig.rfl.is_some() => ", from the rig's SWR",
-                _ => "",
+                AmpMeter::Fwd if rig.fwd == Some("rig") => tr!("amp-rig"),
+                AmpMeter::Fwd if rig.fwd == Some("flagged") => tr!("amp-rig-flagged-reading"),
+                AmpMeter::Rfl if rig.rfl == Some("flagged") => tr!("amp-rig-flagged-reading"),
+                AmpMeter::Fwd if rig.fwd.is_some() => tr!("amp-drv"),
+                AmpMeter::Rfl if rig.rfl == Some("rig") => tr!("amp-rig"),
+                AmpMeter::Rfl if rig.rfl.is_some() => tr!("amp-rig-s-swr"),
+                _ => String::new(),
             },
         }
     };
@@ -1040,13 +1036,15 @@ fn amp_panel_inner(
             // drive limit, as a 100 W radio running barefoot through the
             // bypassed amp does. The link checks again before sending.
             let overdriven = !r.ptt && r.drive_w > limits.drive_warn_w;
-            let ptt = ui.add_enabled_ui(!overdriven, |ui| button(ui, s, true, mode, Some(fill))).inner;
+            let ptt =
+                ui.add_enabled_ui(!overdriven, |ui| button(ui, s, true, mode, Some(fill))).inner;
             corner_mark(ui.painter(), ptt.rect, s, theme::INK_ON_BRIGHT());
             if ptt
-                .on_hover_text("PTT keys the amplifier with the radio; OFF leaves it in bypass. Click to switch.")
-                .on_disabled_hover_text(format!(
-                    "Lower the drive first: {:.0} W would overdrive the amplifier in line (its limit is {:.0} W).",
-                    r.drive_w, limits.drive_warn_w
+                .on_hover_text(tr!("amp-ptt-keys-amplifier-radio-off"))
+                .on_disabled_hover_text(tr!(
+                    "amp-lower-drive-first",
+                    drive = format!("{:.0}", r.drive_w),
+                    limit = format!("{:.0}", limits.drive_warn_w)
                 ))
                 .clicked()
             {
@@ -1054,23 +1052,27 @@ fn amp_panel_inner(
             }
             // SAFETY INTERLOCK (docs/hardrock/safety-interlocks.md, #2):
             // antenna and band switch relays in the RF path, which must not
-            // be switched with RF on them; see NOT_WHILE_TX and `rf_present`.
+            // be switched with RF on them; see `not_while_tx` and `rf_present`.
             // The link checks again before sending (#1).
             let rf = rf_present(&r);
             let relay_button = |ui: &mut egui::Ui, text: &str, hover: &str| {
                 ui.add_enabled_ui(!rf, |ui| button(ui, s, false, text, None))
                     .inner
                     .on_hover_text(hover)
-                    .on_disabled_hover_text(NOT_WHILE_TX)
+                    .on_disabled_hover_text(not_while_tx())
                     .clicked()
             };
             if st.model.antennas() > 1
-                && relay_button(ui, &format!("ANT {}", r.antenna.max(1)), "Switch antenna jack")
+                && relay_button(
+                    ui,
+                    &format!("ANT {}", r.antenna.max(1)),
+                    &tr!("amp-switch-antenna-jack"),
+                )
             {
                 actions.push(AmpAction::SetAntenna(if r.antenna == 2 { 1 } else { 2 }));
             }
             ui.add_space(6.0 * s);
-            if relay_button(ui, "DN", "Band down") {
+            if relay_button(ui, "DN", &tr!("amp-band-down")) {
                 actions.push(AmpAction::BandDown);
             }
             ui.label(
@@ -1079,7 +1081,7 @@ fn amp_panel_inner(
                     .strong()
                     .color(theme::YELLOW()),
             );
-            if relay_button(ui, "UP", "Band up") {
+            if relay_button(ui, "UP", &tr!("amp-band-up")) {
                 actions.push(AmpAction::BandUp);
             }
         });
@@ -1092,7 +1094,7 @@ fn amp_panel_inner(
     // ── the tuner ──────────────────────────────────────────────────────────
     if let Some(atu) = st.atu.as_ref() {
         ui.add_space(8.0 * s);
-        caption(ui, s, "TUNER");
+        caption(ui, s, &tr!("amp-tuner"));
         let net = atu.network;
         let bypassed = !atu.active || net.is_none_or(|n| n.bypassed);
         let h = (nominal * 0.21).max(110.0 * s);
@@ -1130,7 +1132,7 @@ fn amp_panel_inner(
         let failed = atu.last_result.as_deref().is_some_and(|r| {
             ["Failed", "SWR above", "Lo power", "Power too high"].iter().any(|f| r.starts_with(f))
         });
-        let tuned = atu.active && atu.last_result.as_deref() == Some("Tuned");
+        let tuned = atu.active && atu.last_result.as_deref() == Some(&tr!("amp-tuned"));
         let (lit, tune_fill) = if atu.tuning {
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
             (now.rem_euclid(1.0) < 0.5, theme::CYAN())
@@ -1139,10 +1141,8 @@ fn amp_panel_inner(
         } else {
             (failed, theme::ALERT())
         };
-        if button(&mut inside, s, lit, "TUNE", Some(tune_fill))
-            .on_hover_text(
-                "Start a tune — then key a steady carrier (CW, FM or RTTY). Press again to stop.",
-            )
+        if button(&mut inside, s, lit, &tr!("amp-tune"), Some(tune_fill))
+            .on_hover_text(tr!("amp-start-tune-then-key-steady"))
             .clicked()
         {
             actions.push(AmpAction::Tune);
@@ -1157,8 +1157,8 @@ fn amp_panel_inner(
         if inside
             .add_enabled_ui(!rf, |ui| button(ui, s, true, on_byp, Some(fill)))
             .inner
-            .on_hover_text("Put the tuner in line, or bypass it")
-            .on_disabled_hover_text(NOT_WHILE_TX)
+            .on_hover_text(tr!("amp-put-tuner-line-bypass"))
+            .on_disabled_hover_text(not_while_tx())
             .clicked()
         {
             actions.push(AmpAction::SetAtu(!atu.active));
@@ -1167,7 +1167,7 @@ fn amp_panel_inner(
         if atu.tuning || !bypassed {
             ui.horizontal(|ui| {
                 let state = if atu.tuning {
-                    "Tuning…".to_string()
+                    tr!("amp-tuning").to_string()
                 } else if let Some(res) = &atu.last_result {
                     res.clone()
                 } else {
@@ -1220,7 +1220,7 @@ fn pickers(ui: &mut egui::Ui, i: usize, pair: &mut Pair, s: f32) {
             pair.set_top(top);
         }
         ui.add_space(8.0 * s);
-        ui.label(RichText::new("BOTTOM").size(pt).color(theme::TEXT()));
+        ui.label(RichText::new(tr!("amp-bottom")).size(pt).color(theme::TEXT()));
         let mut bottom = pair.bottom;
         let shown = bottom.map_or("none", |b| b.label());
         dot(ui, if bottom.is_some() { bottom_ink() } else { theme::LINE() }, s);
@@ -1238,7 +1238,7 @@ fn pickers(ui: &mut egui::Ui, i: usize, pair: &mut Pair, s: f32) {
         }
     })
     .response
-    .on_hover_text("Pick any reading for either needle. The top needle is white, the bottom blue.");
+    .on_hover_text(tr!("amp-pick-any-reading-either-needle"));
 }
 
 /// A needle's colour as a dot beside its picker. Drawn rather than typed:
@@ -1271,49 +1271,42 @@ fn readings_row(
                               read. The SWR is the figure to go by: check the antenna";
     let fwd_hover = match rig.fwd {
         Some("rig") if past => UNRELIABLE,
-        Some("rig") => "Forward power, measured by the radio: the amplifier reports none in OFF",
+        Some("rig") => &tr!("amp-forward-power-measured-radio-amplifier"),
         Some("flagged") => FLAGGED,
-        Some(_) => {
-            "Forward power, taken from DRV: the amplifier reports none in OFF, and \
-                    in bypass the radio's power goes straight through"
-        }
-        None => "Forward power",
+        Some(_) => &tr!("amp-forward-power-taken-drv-amplifier"),
+        None => &tr!("amp-forward-power"),
     };
     let rfl_hover = match rig.rfl {
         Some("rig") if past => UNRELIABLE,
-        Some("rig") => "Reflected power, measured by the radio: the amplifier reports none in OFF",
+        Some("rig") => &tr!("amp-reflected-power-measured-radio-amplifier"),
         Some("flagged") => FLAGGED,
-        Some(_) => {
-            "Reflected power, worked out from FWD and the SWR: the amplifier reports none in OFF"
-        }
-        None => "Reflected power",
+        Some(_) => &tr!("amp-reflected-power-worked-out-fwd"),
+        None => &tr!("amp-reflected-power"),
     };
     let swr_hover = if past {
-        "Standing wave ratio: red at or past the tune limit (Settings → General). Check the \
-         antenna"
+        tr!("amp-standing-wave-ratio-red-past")
     } else if rig.swr {
-        "Standing wave ratio, measured by the radio: the amplifier reports none in OFF"
+        tr!("amp-standing-wave-ratio-measured-radio")
     } else {
-        "Standing wave ratio"
+        tr!("amp-standing-wave-ratio")
     };
     let tiles: [(&str, String, Option<AmpGauge>, &str); 7] = [
         ("FWD", AmpMeter::Fwd.text(r), Some(AmpGauge::Fwd), fwd_hover),
         ("RFL", AmpMeter::Rfl.text(r), Some(AmpGauge::Rfl), rfl_hover),
-        ("DRV", AmpMeter::Drv.text(r), Some(AmpGauge::Drive), "Drive from the radio"),
-        ("VDD", AmpMeter::Vdd.text(r), Some(AmpGauge::Vdd), "Drain supply"),
-        ("IDD", AmpMeter::Idd.text(r), Some(AmpGauge::Idd), "Drain current"),
+        ("DRV", AmpMeter::Drv.text(r), Some(AmpGauge::Drive), &tr!("amp-drive-radio")),
+        ("VDD", AmpMeter::Vdd.text(r), Some(AmpGauge::Vdd), &tr!("amp-drain-supply")),
+        ("IDD", AmpMeter::Idd.text(r), Some(AmpGauge::Idd), &tr!("amp-drain-current")),
         (
-            "TEMP",
+            &tr!("amp-temp"),
             format!("{:.0}°{unit}", r.temperature),
             Some(AmpGauge::Temp),
-            "Heat spreader temperature: yellow from 49 °C (120 °F), red above 65 °C (149 °F), \
-             off line above 70 °C (158 °F). Click for °C/°F.",
+            &tr!("amp-heat-spreader-temperature-yellow-49"),
         ),
         // No colour of its own, as on the amplifier, where reflected power is
         // the one that warns and trips; but red at or past the tune limit,
         // where a radio's watts can't be trusted and the SWR is the figure
         // that tells the operator something is wrong (AJ3G, 18 Oct 2026).
-        ("SWR", swr, None, swr_hover),
+        ("SWR", swr, None, &swr_hover),
     ];
     let gap = ui.spacing().item_spacing.x;
     let w = (ui.available_width() - gap * 6.0) / 7.0;
@@ -1347,7 +1340,7 @@ fn readings_row(
                 p.text(
                     Pos2::new(rect.right() - 6.0 * s, rect.bottom() - 4.0 * s),
                     egui::Align2::RIGHT_BOTTOM,
-                    if unit == "F" { "°C" } else { "°F" },
+                    if unit == "F" { tr!("amp-c") } else { tr!("amp-f") },
                     egui::FontId::proportional(10.0 * s),
                     ink.gamma_multiply(0.8),
                 );
@@ -1382,20 +1375,20 @@ fn readings_row(
 /// transmitting. The number is the peak hold, as on an SSB wattmeter; the bar
 /// under it is live, with the held peak as a tick on it.
 fn performance_row(ui: &mut egui::Ui, s: f32, perf: &Perf, limits: &AmpLimits, now: f64) {
-    let row = ui.horizontal(|ui| caption(ui, s, "PERFORMANCE")).response.rect;
+    let row = ui.horizontal(|ui| caption(ui, s, &tr!("amp-performance"))).response.rect;
     // Centred over the middle box, EFFICIENCY.
     ui.painter().text(
         Pos2::new(ui.max_rect().center().x, row.center().y),
         egui::Align2::CENTER_CENTER,
-        "numbers hold peaks · bars are live",
+        tr!("amp-numbers-hold-peaks-bars-are"),
         egui::FontId::proportional(11.0 * s),
         theme::TEXT(),
     );
     let full = perf_full(limits);
     let boxes = [
-        ("INPUT POWER", "W", 0, theme::CYAN(), "Supply volts × drain amps"),
-        ("EFFICIENCY", "%", 0, theme::GREEN(), "Output power ÷ input power"),
-        ("GAIN", "dB", 1, theme::GREEN(), "Output power over drive, in decibels"),
+        (tr!("amp-input-power"), "W", 0, theme::CYAN(), tr!("amp-supply-volts-drain-amps")),
+        (tr!("amp-efficiency"), "%", 0, theme::GREEN(), tr!("amp-output-power-input-power")),
+        (tr!("amp-gain"), "dB", 1, theme::GREEN(), tr!("amp-output-power-over-drive-decibels")),
     ];
     let gap = ui.spacing().item_spacing.x;
     let w = (ui.available_width() - gap * 2.0) / 3.0;
@@ -1455,7 +1448,7 @@ fn performance_row(ui: &mut egui::Ui, s: f32, perf: &Perf, limits: &AmpLimits, n
                 p.text(
                     Pos2::new(x, rect.bottom() - 5.0 * s),
                     egui::Align2::LEFT_BOTTOM,
-                    format!("live {} {unit}", fmt(a[i])),
+                    tr!("amp-live-value", value = fmt(a[i]), unit = unit.to_string()),
                     egui::FontId::proportional(11.0 * s),
                     theme::TEXT(),
                 );
@@ -1484,19 +1477,19 @@ fn link_line(ui: &mut egui::Ui, st: &AmpStatus, s: f32, transmitting: bool) {
     let trips = st.alerts.trips();
     let hot = st.readings.is_some_and(|r| st.model.limits().over_temp(&r));
     let (text, col) = if st.connected && hot {
-        ("OFF LINE · over temperature".to_string(), theme::ALERT())
+        (tr!("amp-off-line-over-temperature").to_string(), theme::ALERT())
     } else if st.connected && st.alerts.tripped {
         let why =
             if trips.is_empty() { String::new() } else { format!(" · {}", trips.join(", ")) };
-        (format!("TRIPPED{why}"), theme::ALERT())
+        (tr!("amp-tripped", why = why), theme::ALERT())
     } else if st.connected && transmitting {
-        ("CONNECTED · TRANSMITTING".to_string(), theme::GREEN())
+        (tr!("amp-connected-transmitting").to_string(), theme::GREEN())
     } else if st.connected {
-        ("CONNECTED".to_string(), theme::GREEN())
+        (tr!("amp-connected").to_string(), theme::GREEN())
     } else if let Some(e) = &st.error {
         (e.clone(), theme::ALERT())
     } else {
-        ("Connecting…".to_string(), theme::YELLOW())
+        (tr!("amp-connecting").to_string(), theme::YELLOW())
     };
     ui.label(RichText::new(text).size(12.0 * s).color(col));
 }
@@ -1510,9 +1503,9 @@ struct Dial {
     zones: Zones,
     live: bool,
     /// Added to the name when the scale isn't the usual one.
-    note: &'static str,
+    note: String,
     /// Added after that when the reading isn't the amplifier's own.
-    source: &'static str,
+    source: String,
     /// The radio's own watts at an SWR where they can't be trusted (see
     /// [`swr_past`]): warned of across the top of the meter.
     unsure: bool,
@@ -1747,7 +1740,7 @@ fn bypass_drawing(p: &egui::Painter, rect: Rect, s: f32) {
     p.text(
         Pos2::new(rect.right() - 14.0 * s, rect.bottom() - 12.0 * s),
         egui::Align2::RIGHT_BOTTOM,
-        "ATU BYPASSED",
+        tr!("amp-atu-bypassed"),
         egui::FontId::proportional(13.0 * s),
         theme::CYAN(),
     );
@@ -1814,12 +1807,12 @@ fn lc_network(p: &egui::Painter, rect: Rect, s: f32, n: AtuNetwork, model: AmpMo
     let (l_text, c_text) = match model.atu_scale() {
         Some(sc) => (
             if n.l_step == 0 {
-                "no inductance needed".to_string()
+                tr!("amp-no-inductance-needed").to_string()
             } else {
                 format!("~{:.2} µH · step {}", sc.inductance_uh(n.l_step), n.l_step)
             },
             if n.c_step == 0 {
-                "no capacitance needed".to_string()
+                tr!("amp-no-capacitance-needed").to_string()
             } else {
                 format!("~{:.0} pF · step {}", sc.capacitance_pf(n.c_step), n.c_step)
             },
@@ -1858,7 +1851,8 @@ fn lc_network(p: &egui::Painter, rect: Rect, s: f32, n: AtuNetwork, model: AmpMo
         small,
         theme::TEXT(),
     );
-    let shunt = if n.cap_output { "C OUT · antenna side" } else { "C IN · transmitter side" };
+    let shunt =
+        if n.cap_output { tr!("amp-c-out-antenna-side") } else { tr!("amp-c-transmitter-side") };
     p.text(
         Pos2::new(rect.right() - 14.0 * s, rect.bottom() - 12.0 * s),
         egui::Align2::RIGHT_BOTTOM,
@@ -2142,8 +2136,8 @@ mod tests {
             full: 10.0,
             zones: Zones::Below(0.0),
             live: true,
-            note: "",
-            source: "",
+            note: String::from(""),
+            source: String::from(""),
             unsure,
         };
         assert_eq!(unsure_warning(&dial("FWD", false), Some(&dial("DRV", false))), None);

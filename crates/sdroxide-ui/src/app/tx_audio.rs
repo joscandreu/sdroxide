@@ -18,6 +18,7 @@
 //! meters; METERS runs it for the meters alone, which is how levels are set —
 //! there is no monitoring delay to talk against and nothing to feed back.
 
+use crate::i18n::tr;
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, RichText, Sense, Slider, Stroke,
     StrokeKind, Vec2, pos2, vec2,
@@ -137,11 +138,11 @@ struct AutoLevel {
 /// taken at `current_db` — to [`AUTO_LEVEL_TARGET_DB`], and the level that
 /// loud end was at. The 90th percentile of the speech windows rather than the
 /// maximum, so one plosive does not set the level for every word after it.
-fn auto_level(peaks: &[f32], current_db: f32) -> Result<(f32, f32), &'static str> {
+fn auto_level(peaks: &[f32], current_db: f32) -> Result<(f32, f32), String> {
     let mut speech: Vec<f32> =
         peaks.iter().copied().filter(|p| p.is_finite() && *p > AUTO_LEVEL_SPEECH_DB).collect();
     if speech.len() < AUTO_LEVEL_MIN_WINDOWS {
-        return Err("Heard too little speech — talk normally for the whole count and try again.");
+        return Err(tr!("txaudio-heard-too-little-speech-talk"));
     }
     speech.sort_by(f32::total_cmp);
     let loud = speech[(speech.len() - 1) * 9 / 10];
@@ -211,7 +212,7 @@ impl SdroxideApp {
         ui_state.meters.update(now, fresh);
         pick_up_import(ui_state);
 
-        let resp = egui::Window::new("TX Audio")
+        let resp = egui::Window::new(tr!("txaudio-tx-audio"))
             .id(crate::layout::salted_id(ctx, "TX Audio"))
             .open(&mut open)
             .frame(crate::chrome::window_frame())
@@ -224,13 +225,9 @@ impl SdroxideApp {
                 level_row(ui, &mut v, ui_state, mic_gain, test, transmitting, now, fresh, cmds);
                 if !voice_mode {
                     ui.label(
-                        RichText::new(
-                            "This mode is not a voice mode, so nothing it sends passes \
-                             through the chain. Settings made here take effect in SSB, AM \
-                             and FM.",
-                        )
-                        .color(crate::theme::YELLOW())
-                        .size(11.5),
+                        RichText::new(tr!("txaudio-mode-not-voice-mode-so"))
+                            .color(crate::theme::YELLOW())
+                            .size(11.5),
                     );
                 }
                 ui.separator();
@@ -296,54 +293,44 @@ fn header(
     cmds: &mut Vec<Command>,
 ) {
     ui.horizontal_wrapped(|ui| {
-        if crate::chrome::chip_accent(ui, v.bypass, "BYPASS", crate::theme::ALERT(), Color32::WHITE)
-            .on_hover_text(
-                "Switch every stage out at once, denoiser included, so the microphone goes out \
-             unprocessed. Click again to restore exactly the stages that were on — the \
-             quickest A/B of what the chain is doing.",
-            )
-            .clicked()
+        if crate::chrome::chip_accent(
+            ui,
+            v.bypass,
+            tr!("txaudio-bypass"),
+            crate::theme::ALERT(),
+            Color32::WHITE,
+        )
+        .on_hover_text(tr!("txaudio-switch-every-stage-out-once"))
+        .clicked()
         {
             v.bypass = !v.bypass;
         }
-        if crate::chrome::chip(ui, v.denoise, "DENOISE")
-            .on_hover_text(
-                "RNNoise on the microphone, ahead of every other stage, so room noise is \
-                 removed before the gate or the compressor can bring it up. Adds about \
-                 10 ms of delay.",
-            )
+        if crate::chrome::chip(ui, v.denoise, tr!("txaudio-denoise"))
+            .on_hover_text(tr!("txaudio-rnnoise-microphone-ahead-every-other"))
             .clicked()
         {
             v.denoise = !v.denoise;
         }
-        if crate::chrome::chip(ui, v.digital_voice, "DIGITAL VOICE")
-            .on_hover_text(
-                "Also run FreeDV / RADE digital voice through the chain. Off by default: a \
-                 vocoder is trained on natural speech and may decode worse from a heavily \
-                 processed voice, so try it on the air before relying on it. TCI audio and \
-                 the digital modes never pass through the chain.",
-            )
+        if crate::chrome::chip(ui, v.digital_voice, tr!("txaudio-digital-voice"))
+            .on_hover_text(tr!("txaudio-also-run-freedv-rade-digital"))
             .clicked()
         {
             v.digital_voice = !v.digital_voice;
         }
 
         ui.add_space(12.0);
-        ui.label(RichText::new("Test").weak());
+        ui.label(RichText::new(tr!("txaudio-test")).weak());
         let recording = test == TxVoiceTest::Recording;
         let playing = test == TxVoiceTest::Playing;
         let rec = crate::chrome::chip_accent(
             ui,
             recording,
-            " ⏺ REC ",
+            tr!("txaudio-rec"),
             crate::theme::ALERT(),
             Color32::WHITE,
         );
-        let rec = rec.on_hover_text(format!(
-            "Record a test phrase from the microphone — up to {TX_VOICE_TEST_MAX_S:.0} s, \
-             without keying the transmitter. Click again to stop. It is kept unprocessed, \
-             so PLAY can put the same phrase through every change you make."
-        ));
+        let rec =
+            rec.on_hover_text(tr!("txaudio-rec-hint", max = format!("{TX_VOICE_TEST_MAX_S:.0}")));
         if rec.clicked() && !transmitting {
             cmds.push(Command::TxVoiceTestRecord(!recording));
         }
@@ -352,46 +339,36 @@ fn header(
             ui,
             can_play || playing,
             playing,
-            " ▶ PLAY ",
+            &tr!("txaudio-play"),
             None,
             crate::theme::GREEN(),
             crate::theme::INK_ON_BRIGHT(),
         );
-        let play = play.on_hover_text(
-            "Play the test phrase through the chain as it is set now, to your speakers. \
-             Adjust while it plays and hear the change. Receive audio is replaced while it \
-             plays.",
-        );
+        let play = play.on_hover_text(tr!("txaudio-play-test-phrase-through-chain"));
         if play.clicked() {
             cmds.push(Command::TxVoiceTestPlay(!playing));
         }
         let what = match test {
-            TxVoiceTest::Recording => "recording…".to_string(),
-            _ if test_len > 0.0 => format!("{test_len:.1} s phrase"),
-            _ => "no phrase yet".to_string(),
+            TxVoiceTest::Recording => tr!("txaudio-recording").to_string(),
+            _ if test_len > 0.0 => tr!("txaudio-phrase-length", secs = format!("{test_len:.1}")),
+            _ => tr!("txaudio-no-phrase-yet").to_string(),
         };
         ui.label(RichText::new(what).weak().size(11.5));
 
         ui.add_space(12.0);
-        ui.label(RichText::new("Live").weak());
+        ui.label(RichText::new(tr!("txaudio-live")).weak());
         let monitoring = test == TxVoiceTest::Monitoring;
         let metering = test == TxVoiceTest::Metering;
         let live = crate::chrome::chip_accent_enabled(
             ui,
             !transmitting || monitoring,
             monitoring,
-            " 🎧 LIVE ",
+            &tr!("txaudio-live-2"),
             None,
             crate::theme::CYAN(),
             crate::theme::INK_ON_CYAN(),
         );
-        let live = live.on_hover_text(
-            "Hear your microphone through the chain as you talk, without keying the \
-             transmitter. Use headphones: through speakers it feeds back. You hear yourself \
-             a few tens of milliseconds late, which makes talking awkward — set levels on the \
-             meters, and judge the sound with REC / PLAY. Receive audio is replaced while it \
-             runs; pressing PTT stops it.",
-        );
+        let live = live.on_hover_text(tr!("txaudio-hear-your-microphone-through-chain"));
         if live.clicked() {
             let want = if monitoring { TxVoiceLive::Off } else { TxVoiceLive::Audio };
             cmds.push(Command::TxVoiceTestLive(want));
@@ -400,17 +377,12 @@ fn header(
             ui,
             !transmitting || metering,
             metering,
-            " METERS ",
+            &tr!("txaudio-meters"),
             None,
             crate::theme::CYAN(),
             crate::theme::INK_ON_CYAN(),
         );
-        let meters = meters.on_hover_text(
-            "Run your microphone through the chain for the meters alone: nothing on the \
-             speakers, so no delay to talk against and nothing to feed back. The way to set \
-             mic and input gain, the gate threshold and how hard the compressor works. \
-             Receive audio carries on; pressing PTT stops it.",
-        );
+        let meters = meters.on_hover_text(tr!("txaudio-run-your-microphone-through-chain"));
         if meters.clicked() {
             let want = if metering { TxVoiceLive::Off } else { TxVoiceLive::Meters };
             cmds.push(Command::TxVoiceTestLive(want));
@@ -418,22 +390,12 @@ fn header(
     });
     if test == TxVoiceTest::Monitoring {
         ui.label(
-            RichText::new(
-                "Monitoring live — use headphones, or the speakers will feed back into the \
-                 microphone.",
-            )
-            .color(crate::theme::YELLOW())
-            .size(11.5),
+            RichText::new(tr!("txaudio-monitoring-live-use-headphones-speakers"))
+                .color(crate::theme::YELLOW())
+                .size(11.5),
         );
     }
-    ui.label(
-        RichText::new(
-            "Voice modes only. TCI clients and the digital modes bypass the chain; when it \
-             is in use, keep the radio's own TX EQ and processor flat.",
-        )
-        .weak()
-        .size(11.0),
-    );
+    ui.label(RichText::new(tr!("txaudio-voice-modes-only-tci-clients")).weak().size(11.0));
 }
 
 /// Mic gain, the profile's input gain, and Auto-set.
@@ -465,19 +427,21 @@ fn level_row(
                 cmds.push(Command::TxVoiceTestLive(TxVoiceLive::Off));
             }
             st.level_note = Some(if lost {
-                "Auto-set stopped: the microphone was taken.".to_string()
+                tr!("txaudio-auto-set-stopped-microphone-was").to_string()
             } else {
                 match auto_level(&a.peaks, v.input_gain_db) {
                     Ok((gain, loud)) => {
                         v.input_gain_db = gain;
                         let clip = if loud > -1.0 {
-                            " The microphone may be clipping before it gets here — turn its \
-                             own gain down if it sounds harsh."
+                            tr!("txaudio-microphone-may-clipping-before-gets")
                         } else {
-                            ""
+                            String::from("")
                         };
-                        format!(
-                            "Input gain set to {gain:+.1} dB (voice peaks were {loud:.0} dBFS).{clip}"
+                        tr!(
+                            "txaudio-auto-set-done",
+                            gain = format!("{gain:+.1}"),
+                            loud = format!("{loud:.0}"),
+                            clip = clip
                         )
                     }
                     Err(e) => e.to_string(),
@@ -488,10 +452,9 @@ fn level_row(
 
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().slider_width = 130.0;
-        ui.label(RichText::new("Level").weak());
-        let mic_hover = "The Mic control — the same one as on the transmit bar, shared by every \
-                         profile. 0 dB at its middle, +6 dB at the top.";
-        ui.label("Mic").on_hover_text(mic_hover);
+        ui.label(RichText::new(tr!("txaudio-level")).weak());
+        let mic_hover = tr!("txaudio-mic-control-same-one-transmit");
+        ui.label(tr!("txaudio-mic")).on_hover_text(&mic_hover);
         let mut mic = mic_gain;
         let r = crate::chrome::slider_readout(
             ui,
@@ -508,12 +471,8 @@ fn level_row(
             cmds.push(Command::SetMicGain(mic));
         }
         ui.add_space(8.0);
-        let input_hover = "Gain on top of Mic for this microphone, stored with the profile. \
-                           The presets' thresholds assume a voice peaking around \
-                           -10 dBFS on the IN meter; Auto-set puts it there. Stays in under \
-                           BYPASS, and applies to digital voice too: it is level, not \
-                           processing.";
-        ui.label("Input").on_hover_text(input_hover);
+        let input_hover = tr!("txaudio-gain-top-mic-microphone-stored");
+        ui.label(tr!("txaudio-input")).on_hover_text(&input_hover);
         let measuring = st.auto.is_some();
         ui.add_enabled_ui(!measuring, |ui| {
             crate::chrome::slider_readout(
@@ -527,15 +486,18 @@ fn level_row(
         });
         let label = match &st.auto {
             Some(a) => {
-                format!("Listening… {:.0} s", (AUTO_LEVEL_S - (now - a.started)).max(0.0).ceil())
+                tr!(
+                    "txaudio-listening",
+                    secs = format!("{:.0}", (AUTO_LEVEL_S - (now - a.started)).max(0.0).ceil())
+                )
             }
-            None => "Auto-set".to_string(),
+            None => tr!("txaudio-auto-set").to_string(),
         };
         let b = ui.add_enabled(!transmitting || measuring, egui::Button::new(label)).on_hover_text(
-            format!(
-                "Talk normally for {AUTO_LEVEL_S:.0} s — the way you would on the air — and \
-                 the input gain is set so your voice peaks around \
-                 {AUTO_LEVEL_TARGET_DB:.0} dBFS. Click again to cancel."
+            tr!(
+                "txaudio-auto-set-hint",
+                secs = format!("{AUTO_LEVEL_S:.0}"),
+                target = format!("{AUTO_LEVEL_TARGET_DB:.0}")
             ),
         );
         if b.clicked() {
@@ -544,7 +506,7 @@ fn level_row(
                     if a.started_live && test.is_live() {
                         cmds.push(Command::TxVoiceTestLive(TxVoiceLive::Off));
                     }
-                    st.level_note = Some("Auto-set cancelled.".into());
+                    st.level_note = Some(tr!("txaudio-auto-set-cancelled"));
                 }
                 None => {
                     let started_live = !test.is_live();
@@ -552,7 +514,7 @@ fn level_row(
                         cmds.push(Command::TxVoiceTestLive(TxVoiceLive::Meters));
                     }
                     st.auto = Some(AutoLevel { started: now, peaks: Vec::new(), started_live });
-                    st.level_note = Some("Talk now, as you would on the air…".into());
+                    st.level_note = Some(tr!("txaudio-talk-now-you-would-air"));
                 }
             }
         }
@@ -564,13 +526,17 @@ fn level_row(
 
 /// The Mic control's 0..=1 as the gain it applies: 50 % is unity, the top +6 dB.
 fn mic_gain_text(x: f32) -> String {
-    if x <= 0.001 { "-∞ dB".to_string() } else { format!("{:+.1} dB", 20.0 * (2.0 * x).log10()) }
+    if x <= 0.001 {
+        tr!("txaudio-db").to_string()
+    } else {
+        format!("{:+.1} dB", 20.0 * (2.0 * x).log10())
+    }
 }
 
 /// The left-hand column: the reorderable stages, then the fixed ones.
 fn stage_list(ui: &mut egui::Ui, v: &mut TxVoiceState, page: &mut Page) {
-    ui.label(RichText::new("Chain").strong().color(crate::theme::CYAN()));
-    ui.label(RichText::new("In order the audio meets them").weak().size(10.5));
+    ui.label(RichText::new(tr!("txaudio-chain")).strong().color(crate::theme::CYAN()));
+    ui.label(RichText::new(tr!("txaudio-order-audio-meets-them")).weak().size(10.5));
     ui.add_space(4.0);
     let mut swap: Option<(usize, usize)> = None;
     for i in 0..v.order.len() {
@@ -578,7 +544,7 @@ fn stage_list(ui: &mut egui::Ui, v: &mut TxVoiceState, page: &mut Page) {
         ui.horizontal(|ui| {
             let mut on = v.stage_enabled(stage);
             if crate::chrome::checkbox(ui, &mut on, "")
-                .on_hover_text("Switch this stage on")
+                .on_hover_text(tr!("txaudio-switch-stage"))
                 .changed()
             {
                 v.set_stage_enabled(stage, on);
@@ -592,14 +558,14 @@ fn stage_list(ui: &mut egui::Ui, v: &mut TxVoiceState, page: &mut Page) {
             }
             if ui
                 .add_enabled(i > 0, egui::Button::new("▲").small())
-                .on_hover_text("Earlier in the chain")
+                .on_hover_text(tr!("txaudio-earlier-chain"))
                 .clicked()
             {
                 swap = Some((i, i - 1));
             }
             if ui
                 .add_enabled(i + 1 < v.order.len(), egui::Button::new("▼").small())
-                .on_hover_text("Later in the chain")
+                .on_hover_text(tr!("txaudio-later-chain"))
                 .clicked()
             {
                 swap = Some((i, i + 1));
@@ -612,12 +578,18 @@ fn stage_list(ui: &mut egui::Ui, v: &mut TxVoiceState, page: &mut Page) {
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         let mut on = v.output.limiter;
-        if crate::chrome::checkbox(ui, &mut on, "").on_hover_text("The output limiter").changed() {
+        if crate::chrome::checkbox(ui, &mut on, "")
+            .on_hover_text(tr!("txaudio-output-limiter"))
+            .changed()
+        {
             v.output.limiter = on;
         }
         if ui
-            .add_sized(vec2(92.0, 20.0), egui::Button::selectable(*page == Page::Output, "Output"))
-            .on_hover_text("Trim and limiter — always last")
+            .add_sized(
+                vec2(92.0, 20.0),
+                egui::Button::selectable(*page == Page::Output, tr!("txaudio-output")),
+            )
+            .on_hover_text(tr!("txaudio-trim-limiter-always-last"))
             .clicked()
         {
             *page = Page::Output;
@@ -627,7 +599,7 @@ fn stage_list(ui: &mut egui::Ui, v: &mut TxVoiceState, page: &mut Page) {
     if ui
         .add_sized(
             vec2(130.0, 20.0),
-            egui::Button::selectable(*page == Page::Profiles, "Profiles…"),
+            egui::Button::selectable(*page == Page::Profiles, tr!("txaudio-profiles")),
         )
         .clicked()
     {
@@ -826,30 +798,26 @@ fn gr_bar(ui: &mut egui::Ui, label: &str, gr: f32) {
 // ── Pages ──────────────────────────────────────────────────────────────────
 
 fn gate_page(ui: &mut egui::Ui, g: &mut TxGateState, m: TxVoiceMeters) {
-    page_title(
-        ui,
-        "Gate / expander",
-        "Pushes room noise, fan rumble and hiss down in the pauses. Set the threshold just \
-         above your noise floor and below your quietest syllables.",
-    );
+    page_title(ui, &tr!("txaudio-gate-expander"), &tr!("txaudio-pushes-room-noise-fan-rumble"));
     ui.horizontal(|ui| {
         let gate = g.ratio >= 9.9 && g.floor_db <= -39.9;
         let exp = (g.ratio - 2.0).abs() < 0.01 && (g.floor_db + 15.0).abs() < 0.01;
-        if crate::chrome::chip(ui, gate, "GATE")
-            .on_hover_text("Hard gate: 10:1, down to -40 dB")
+        if crate::chrome::chip(ui, gate, tr!("txaudio-gate"))
+            .on_hover_text(tr!("txaudio-hard-gate-10-1-down"))
             .clicked()
         {
             *g = g.as_gate();
         }
-        if crate::chrome::chip(ui, exp, "EXPANDER")
-            .on_hover_text(
-                "Gentle expander: 2:1, never more than -15 dB — the room never goes dead",
-            )
+        if crate::chrome::chip(ui, exp, tr!("txaudio-expander"))
+            .on_hover_text(tr!("txaudio-gentle-expander-2-1-never"))
             .clicked()
         {
             *g = g.as_expander();
         }
-        if crate::chrome::chip(ui, false, "RESET").on_hover_text("Back to the defaults").clicked() {
+        if crate::chrome::chip(ui, false, tr!("txaudio-reset"))
+            .on_hover_text(tr!("txaudio-back-defaults"))
+            .clicked()
+        {
             *g = TxGateState { enabled: g.enabled, ..Default::default() };
         }
     });
@@ -869,13 +837,69 @@ fn gate_page(ui: &mut egui::Ui, g: &mut TxGateState, m: TxVoiceMeters) {
         out,
     );
     egui::Grid::new("txa-gate").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-        knob(ui, "Threshold", "Below this the gate starts to close.", &mut g.threshold_db, TxGateState::THRESHOLD_DB_RANGE, " dB", false);
-        knob(ui, "Return", "Hysteresis: once open, it closes only this far below the threshold, so a voice hovering at it does not make the gate flutter.", &mut g.return_db, TxGateState::RETURN_DB_RANGE, " dB", false);
-        knob(ui, "Hold", "How long it stays open after the voice drops, so word endings are not clipped.", &mut g.hold_ms, TxGateState::HOLD_MS_RANGE, " ms", false);
-        knob(ui, "Release", "How fast it closes once the hold is over. Lengthen it if the gate pumps.", &mut g.release_ms, TxGateState::RELEASE_MS_RANGE, " ms", true);
-        knob(ui, "Floor", "The most it ever turns the pauses down.", &mut g.floor_db, TxGateState::FLOOR_DB_RANGE, " dB", false);
-        knob(ui, "Ratio", "How steeply it closes below the threshold.", &mut g.ratio, TxGateState::RATIO_RANGE, ":1", false);
-        knob(ui, "Look-ahead", "Opens this much before a word starts, so its first consonant is not chopped. Adds the same delay to everything transmitted.", &mut g.lookahead_ms, TxGateState::LOOKAHEAD_MS_RANGE, " ms", false);
+        knob(
+            ui,
+            &tr!("txaudio-threshold"),
+            &tr!("txaudio-below-gate-starts-close"),
+            &mut g.threshold_db,
+            TxGateState::THRESHOLD_DB_RANGE,
+            " dB",
+            false,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-return"),
+            &tr!("txaudio-hysteresis-once-open-closes-only"),
+            &mut g.return_db,
+            TxGateState::RETURN_DB_RANGE,
+            " dB",
+            false,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-hold"),
+            &tr!("txaudio-how-long-stays-open-after"),
+            &mut g.hold_ms,
+            TxGateState::HOLD_MS_RANGE,
+            " ms",
+            false,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-release"),
+            &tr!("txaudio-how-fast-closes-once-hold"),
+            &mut g.release_ms,
+            TxGateState::RELEASE_MS_RANGE,
+            " ms",
+            true,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-floor"),
+            &tr!("txaudio-most-ever-turns-pauses-down"),
+            &mut g.floor_db,
+            TxGateState::FLOOR_DB_RANGE,
+            " dB",
+            false,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-ratio"),
+            &tr!("txaudio-how-steeply-closes-below-threshold"),
+            &mut g.ratio,
+            TxGateState::RATIO_RANGE,
+            ":1",
+            false,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-look-ahead"),
+            &tr!("txaudio-opens-much-before-word-starts"),
+            &mut g.lookahead_ms,
+            TxGateState::LOOKAHEAD_MS_RANGE,
+            " ms",
+            false,
+        );
     });
     gr_bar(ui, "GR", m.gate_gr_db);
 }
@@ -892,15 +916,10 @@ enum EqHandle {
 }
 
 fn eq_page(ui: &mut egui::Ui, eq: &mut TxEqState) {
-    page_title(
-        ui,
-        "EQ",
-        "High-pass, low shelf, two peaks, high shelf and low-pass. Drag a point on the \
-         curve, or set it below. Set the low-pass to your transmit filter's width.",
-    );
+    page_title(ui, "EQ", &tr!("txaudio-high-pass-low-shelf-two"));
     ui.horizontal(|ui| {
-        if crate::chrome::chip(ui, false, "FLAT")
-            .on_hover_text("Every band back to 0 dB, both edges off")
+        if crate::chrome::chip(ui, false, tr!("txaudio-flat"))
+            .on_hover_text(tr!("txaudio-every-band-back-0-db"))
             .clicked()
         {
             *eq = TxEqState { enabled: eq.enabled, ..Default::default() };
@@ -976,61 +995,65 @@ fn eq_page(ui: &mut egui::Ui, eq: &mut TxEqState) {
             FontId::proportional(9.0),
             crate::theme::INK_ON_BRIGHT(),
         );
-        resp.on_hover_text(format!("{f:.0} Hz, {g:+.1} dB — drag to move"));
+        resp.on_hover_text(tr!(
+            "txaudio-eq-point",
+            hz = format!("{f:.0}"),
+            db = format!("{g:+.1}")
+        ));
     }
 
     egui::Grid::new("txa-eq").num_columns(5).spacing([10.0, 4.0]).show(ui, |ui| {
         ui.label("");
-        ui.label(RichText::new("Freq").weak());
-        ui.label(RichText::new("Gain").weak());
-        ui.label(RichText::new("Q / Slope").weak());
+        ui.label(RichText::new(tr!("txaudio-freq")).weak());
+        ui.label(RichText::new(tr!("txaudio-gain")).weak());
+        ui.label(RichText::new(tr!("txaudio-q-slope")).weak());
         ui.label("");
         ui.end_row();
         edge_row(
             ui,
-            "High-pass",
+            &tr!("txaudio-high-pass"),
             &mut eq.hpf,
             TxEqState::HPF_HZ_RANGE,
-            "Removes handling noise, breath pops and hum below the corner.",
+            &tr!("txaudio-removes-handling-noise-breath-pops"),
         );
         band_row(
             ui,
-            "Low shelf",
+            &tr!("txaudio-low-shelf"),
             &mut eq.low,
             TxEqState::LOW_FREQ_HZ_RANGE,
             TxEqState::SHELF_SLOPE_RANGE,
-            "Body, or mud: cut a little here for a voice that sounds boxy.",
+            &tr!("txaudio-body-mud-cut-little-here"),
         );
         band_row(
             ui,
-            "Peak 1",
+            &tr!("txaudio-peak-1"),
             &mut eq.mid,
             TxEqState::MID_FREQ_HZ_RANGE,
             TxEqState::MID_Q_RANGE,
-            "A bump or dip in the voice band — often a cut around 300–500 Hz.",
+            &tr!("txaudio-bump-dip-voice-band-often"),
         );
         band_row(
             ui,
-            "Peak 2",
+            &tr!("txaudio-peak-2"),
             &mut eq.mid2,
             TxEqState::MID2_FREQ_HZ_RANGE,
             TxEqState::MID_Q_RANGE,
-            "Presence: a lift around 2–3 kHz is what cuts through on SSB.",
+            &tr!("txaudio-presence-lift-around-2-3"),
         );
         band_row(
             ui,
-            "High shelf",
+            &tr!("txaudio-high-shelf"),
             &mut eq.high,
             TxEqState::HIGH_FREQ_HZ_RANGE,
             TxEqState::SHELF_SLOPE_RANGE,
-            "Brightness.",
+            &tr!("txaudio-brightness"),
         );
         edge_row(
             ui,
-            "Low-pass",
+            &tr!("txaudio-low-pass"),
             &mut eq.lpf,
             TxEqState::LPF_HZ_RANGE,
-            "Stops energy above the transmit filter from being spent in the modulator.",
+            &tr!("txaudio-stops-energy-above-transmit-filter"),
         );
     });
 }
@@ -1080,9 +1103,9 @@ fn edge_row(
     );
     ui.label("");
     ui.add_enabled_ui(e.enabled, |ui| {
-        let text = if e.steep { "24 dB/oct" } else { "12 dB/oct" };
+        let text = if e.steep { tr!("txaudio-t-24-db-oct") } else { tr!("txaudio-t-12-db-oct") };
         if crate::chrome::chip(ui, e.steep, text)
-            .on_hover_text("Click for a steeper or gentler slope")
+            .on_hover_text(tr!("txaudio-click-steeper-gentler-slope"))
             .clicked()
         {
             e.steep = !e.steep;
@@ -1093,38 +1116,81 @@ fn edge_row(
 }
 
 fn deess_page(ui: &mut egui::Ui, d: &mut TxDeEssState, m: TxVoiceMeters) {
-    page_title(
-        ui,
-        "De-esser",
-        "Turns down only the sibilant band when \"s\" and \"sh\" cross the threshold, so the \
-         rest of the voice keeps its level. Find the frequency by sweeping it while saying \
-         \"sister silver cellophane\" and parking where the hiss is loudest.",
-    );
+    page_title(ui, &tr!("txaudio-de-esser"), &tr!("txaudio-turns-down-only-sibilant-band"));
     ui.horizontal(|ui| {
-        if crate::chrome::chip(ui, false, "RESET").on_hover_text("Back to the defaults").clicked() {
+        if crate::chrome::chip(ui, false, tr!("txaudio-reset"))
+            .on_hover_text(tr!("txaudio-back-defaults"))
+            .clicked()
+        {
             *d = TxDeEssState { enabled: d.enabled, ..Default::default() };
         }
     });
     egui::Grid::new("txa-deess").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-        knob(ui, "Frequency", "Centre of the sibilant band.", &mut d.freq_hz, TxDeEssState::FREQ_HZ_RANGE, " Hz", true);
-        knob(ui, "Q", "Width of the band — higher is narrower.", &mut d.q, TxDeEssState::Q_RANGE, "", false);
-        knob(ui, "Threshold", "Band level where reduction starts. Too low and it works all the time, dulling the voice.", &mut d.threshold_db, TxDeEssState::THRESHOLD_DB_RANGE, " dB", false);
-        knob(ui, "Amount", "The most the band is ever turned down. Start around -6 dB.", &mut d.amount_db, TxDeEssState::AMOUNT_DB_RANGE, " dB", false);
-        knob(ui, "Attack", "How fast it reacts.", &mut d.attack_ms, TxDeEssState::ATTACK_MS_RANGE, " ms", true);
-        knob(ui, "Release", "How fast it lets go.", &mut d.release_ms, TxDeEssState::RELEASE_MS_RANGE, " ms", true);
+        knob(
+            ui,
+            &tr!("txaudio-frequency"),
+            &tr!("txaudio-centre-sibilant-band"),
+            &mut d.freq_hz,
+            TxDeEssState::FREQ_HZ_RANGE,
+            " Hz",
+            true,
+        );
+        knob(
+            ui,
+            "Q",
+            &tr!("txaudio-width-band-higher-narrower"),
+            &mut d.q,
+            TxDeEssState::Q_RANGE,
+            "",
+            false,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-threshold"),
+            &tr!("txaudio-band-level-where-reduction-starts"),
+            &mut d.threshold_db,
+            TxDeEssState::THRESHOLD_DB_RANGE,
+            " dB",
+            false,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-amount"),
+            &tr!("txaudio-most-band-ever-turned-down"),
+            &mut d.amount_db,
+            TxDeEssState::AMOUNT_DB_RANGE,
+            " dB",
+            false,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-attack"),
+            &tr!("txaudio-how-fast-reacts"),
+            &mut d.attack_ms,
+            TxDeEssState::ATTACK_MS_RANGE,
+            " ms",
+            true,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-release"),
+            &tr!("txaudio-how-fast-lets-go"),
+            &mut d.release_ms,
+            TxDeEssState::RELEASE_MS_RANGE,
+            " ms",
+            true,
+        );
     });
     gr_bar(ui, "GR", m.deess_gr_db);
 }
 
 fn comp_page(ui: &mut egui::Ui, c: &mut TxCompState, m: TxVoiceMeters) {
-    page_title(
-        ui,
-        "Compressor",
-        "Brings quiet syllables up and holds loud ones back. Aim for 3–6 dB of reduction on \
-         peaks; more than 10 dB is obvious compression, better suited to contests.",
-    );
+    page_title(ui, &tr!("txaudio-compressor"), &tr!("txaudio-brings-quiet-syllables-up-holds"));
     ui.horizontal(|ui| {
-        if crate::chrome::chip(ui, false, "RESET").on_hover_text("Back to the defaults").clicked() {
+        if crate::chrome::chip(ui, false, tr!("txaudio-reset"))
+            .on_hover_text(tr!("txaudio-back-defaults"))
+            .clicked()
+        {
             *c = TxCompState { enabled: c.enabled, ..Default::default() };
         }
     });
@@ -1133,21 +1199,77 @@ fn comp_page(ui: &mut egui::Ui, c: &mut TxCompState, m: TxVoiceMeters) {
         x + cfg.drive_db + cfg.static_gain_db(x + cfg.drive_db) + cfg.makeup_db
     });
     egui::Grid::new("txa-comp").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-        knob(ui, "Threshold", "Level above which it starts to compress.", &mut c.threshold_db, TxCompState::THRESHOLD_DB_RANGE, " dB", false);
-        knob(ui, "Ratio", "How hard it compresses above the threshold.", &mut c.ratio, TxCompState::RATIO_RANGE, ":1", true);
-        knob(ui, "Attack", "How fast it reacts to a peak. 10–25 ms keeps consonants crisp.", &mut c.attack_ms, TxCompState::ATTACK_MS_RANGE, " ms", true);
-        knob(ui, "Release", "How fast it recovers.", &mut c.release_ms, TxCompState::RELEASE_MS_RANGE, " ms", true);
-        knob(ui, "Knee", "Soft-knee width; 0 is a hard knee.", &mut c.knee_db, TxCompState::KNEE_DB_RANGE, " dB", false);
-        knob(ui, "Makeup", "Gain after compression, to bring the level back up.", &mut c.makeup_db, TxCompState::MAKEUP_DB_RANGE, " dB", false);
-        knob(ui, "Drive", "Gain ahead of the compressor, so more of the voice crosses the threshold — raises the average power. Pair with the output limiter.", &mut c.drive_db, TxCompState::DRIVE_DB_RANGE, " dB", false);
-        let mut stages = c.phase_stages as i32;
-        ui.label("Phase").on_hover_text(
-            "All-pass phase rotator ahead of the detector. Evens out the lopsided peaks a \
-             voice has, so the same peak level carries more average power. 4 is a common \
-             broadcast setting; 0 is off.",
+        knob(
+            ui,
+            &tr!("txaudio-threshold"),
+            &tr!("txaudio-level-above-which-starts-compress"),
+            &mut c.threshold_db,
+            TxCompState::THRESHOLD_DB_RANGE,
+            " dB",
+            false,
         );
-        if crate::chrome::slider_readout(ui, 78.0, Slider::new(&mut stages, 0..=TxCompState::PHASE_STAGES_MAX as i32))
-            .changed()
+        knob(
+            ui,
+            &tr!("txaudio-ratio"),
+            &tr!("txaudio-how-hard-compresses-above-threshold"),
+            &mut c.ratio,
+            TxCompState::RATIO_RANGE,
+            ":1",
+            true,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-attack"),
+            &tr!("txaudio-how-fast-reacts-peak-10"),
+            &mut c.attack_ms,
+            TxCompState::ATTACK_MS_RANGE,
+            " ms",
+            true,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-release"),
+            &tr!("txaudio-how-fast-recovers"),
+            &mut c.release_ms,
+            TxCompState::RELEASE_MS_RANGE,
+            " ms",
+            true,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-knee"),
+            &tr!("txaudio-soft-knee-width-0-hard"),
+            &mut c.knee_db,
+            TxCompState::KNEE_DB_RANGE,
+            " dB",
+            false,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-makeup"),
+            &tr!("txaudio-gain-after-compression-bring-level"),
+            &mut c.makeup_db,
+            TxCompState::MAKEUP_DB_RANGE,
+            " dB",
+            false,
+        );
+        knob(
+            ui,
+            &tr!("txaudio-drive"),
+            &tr!("txaudio-gain-ahead-compressor-so-more"),
+            &mut c.drive_db,
+            TxCompState::DRIVE_DB_RANGE,
+            " dB",
+            false,
+        );
+        let mut stages = c.phase_stages as i32;
+        ui.label(tr!("txaudio-phase")).on_hover_text(tr!("txaudio-all-pass-phase-rotator-ahead"));
+        if crate::chrome::slider_readout(
+            ui,
+            78.0,
+            Slider::new(&mut stages, 0..=TxCompState::PHASE_STAGES_MAX as i32),
+        )
+        .changed()
         {
             c.phase_stages = stages.clamp(0, TxCompState::PHASE_STAGES_MAX as i32) as u8;
         }
@@ -1157,21 +1279,15 @@ fn comp_page(ui: &mut egui::Ui, c: &mut TxCompState, m: TxVoiceMeters) {
 }
 
 fn output_page(ui: &mut egui::Ui, o: &mut TxOutputState, m: TxVoiceMeters) {
-    page_title(
-        ui,
-        "Output",
-        "The last stage: a trim, and a look-ahead limiter that holds every peak under the \
-         ceiling without the splatter hard clipping makes. Off by default, so switching the \
-         chain on does not change a drive level you have already set.",
-    );
+    page_title(ui, &tr!("txaudio-output"), &tr!("txaudio-last-stage-trim-look-ahead"));
     egui::Grid::new("txa-out").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-        ui.label("Limiter");
-        crate::chrome::checkbox(ui, &mut o.limiter, "On");
+        ui.label(tr!("txaudio-limiter"));
+        crate::chrome::checkbox(ui, &mut o.limiter, tr!("txaudio-on"));
         ui.end_row();
         knob(
             ui,
-            "Ceiling",
-            "No peak leaves the chain above this.",
+            &tr!("txaudio-ceiling"),
+            &tr!("txaudio-no-peak-leaves-chain-above"),
             &mut o.ceiling_db,
             TxOutputState::CEILING_DB_RANGE,
             " dB",
@@ -1179,8 +1295,8 @@ fn output_page(ui: &mut egui::Ui, o: &mut TxOutputState, m: TxVoiceMeters) {
         );
         knob(
             ui,
-            "Trim",
-            "Output gain, ahead of the limiter.",
+            &tr!("txaudio-trim"),
+            &tr!("txaudio-output-gain-ahead-limiter"),
             &mut o.trim_db,
             TxOutputState::TRIM_DB_RANGE,
             " dB",
@@ -1201,7 +1317,9 @@ fn meter_strip(ui: &mut egui::Ui, v: &TxVoiceState, m: TxVoiceMeters) {
         });
         ui.add_space(16.0);
         ui.vertical(|ui| {
-            let gr = |on: bool, g: f32| if on { format!("{g:5.1}") } else { "  off".to_string() };
+            let gr = |on: bool, g: f32| {
+                if on { format!("{g:5.1}") } else { tr!("txaudio-off").to_string() }
+            };
             ui.label(
                 RichText::new(format!(
                     "GR  gate {}  de-ess {}  comp {}  lim {}",
@@ -1214,12 +1332,7 @@ fn meter_strip(ui: &mut egui::Ui, v: &TxVoiceState, m: TxVoiceMeters) {
                 .size(10.5),
             );
             ui.label(
-                RichText::new(
-                    "Meters move while you transmit a voice over, play the test phrase, or \
-                     run LIVE or METERS.",
-                )
-                .weak()
-                .size(10.5),
+                RichText::new(tr!("txaudio-meters-move-while-you-transmit")).weak().size(10.5),
             );
         });
     });
@@ -1519,7 +1632,7 @@ fn pick_up_import(ui: &mut TxAudioUi) {
     ui.note = Some(match got {
         Err(e) => e,
         Ok(loaded) => match serde_json::from_str::<TxVoiceProfile>(&loaded.text) {
-            Err(e) => format!("Not a TX audio profile: {e}"),
+            Err(e) => tr!("txaudio-not-a-profile", error = e.to_string()),
             Ok(mut p) => {
                 p.voice = p.voice.clamped();
                 if p.name.trim().is_empty() {
@@ -1531,34 +1644,44 @@ fn pick_up_import(ui: &mut TxAudioUi) {
                     None => ui.profiles.push(p),
                 }
                 ui.save_profiles();
-                format!("Imported \"{name}\".")
+                tr!("txaudio-imported", name = name.to_string())
             }
         },
     });
 }
 
 fn profiles_page(ui: &mut egui::Ui, st: &mut TxAudioUi, v: &mut TxVoiceState) {
-    page_title(
-        ui,
-        "Profiles",
-        "A profile is the whole chain: every stage's settings, which are on, their \
-         order, and the input gain for your microphone. Loading one replaces the chain; the \
-         Mic control and drive stay as they are.",
-    );
+    page_title(ui, &tr!("txaudio-profiles-2"), &tr!("txaudio-profile-whole-chain-every-stage"));
     ui.horizontal(|ui| {
-        ui.add(egui::TextEdit::singleline(&mut st.profile_name).hint_text("Name").desired_width(180.0));
+        ui.add(
+            egui::TextEdit::singleline(&mut st.profile_name)
+                .hint_text(tr!("txaudio-name"))
+                .desired_width(180.0),
+        );
         let name = st.profile_name.trim().to_string();
-        if ui.add_enabled(!name.is_empty(), egui::Button::new("Save")).on_hover_text("Store the chain as it is now under this name, replacing a profile of the same name").clicked() {
+        if ui
+            .add_enabled(!name.is_empty(), egui::Button::new(tr!("txaudio-save")))
+            .on_hover_text(tr!("txaudio-store-chain-now-under-name"))
+            .clicked()
+        {
             let p = TxVoiceProfile { name: name.clone(), voice: *v };
             match st.profiles.iter().position(|q| q.name == name) {
                 Some(i) => st.profiles[i] = p,
                 None => st.profiles.push(p),
             }
             st.save_profiles();
-            st.note = Some(format!("Saved \"{name}\"."));
+            st.note = Some(tr!("txaudio-saved", name = name.to_string()));
         }
-        if ui.button("Import…").on_hover_text("Read a profile from a .json file").clicked() {
-            crate::download::load_text("TX audio profile", &["json"], st.import_inbox.clone());
+        if ui
+            .button(tr!("txaudio-import"))
+            .on_hover_text(tr!("txaudio-read-profile-json-file"))
+            .clicked()
+        {
+            crate::download::load_text(
+                &tr!("txaudio-tx-audio-profile"),
+                &["json"],
+                st.import_inbox.clone(),
+            );
         }
     });
     ui.add_space(4.0);
@@ -1566,9 +1689,7 @@ fn profiles_page(ui: &mut egui::Ui, st: &mut TxAudioUi, v: &mut TxVoiceState) {
     let mut preset: Option<TxVoiceState> = None;
     let mut delete: Option<usize> = None;
     if st.profiles.is_empty() {
-        ui.label(
-            RichText::new("No profiles yet. Save stores the chain you have set up now.").weak(),
-        );
+        ui.label(RichText::new(tr!("txaudio-no-profiles-yet-save-stores")).weak());
     }
     egui::Grid::new("txa-profiles").num_columns(4).spacing([8.0, 4.0]).striped(true).show(
         ui,
@@ -1580,13 +1701,13 @@ fn profiles_page(ui: &mut egui::Ui, st: &mut TxAudioUi, v: &mut TxVoiceState) {
                     st.selected_profile = Some(i);
                     st.profile_name = p.name.clone();
                 }
-                if r.double_clicked() || ui.button("Load").clicked() {
+                if r.double_clicked() || ui.button(tr!("txaudio-load")).clicked() {
                     load = Some(p.voice);
                 }
-                if ui.button("Export…").clicked() {
+                if ui.button(tr!("txaudio-export")).clicked() {
                     export_profile(p);
                 }
-                if ui.button("Delete").clicked() {
+                if ui.button(tr!("txaudio-delete")).clicked() {
                     delete = Some(i);
                 }
                 ui.end_row();
@@ -1597,24 +1718,16 @@ fn profiles_page(ui: &mut egui::Ui, st: &mut TxAudioUi, v: &mut TxVoiceState) {
         let p = st.profiles.remove(i);
         st.selected_profile = None;
         st.save_profiles();
-        st.note = Some(format!("Deleted \"{}\".", p.name));
+        st.note = Some(tr!("txaudio-deleted", name = p.name.to_string()));
     }
     ui.add_space(8.0);
-    ui.label(RichText::new("Starting points").strong());
-    ui.label(
-        RichText::new(
-            "Set your level with Auto-set first — the presets' thresholds assume it — then \
-             tune from here rather than transmitting as loaded: record a phrase and listen \
-             after each change. A preset keeps your input gain.",
-        )
-        .weak()
-        .size(11.0),
-    );
+    ui.label(RichText::new(tr!("txaudio-starting-points")).strong());
+    ui.label(RichText::new(tr!("txaudio-set-your-level-auto-set")).weak().size(11.0));
     ui.horizontal_wrapped(|ui| {
         for p in starting_points() {
             if ui.button(p.name).on_hover_text(p.about).clicked() {
                 preset = Some(p.voice);
-                st.note = Some(format!("Loaded the \"{}\" starting point.", p.name));
+                st.note = Some(tr!("txaudio-loaded-preset", name = p.name.to_string()));
             }
         }
     });
@@ -1633,7 +1746,7 @@ fn profiles_page(ui: &mut egui::Ui, st: &mut TxAudioUi, v: &mut TxVoiceState) {
         // voice, not about whether digital voice goes through it.
         *v = TxVoiceState { digital_voice: v.digital_voice, ..s.clamped() };
         if st.note.is_none() {
-            st.note = Some("Profile loaded.".into());
+            st.note = Some(tr!("txaudio-profile-loaded"));
         }
     }
     if let Some(n) = &st.note {
