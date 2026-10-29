@@ -78,9 +78,12 @@ Selectors are also used where a word depends on a value — a month, a region,
 - **The manual behind F1** is a separate document and is English only.
 - **Voice announcements** use an English voice; their settings are
   translated, the speech is not.
-- **Scripts.** The interface fonts cover Latin, Greek and Cyrillic. Languages
-  written in other scripts need a font added first, and egui does not lay out
-  right-to-left text, so Arabic and Hebrew are not possible yet.
+- **Scripts.** The interface fonts cover Latin, Greek and Cyrillic, and a
+  subset of Noto Sans SC covers the GB 2312 characters of Simplified Chinese
+  (`zh-CN`). A script beyond those needs a font added first, and egui does not
+  lay out right-to-left text, so Arabic and Hebrew are not possible yet. A
+  character outside the GB 2312 set would show as a box in Chinese; extend the
+  subset (`assets/fonts`) if a translation needs one.
 - **Numbers** are written the way the program formats them (a dot for the
   decimal point, no grouping), in every language.
 
