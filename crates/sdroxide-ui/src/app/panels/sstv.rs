@@ -100,6 +100,9 @@ pub(in crate::app) struct SstvUi {
     /// is client-owned, so an echo of our own write — or an edit made on another
     /// screen — can update the other four without fighting the keyboard.
     pub(in crate::app) msg_edit: Option<(usize, String)>,
+    /// Messages handed back to the engine and not yet echoed, by slot. Shown,
+    /// previewed and transmitted in place of the stale presets meanwhile.
+    pub(in crate::app) msg_sent: HashMap<usize, String>,
     /// Fetched source pictures, keyed by slot; `None` until one arrives.
     pub(in crate::app) slots: Vec<Option<SstvSlot>>,
     /// The version last asked for per slot.
@@ -178,6 +181,7 @@ impl Default for SstvUi {
             presets: ImagePresets::default(),
             slot_thumbs: (0..IMAGE_SLOTS).map(|_| None).collect(),
             msg_edit: None,
+            msg_sent: HashMap::new(),
             slots: (0..IMAGE_SLOTS).map(|_| None).collect(),
             src_asked: HashMap::new(),
             selected_slot: 0,
@@ -303,13 +307,15 @@ impl SstvUi {
             }
         }
         // The message box takes the engine's text for every slot except the one
-        // under the cursor, so an edit made elsewhere shows up.
-        if self.presets.slot(self.selected_slot).message != presets.slot(self.selected_slot).message
-            && !matches!(&self.msg_edit, Some((i, _)) if *i == self.selected_slot)
-        {
+        // under the cursor, so an edit made elsewhere shows up — once our own
+        // writes have come back, so an echo still on its way is not mistaken
+        // for one.
+        let shown = self.current_message().to_string();
+        self.presets = presets;
+        crate::sstv::settle_messages(&mut self.msg_sent, &self.presets);
+        if self.current_message() != shown {
             self.preview_dirty = true;
         }
-        self.presets = presets;
     }
 
     /// A fetched source picture for a slot.
@@ -442,7 +448,12 @@ impl SstvUi {
 
     /// The overlay message for the slot currently being edited.
     pub(in crate::app) fn current_message(&self) -> &str {
-        crate::sstv::message_shown(&self.msg_edit, &self.presets, self.selected_slot)
+        crate::sstv::message_shown(
+            &self.msg_edit,
+            &self.msg_sent,
+            &self.presets,
+            self.selected_slot,
+        )
     }
 
     /// Rebuild the transmit preview when the size, slot, or message changed.
@@ -1165,6 +1176,7 @@ impl SdroxideApp {
                                     // lost to a click.
                                     cmds.extend(crate::sstv::claim_message(
                                         &mut self.sstv.msg_edit,
+                                        &mut self.sstv.msg_sent,
                                         &self.sstv.presets,
                                         i,
                                     ));
@@ -1266,6 +1278,7 @@ impl SdroxideApp {
                         } else if resp.gained_focus() {
                             cmds.extend(crate::sstv::claim_message(
                                 &mut self.sstv.msg_edit,
+                                &mut self.sstv.msg_sent,
                                 &self.sstv.presets,
                                 sel,
                             ));
@@ -1273,6 +1286,7 @@ impl SdroxideApp {
                         if resp.lost_focus() {
                             cmds.extend(crate::sstv::commit_message(
                                 &mut self.sstv.msg_edit,
+                                &mut self.sstv.msg_sent,
                                 &self.sstv.presets,
                             ));
                         }
@@ -1308,13 +1322,17 @@ impl SdroxideApp {
                                 })
                                 .inner;
                             if tx.clicked() {
-                                // Compose before committing: what goes on the air is
-                                // what is on screen, including an edit the operator
-                                // never clicked out of. The commit follows so the
-                                // engine stores it too.
+                                // What goes on the air is what is on screen. The
+                                // click has usually already taken the focus off the
+                                // message box and committed it above, this same
+                                // frame, so the text comes from the write still in
+                                // flight rather than the presets it has not reached
+                                // yet (#752). The commit here covers a box that
+                                // kept its focus.
                                 let png = self.sstv.compose_png(dims);
                                 cmds.extend(crate::sstv::commit_message(
                                     &mut self.sstv.msg_edit,
+                                    &mut self.sstv.msg_sent,
                                     &self.sstv.presets,
                                 ));
                                 if let Some(png) = png {
