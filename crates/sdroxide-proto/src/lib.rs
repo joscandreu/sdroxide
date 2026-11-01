@@ -1622,7 +1622,13 @@ use sdroxide_types::{
 ///
 /// v189: [`sdroxide_types::Command`] gains `ClearMemories`, appended; a v188
 /// peer has no variant to decode it into.
-pub const PROTO_VERSION: u16 = 189;
+///
+/// v190: JS8 group auto-responses and station info. `DigiConfig` gains
+/// `js8_info`, `js8_auto_rules_on` and `js8_auto_rules` (`Vec<Js8AutoRule>`)
+/// after `js8_groups`. `Js8Status` gains `auto_pending`
+/// (`Vec<Js8AutoPending>`) on its tail. Both ride `DigiStatus`, so a v189 peer
+/// misreads every digital status.
+pub const PROTO_VERSION: u16 = 190;
 const VERSION_BYTE: u8 = 0x12;
 
 #[derive(Debug, thiserror::Error)]
