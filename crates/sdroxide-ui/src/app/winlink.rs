@@ -51,9 +51,17 @@ pub struct MailUi {
     /// Without this the window opens showing "loading…" for ever: nothing else
     /// sets `dirty`, so the request is never made.
     was_open: bool,
+    /// The VARA CHAT window, and what is being typed in it.
+    pub chat_open: bool,
+    pub(in crate::app) chat_input: String,
+    pub(in crate::app) chat_call: String,
 }
 
 impl MailUi {
+    pub(in crate::app) fn status(&self) -> &WinlinkStatus {
+        &self.status
+    }
+
     /// Starting divider position, and the range it may be dragged through.
     const SPLIT_DEFAULT: f32 = 0.45;
     const SPLIT_MIN: f32 = 0.12;
@@ -275,6 +283,13 @@ impl crate::app::SdroxideApp {
             }
             if ui.selectable_label(self.mail.log_open, "LOG").clicked() {
                 self.mail.log_open = !self.mail.log_open;
+            }
+            if ui
+                .selectable_label(self.mail.chat_open, tr!("varachat-button"))
+                .on_hover_text(tr!("varachat-button-hover"))
+                .clicked()
+            {
+                self.mail.chat_open = !self.mail.chat_open;
             }
         });
 

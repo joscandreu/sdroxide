@@ -3192,6 +3192,12 @@ struct Engine {
     /// The operator has been told once that the TNC's PTT is being ignored
     /// because of the mode; reset when a key-up is honoured.
     vara_mode_warned: bool,
+    /// Where the dial was before moving to a VarAC slot to call, and whether
+    /// the chat has been seen busy since: when it is idle again, the dial
+    /// goes back.
+    chat_return_hz: Option<f64>,
+    chat_was_busy: bool,
+    chat_return_since: Option<Instant>,
     /// The VARA TNC sdroxide runs is up and keys the radio through the rigctld
     /// server — for Pat or any other program using it, not only our Winlink.
     /// A PTT that arrives that way is indistinguishable from the operator's,
@@ -4570,6 +4576,9 @@ fn engine_thread(
         vara_tx: false,
         vara_tx_since: None,
         vara_mode_warned: false,
+        chat_return_hz: None,
+        chat_was_busy: false,
+        chat_return_since: None,
         tnc_rigctld: false,
         tci_tx_starved: 0,
         tci_pace: TciTxPace::default(),
@@ -10140,6 +10149,72 @@ impl Engine {
                 }
                 return;
             }
+            VaraChatCall { call, offset_hz } => {
+                let Some(key_ptt) = self.winlink.as_ref().map(|wl| wl.config().vara.key_ptt) else {
+                    return;
+                };
+                let mode = self.state.rx[0].mode;
+                let voice =
+                    matches!(mode, Mode::Usb | Mode::Lsb | Mode::Digu | Mode::Digl | Mode::Nfm);
+                if key_ptt && !voice {
+                    let _ = self.event_tx.send(RadioEvent::Notice(Some(format!(
+                        "switch the radio to DIGU (or USB, or NFM for VARA FM) to chat through \
+                         the VARA TNC — it is in {}",
+                        mode.label()
+                    ))));
+                    return;
+                }
+                // A VarAC CQ names the slot its caller waits on: go there to
+                // call, and come back when the QSO is over.
+                let home = self.state.active_freq_hz();
+                if offset_hz != 0 {
+                    self.retune_for_chat(home + f64::from(offset_hz));
+                }
+                let result = self.winlink.as_mut().map(|wl| wl.chat_call(&call));
+                match result {
+                    Some(Ok(())) => {
+                        if offset_hz != 0 {
+                            self.chat_return_hz = Some(home);
+                            self.chat_was_busy = false;
+                            self.chat_return_since = Some(Instant::now());
+                        }
+                    }
+                    Some(Err(e)) => {
+                        if offset_hz != 0 {
+                            self.retune_for_chat(home);
+                        }
+                        let _ = self.event_tx.send(RadioEvent::Notice(Some(e)));
+                    }
+                    None => {}
+                }
+                self.emit_winlink_status();
+                return;
+            }
+            VaraChatSend(text) => {
+                if let Some(Err(e)) = self.winlink.as_mut().map(|wl| wl.chat_send(&text)) {
+                    let _ = self.event_tx.send(RadioEvent::Notice(Some(e)));
+                }
+                return;
+            }
+            VaraChatHangUp => {
+                if let Some(Err(e)) = self.winlink.as_mut().map(|wl| wl.chat_hang_up()) {
+                    let _ = self.event_tx.send(RadioEvent::Notice(Some(e)));
+                }
+                return;
+            }
+            VaraChatCq => {
+                if let Some(Err(e)) = self.winlink.as_mut().map(|wl| wl.chat_cq()) {
+                    let _ = self.event_tx.send(RadioEvent::Notice(Some(e)));
+                }
+                return;
+            }
+            VaraChatClear => {
+                if let Some(wl) = self.winlink.as_mut() {
+                    wl.chat_clear();
+                }
+                self.emit_winlink_status();
+                return;
+            }
             WinlinkConnect => {
                 // Taken by value so the radio can be set up for the call
                 // below: applying the gateway's channel needs the engine, and
@@ -13462,6 +13537,46 @@ impl Engine {
             let _ = self.event_tx.send(RadioEvent::WinlinkStatus(wl.status().clone()));
         }
         self.pump_vara_ptt(&ptt, busy);
+        self.chat_return_dial();
+    }
+
+    /// Back to the calling frequency once a QSO that moved the dial is over.
+    fn chat_return_dial(&mut self) {
+        let Some(home) = self.chat_return_hz else { return };
+        let busy = self.winlink.as_ref().is_some_and(|wl| wl.chat_busy());
+        // A call that never got going (refused by the TNC at once) has no
+        // busy spell to wait for; give it a few seconds, then come back.
+        let never_started = !self.chat_was_busy
+            && self.chat_return_since.is_some_and(|t| t.elapsed() > Duration::from_secs(10));
+        if busy {
+            self.chat_was_busy = true;
+        } else if self.chat_was_busy || never_started {
+            self.chat_return_hz = None;
+            self.chat_was_busy = false;
+            self.chat_return_since = None;
+            self.retune_for_chat(home);
+        }
+    }
+
+    /// Move the dial for a chat, and say so.
+    fn retune_for_chat(&mut self, hz: f64) {
+        if (self.state.active_freq_hz() - hz).abs() < 1.0 {
+            return;
+        }
+        self.stop_scan_for_operator();
+        match self.state.active_vfo {
+            Vfo::A => self.state.vfo_a_hz = hz,
+            Vfo::B => self.state.vfo_b_hz = hz,
+        }
+        self.state.band = Band::containing(hz);
+        self.keep_vfo_in_span();
+        self.update_tuning();
+        // Called from paths that return before `apply`'s closing state
+        // announcement, so say where the dial is now.
+        self.emit_state();
+        let _ = self
+            .event_tx
+            .send(RadioEvent::Notice(Some(format!("tuned to {:.6} MHz for the chat", hz / 1e6))));
     }
 
     /// The over on the air is a VARA TNC's waveform arriving on the microphone
@@ -13549,6 +13664,8 @@ impl Engine {
         self.state.band = Band::containing(vara.freq_hz);
         self.keep_vfo_in_span();
         self.update_tuning();
+        // `WinlinkConnect` returns before `apply` announces the state.
+        self.emit_state();
         let _ = self.event_tx.send(RadioEvent::Notice(Some(format!(
             "tuned to {:.4} MHz for {}",
             vara.freq_hz / 1e6,
@@ -13672,6 +13789,9 @@ impl Engine {
             self.state.band = Band::containing(cfg.gateway_freq_hz);
             self.keep_vfo_in_span();
             self.update_tuning();
+            // `WinlinkConnect` returns before `apply` announces the state, so
+            // a client would otherwise go on showing the old dial.
+            self.emit_state();
             let _ = self.event_tx.send(RadioEvent::Notice(Some(format!(
                 "tuned to {:.4} MHz for {}",
                 cfg.gateway_freq_hz / 1e6,

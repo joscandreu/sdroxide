@@ -117,7 +117,9 @@ One binary, three ways to run it:
   external VARA-compatible TNC — your own xara or VARA, driven over its TCP
   ports, with sdroxide keying from the TNC's PTT — including peer-to-peer
   sessions, both calling and answering — and sdroxide can start and watch
-  xara for you. ARDOP is still to come.
+  xara for you. The same TNC carries **VARA chat** (beta): keyboard QSOs that
+  speak VarAC's message format or VARA Chat's plain text, CQ frames heard and
+  sent, and VarAC slot CQs answered on their slot. ARDOP is still to come.
 - **Bandplan overlay** — a colour-coded strip along the bottom of the waterfall
   that labels allocations (ham bands, broadcast, CB, AM); it shows coarse bands
   when zoomed out and CW/digital/SSB sub-segments when zoomed into a ham band.

@@ -326,10 +326,11 @@ pub use wefax::{
     WEFAX_STATIONS, WefaxChartMeta, WefaxIoc, WefaxLpm, WefaxStation, WefaxStatus, shift_fax_rows,
 };
 pub use winlink::{
+    CHAT_CQ_MAX, CHAT_LINES_MAX, ChatCq, ChatFormat, ChatLine, ChatLineKind, ChatState,
     DEFAULT_CMS_ADDRESS, DEFAULT_VARA_TNC, MAIL_PAGE_MAX, MailAttachment, MailDraft, MailEntry,
     MailFolder, MailListing, MailMessage, ManagedTncConfig, ManagedTncStatus, TncAudio, TncDevice,
-    TncMode, TncPtt, TncState, VaraGateway, VaraTncConfig, WinlinkConfig, WinlinkGateway,
-    WinlinkLane, WinlinkStatus,
+    TncMode, TncPtt, TncState, VaraChatConfig, VaraChatStatus, VaraGateway, VaraTncConfig,
+    WinlinkConfig, WinlinkGateway, WinlinkLane, WinlinkStatus,
 };
 pub use wsjtx::{CwTextConfig, N1mmConfig, WsjtxConfig};
 pub use wspr::{

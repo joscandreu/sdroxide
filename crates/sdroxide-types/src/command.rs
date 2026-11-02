@@ -1242,4 +1242,19 @@ pub enum Command {
     ///
     /// Appended for the usual reason — postcard numbers variants by position.
     SetVaraMonConfig(Box<crate::VaraMonConfig>),
+    /// VARA chat: call a station. `offset_hz` moves the dial first (a VarAC
+    /// CQ's slot), and the dial goes back when the QSO ends; zero calls where
+    /// the radio is.
+    VaraChatCall {
+        call: String,
+        offset_hz: i32,
+    },
+    /// VARA chat: send one line to the station in the QSO.
+    VaraChatSend(String),
+    /// VARA chat: end the QSO (politely to a VarAC station), or stop a call.
+    VaraChatHangUp,
+    /// VARA chat: send a CQ frame.
+    VaraChatCq,
+    /// VARA chat: empty the conversation and the heard CQs.
+    VaraChatClear,
 }

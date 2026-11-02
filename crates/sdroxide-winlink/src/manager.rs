@@ -17,6 +17,7 @@ use sdroxide_types::{
     WinlinkStatus,
 };
 
+use crate::chat_station::{ChatCmd, ChatCtx, ChatEvent, chat_loop};
 use crate::mailbox::{Mailbox, MailboxError};
 use crate::message::{Attachment, Message, format_date, generate_mid};
 use crate::session::{self, SessionConfig, SessionOutcome};
@@ -93,7 +94,7 @@ struct Listener {
     stop: Arc<AtomicBool>,
     handle: std::thread::JoinHandle<()>,
     /// The settings it was started with; a change restarts it.
-    key: (String, String, Option<u32>, bool),
+    key: String,
 }
 
 /// Whether a message is for `call` — the peer at the other end of a
@@ -165,8 +166,12 @@ pub struct WinlinkManager {
     /// Where the mailbox lives, so the listener can read the outbox when a
     /// peer calls.
     root: PathBuf,
-    /// Answering peer-to-peer calls through a VARA TNC, when enabled.
+    /// Answering peer-to-peer calls through a VARA TNC, when enabled — or the
+    /// chat station, which takes its place on the TNC when chat is enabled.
     listener: Option<Listener>,
+    /// The chat station's command and report channels, while it runs.
+    chat_cmd: Option<Sender<ChatCmd>>,
+    chat_rx: Option<Receiver<ChatEvent>>,
     /// The VARA TNC sdroxide runs itself, when the operator asked for that.
     tnc: Option<TncProcess>,
     /// The command line it was started with; a change restarts it.
@@ -210,6 +215,8 @@ impl WinlinkManager {
             ptt_rx,
             root,
             listener: None,
+            chat_cmd: None,
+            chat_rx: None,
             tnc: None,
             tnc_args: Vec::new(),
             tnc_retry_at: None,
@@ -426,9 +433,19 @@ impl WinlinkManager {
     fn sync_listener(&mut self) {
         let v = &self.cfg.vara;
         let mycall = self.cfg.callsign.trim().to_uppercase();
-        let want = v.listen && !mycall.is_empty();
-        let key =
-            (v.address.trim().to_string(), mycall.clone(), v.bandwidth.map(|b| b.hz()), v.key_ptt);
+        let chat = v.chat.enabled;
+        let want = (v.listen || chat) && !mycall.is_empty();
+        let bw = v.bandwidth.map(|b| b.hz());
+        let key = format!(
+            "{chat}|{}|{mycall}|{bw:?}|{}|{:?}|{}|{}|{}|{}",
+            v.address.trim(),
+            v.key_ptt,
+            v.chat.format,
+            v.chat.name,
+            v.chat.qth,
+            v.chat.send_profile,
+            self.cfg.locator,
+        );
         if let Some(l) = &self.listener {
             // A running listener is kept while the settings stand — including
             // while it is busy answering a call, which is its own session.
@@ -440,6 +457,11 @@ impl WinlinkManager {
                 l.stop.store(true, Ordering::SeqCst);
             }
             self.status.listening = false;
+            self.chat_cmd = None;
+        }
+        if !chat {
+            self.status.chat.state = sdroxide_types::ChatState::Off;
+            self.status.chat.peer.clear();
         }
         // A new one only when the TNC is free — our own call has it otherwise —
         // and, when sdroxide runs the TNC, once that has said it is up.
@@ -447,30 +469,128 @@ impl WinlinkManager {
             return;
         }
         let stop = Arc::new(AtomicBool::new(false));
-        let how = VaraListen { address: key.0.clone(), mycall, bandwidth_hz: key.2 };
-        let ctx = ListenCtx {
-            how,
-            ptt: key.3.then(|| self.ptt_tx.clone()),
-            stop: Arc::clone(&stop),
-            busy: Arc::clone(&self.busy),
-            done_tx: self.done_tx.clone(),
-            root: self.root.clone(),
-            session: SessionConfig {
-                callsign: self.cfg.callsign.trim().to_uppercase(),
-                password: String::new(),
-                locator: self.cfg.locator.clone(),
-                app_name: self.cfg.app_name.clone(),
-                app_version: env!("CARGO_PKG_VERSION").to_string(),
-                target_call: String::new(),
-            },
+        let how = VaraListen { address: v.address.trim().to_string(), mycall, bandwidth_hz: bw };
+        let ptt = v.key_ptt.then(|| self.ptt_tx.clone());
+        let spawned = if chat {
+            let (cmd_tx, cmds) = crossbeam_channel::unbounded();
+            let (ev_tx, ev_rx) = crossbeam_channel::unbounded();
+            let profile = v
+                .chat
+                .send_profile
+                .then(|| (v.chat.name.clone(), v.chat.qth.clone(), self.cfg.locator.clone()));
+            let ctx = ChatCtx {
+                how,
+                ptt,
+                stop: Arc::clone(&stop),
+                cmds,
+                events: ev_tx,
+                format: v.chat.format,
+                profile,
+            };
+            self.chat_cmd = Some(cmd_tx);
+            self.chat_rx = Some(ev_rx);
+            std::thread::Builder::new()
+                .name("sdroxide-vara-chat".into())
+                .spawn(move || chat_loop(ctx))
+        } else {
+            let ctx = ListenCtx {
+                how,
+                ptt,
+                stop: Arc::clone(&stop),
+                busy: Arc::clone(&self.busy),
+                done_tx: self.done_tx.clone(),
+                root: self.root.clone(),
+                session: SessionConfig {
+                    callsign: self.cfg.callsign.trim().to_uppercase(),
+                    password: String::new(),
+                    locator: self.cfg.locator.clone(),
+                    app_name: self.cfg.app_name.clone(),
+                    app_version: env!("CARGO_PKG_VERSION").to_string(),
+                    target_call: String::new(),
+                },
+            };
+            std::thread::Builder::new()
+                .name("sdroxide-winlink-listen".into())
+                .spawn(move || listen_loop(ctx))
         };
-        match std::thread::Builder::new()
-            .name("sdroxide-winlink-listen".into())
-            .spawn(move || listen_loop(ctx))
-        {
+        match spawned {
             Ok(handle) => self.listener = Some(Listener { stop, handle, key }),
             Err(e) => self.status.last_error = Some(format!("starting the VARA listener: {e}")),
         }
+    }
+
+    /// A chat QSO is in progress (or being set up or closed).
+    pub fn chat_busy(&self) -> bool {
+        use sdroxide_types::ChatState;
+        matches!(
+            self.status.chat.state,
+            ChatState::Calling | ChatState::Connected | ChatState::Closing
+        )
+    }
+
+    fn chat(&mut self, c: ChatCmd) -> Result<(), String> {
+        match &self.chat_cmd {
+            Some(tx) if tx.send(c).is_ok() => Ok(()),
+            _ => {
+                Err("VARA chat is not standing by: turn it on in Settings \u{2192} Winlink".into())
+            }
+        }
+    }
+
+    /// Call a station for a chat.
+    pub fn chat_call(&mut self, call: &str) -> Result<(), String> {
+        self.status.chat.message.clear();
+        self.chat(ChatCmd::Call(call.to_string()))
+    }
+
+    pub fn chat_send(&mut self, text: &str) -> Result<(), String> {
+        self.chat(ChatCmd::Send(text.to_string()))
+    }
+
+    pub fn chat_hang_up(&mut self) -> Result<(), String> {
+        self.chat(ChatCmd::HangUp)
+    }
+
+    pub fn chat_cq(&mut self) -> Result<(), String> {
+        self.chat(ChatCmd::Cq)
+    }
+
+    pub fn chat_clear(&mut self) {
+        self.status.chat.lines.clear();
+        self.status.chat.heard.clear();
+        self.status.chat.message.clear();
+    }
+
+    /// Take what the chat station has reported. Returns whether anything did.
+    fn drain_chat(&mut self) -> bool {
+        use sdroxide_types::{CHAT_CQ_MAX, CHAT_LINES_MAX};
+        let Some(rx) = &self.chat_rx else { return false };
+        let events: Vec<ChatEvent> = rx.try_iter().collect();
+        let changed = !events.is_empty();
+        let c = &mut self.status.chat;
+        for e in events {
+            match e {
+                ChatEvent::State { state, peer, plain } => {
+                    c.state = state;
+                    c.peer = peer;
+                    c.plain = plain;
+                }
+                ChatEvent::Line(l) => {
+                    c.lines.push(l);
+                    let n = c.lines.len();
+                    if n > CHAT_LINES_MAX {
+                        c.lines.drain(..n - CHAT_LINES_MAX);
+                    }
+                }
+                ChatEvent::Heard(cq) => {
+                    c.heard.retain(|h| h.raw != cq.raw);
+                    c.heard.insert(0, cq);
+                    c.heard.truncate(CHAT_CQ_MAX);
+                }
+                ChatEvent::Problem(m) => c.message = m,
+            }
+        }
+        changed
     }
 
     pub fn config(&self) -> &WinlinkConfig {
@@ -498,6 +618,9 @@ impl WinlinkManager {
             && let Some(why) = self.tnc_not_ready()
         {
             return Err(why);
+        }
+        if matches!(route, WinlinkRoute::Vara { .. }) && self.chat_busy() {
+            return Err("a VARA chat QSO is in progress: finish it first".into());
         }
         if !self.cfg.is_usable() {
             // Names the APPLY button on purpose: the settings tab keeps edits
@@ -568,6 +691,7 @@ impl WinlinkManager {
             l.stop.store(true, Ordering::SeqCst);
             l.handle
         });
+        self.chat_cmd = None;
         self.status.listening = false;
 
         busy.store(true, Ordering::SeqCst);
@@ -634,6 +758,7 @@ impl WinlinkManager {
         self.sync_tnc();
         changed |= self.status.tnc != tnc_before;
         self.sync_listener();
+        changed |= self.drain_chat();
         let outcome = match self.done_rx.try_recv() {
             Ok(Done::Session(outcome, err)) => (outcome, err),
             Ok(Done::Listener { listening, activity }) => {

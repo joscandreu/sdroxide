@@ -182,6 +182,10 @@ pub struct VaraTransport {
     listening: bool,
     /// The channel is busy, from the TNC's last `BUSY` notice.
     busy: bool,
+    /// The TNC was put in chat mode by us.
+    chat: bool,
+    /// The last signal-to-noise report (`SN`), dB.
+    pub last_snr: Option<f32>,
     /// What the TNC said along the way, for the session transcript.
     log: Vec<String>,
     /// Bytes the TNC still holds to send, from its last `BUFFER` notice.
@@ -248,6 +252,8 @@ impl VaraTransport {
             linked: false,
             listening: false,
             busy: false,
+            chat: false,
+            last_snr: None,
             log: Vec::new(),
             buffered: 0,
             hung_up: false,
@@ -306,6 +312,74 @@ impl VaraTransport {
         }
     }
 
+    /// Open both ports and set the TNC up for keyboard chat, as VARA Chat
+    /// and VarAC do: chat timing (`CHAT ON`, which also listens), peer
+    /// timing and text compression where the TNC knows them, and listening
+    /// for callers. Drive it with [`VaraTransport::next_event`],
+    /// [`VaraTransport::read_some`] and [`VaraTransport::write_data`].
+    pub fn chat_standby(
+        how: &VaraListen,
+        cancel: Arc<AtomicBool>,
+        ptt: Option<Sender<bool>>,
+    ) -> Result<Self, TransportError> {
+        let mut t = Self::open(&how.address, cancel, ptt)?;
+        let setup = (|| -> std::io::Result<()> {
+            t.command(&format!("MYCALL {}", how.mycall.trim().to_uppercase()))?;
+            if let Some(bw) = how.bandwidth_hz {
+                t.command(&format!("BW{bw}"))?;
+            }
+            t.command("CHAT ON")?;
+            t.optional("P2P SESSION")?;
+            t.optional("COMPRESSION TEXT")?;
+            t.command("LISTEN ON")?;
+            Ok(())
+        })();
+        match setup {
+            Ok(()) => {
+                t.listening = true;
+                t.chat = true;
+                Ok(t)
+            }
+            Err(e) => {
+                t.closed = true;
+                Err(TransportError::Connect(how.address.clone(), e))
+            }
+        }
+    }
+
+    /// One read from the data port: what was there within a short wait, or
+    /// nothing. The TNC closing the port is an error.
+    pub fn read_some(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self.data.read(buf) {
+            Ok(0) => Err(io_err(ErrorKind::BrokenPipe, "the TNC closed its data port")),
+            Ok(n) => Ok(n),
+            Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => Ok(0),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Hand bytes to the TNC to send on the link.
+    pub fn write_data(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+        self.data.write_all(bytes)
+    }
+
+    /// Bytes the TNC still holds to send.
+    pub fn buffered(&self) -> usize {
+        self.buffered
+    }
+
+    /// A link has come and gone; carry on standing by on the same ports.
+    pub fn link_reset(&mut self) {
+        self.closed = false;
+        self.linked = false;
+        self.buffered = 0;
+    }
+
+    /// The other end of the link now, as the TNC named it.
+    pub fn set_peer(&mut self, call: &str) {
+        self.gateway = call.to_string();
+    }
+
     /// Wait for a station to call us; returns its callsign once linked.
     ///
     /// Blocks until a call arrives, the operator stops listening (the cancel
@@ -358,6 +432,9 @@ impl VaraTransport {
             }
             TncEvent::Connected { .. } => self.linked = true,
             TncEvent::Busy(on) => self.busy = *on,
+            TncEvent::Other(o) if o.starts_with("SN ") => {
+                self.last_snr = o[3..].trim().parse().ok().or(self.last_snr);
+            }
             TncEvent::Closed => self.gone = true,
             _ => {}
         }
@@ -379,7 +456,7 @@ impl VaraTransport {
     }
 
     /// The next event, waiting at most `wait`.
-    fn next_event(&mut self, wait: Duration) -> Option<TncEvent> {
+    pub fn next_event(&mut self, wait: Duration) -> Option<TncEvent> {
         match self.events.recv_timeout(wait) {
             Ok(ev) => {
                 self.note(&ev);
@@ -394,7 +471,7 @@ impl VaraTransport {
     }
 
     /// Send a command and wait for its `OK`. `WRONG` is an error naming it.
-    fn command(&mut self, line: &str) -> std::io::Result<()> {
+    pub fn command(&mut self, line: &str) -> std::io::Result<()> {
         self.send_line(line)?;
         let deadline = Instant::now() + ACK_TIMEOUT;
         while Instant::now() < deadline {
@@ -591,6 +668,9 @@ impl VaraTransport {
         }
         // A TNC we put on watch must not go on answering calls with nobody
         // behind it to take the mail.
+        if self.chat && !self.gone {
+            let _ = self.command("CHAT OFF");
+        }
         if self.listening && !self.gone {
             let _ = self.command("LISTEN OFF");
         }

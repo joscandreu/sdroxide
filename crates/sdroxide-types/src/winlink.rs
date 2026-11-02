@@ -156,6 +156,8 @@ pub struct WinlinkStatus {
     pub listening: bool,
     /// The TNC sdroxide runs itself, when it does.
     pub tnc: ManagedTncStatus,
+    /// Keyboard chat over VARA.
+    pub chat: VaraChatStatus,
 }
 
 /// The gateway the CMS telnet transport dials by default.
@@ -220,6 +222,120 @@ pub struct VaraTncConfig {
     pub gateways: Vec<VaraGateway>,
     /// Have sdroxide run the TNC (xara) itself rather than expect one running.
     pub managed: ManagedTncConfig,
+    /// Keyboard chat through the same TNC.
+    pub chat: VaraChatConfig,
+}
+
+/// What goes inside a chat link's byte stream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ChatFormat {
+    /// VarAC's messages, switching to plain text for a station that sends
+    /// plain text (VARA Chat and terminal programs).
+    #[default]
+    Auto,
+    /// VarAC's messages only.
+    VarAc,
+    /// Plain text lines only, as VARA Chat sends them.
+    Plain,
+}
+
+/// Keyboard chat over VARA: standing by for calls and CQs, and how to talk.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VaraChatConfig {
+    /// Stand by for chat: keep the TNC in chat mode and listening, show the CQ
+    /// frames it hears, and answer stations that call. Takes the TNC instead
+    /// of the Winlink peer-to-peer listener.
+    pub enabled: bool,
+    pub format: ChatFormat,
+    /// Sent after the opening report to a VarAC station, as VarAC does.
+    pub name: String,
+    pub qth: String,
+    pub send_profile: bool,
+}
+
+impl Default for VaraChatConfig {
+    fn default() -> Self {
+        VaraChatConfig {
+            enabled: false,
+            format: ChatFormat::Auto,
+            name: String::new(),
+            qth: String::new(),
+            send_profile: true,
+        }
+    }
+}
+
+/// Where the chat station is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ChatState {
+    #[default]
+    Off,
+    /// On the TNC, listening; no QSO.
+    Standby,
+    /// Calling a station.
+    Calling,
+    /// In a QSO.
+    Connected,
+    /// Saying goodbye: `<DISC>` sent, the link not yet closed.
+    Closing,
+}
+
+/// Who a line of the conversation came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ChatLineKind {
+    /// Typed here.
+    Me,
+    /// The other station.
+    #[default]
+    Them,
+    /// About the link or the QSO rather than said: connected, reports, CQs.
+    Note,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ChatLine {
+    /// Unix seconds.
+    pub at: i64,
+    pub kind: ChatLineKind,
+    pub text: String,
+}
+
+/// A CQ frame heard while standing by.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ChatCq {
+    /// The callsign as sent, and the one to call (a VarAC slot suffix removed).
+    pub raw: String,
+    pub call: String,
+    /// Where the caller waits, from the dial it was heard on.
+    pub offset_hz: i32,
+    /// A VarAC beacon rather than a CQ.
+    pub beacon: bool,
+    /// The bandwidth it was sent at, as the TNC reported it.
+    pub bw: String,
+    /// Unix seconds.
+    pub at: i64,
+}
+
+/// Most chat lines kept; older ones scroll away.
+pub const CHAT_LINES_MAX: usize = 500;
+/// Most heard CQs kept.
+pub const CHAT_CQ_MAX: usize = 30;
+
+/// The chat station's state and conversation, carried in [`WinlinkStatus`].
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VaraChatStatus {
+    pub state: ChatState,
+    /// The station in the QSO (or being called).
+    pub peer: String,
+    /// The other station sends plain text rather than VarAC's messages.
+    pub plain: bool,
+    pub lines: Vec<ChatLine>,
+    /// CQs heard, newest first.
+    pub heard: Vec<ChatCq>,
+    /// Why the last thing asked for did not happen.
+    pub message: String,
 }
 
 /// Which audio system the managed TNC opens its devices through.
@@ -438,6 +554,7 @@ impl Default for VaraTncConfig {
             busy_wait_s: 30,
             gateways: Vec::new(),
             managed: ManagedTncConfig::default(),
+            chat: VaraChatConfig::default(),
         }
     }
 }

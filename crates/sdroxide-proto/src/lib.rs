@@ -1643,7 +1643,12 @@ use sdroxide_types::{
 /// `managed` (`ManagedTncConfig`) and `WinlinkStatus` gains `tnc`
 /// (`ManagedTncStatus`, with the devices the TNC can open), each on its tail,
 /// so a v192 peer reads both out of step.
-pub const PROTO_VERSION: u16 = 193;
+///
+/// v194: keyboard chat over VARA. `VaraTncConfig` gains `chat`
+/// (`VaraChatConfig`) and `WinlinkStatus` gains `chat` (`VaraChatStatus`), on
+/// their tails; `Command` gains `VaraChatCall`, `VaraChatSend`,
+/// `VaraChatHangUp`, `VaraChatCq` and `VaraChatClear`, appended.
+pub const PROTO_VERSION: u16 = 194;
 const VERSION_BYTE: u8 = 0x12;
 
 #[derive(Debug, thiserror::Error)]
@@ -2277,7 +2282,25 @@ mod tests {
                 kiss_port: 8100,
                 extra_args: "--tx-buffer-ms 60".into(),
             },
+            chat: sdroxide_types::VaraChatConfig {
+                enabled: true,
+                format: sdroxide_types::ChatFormat::Plain,
+                name: "José".into(),
+                qth: "Valencia".into(),
+                send_profile: false,
+            },
         };
+        for c in [
+            Command::VaraChatCall { call: "F6JON".into(), offset_hz: -1500 },
+            Command::VaraChatSend("hola ñ".into()),
+            Command::VaraChatHangUp,
+            Command::VaraChatCq,
+            Command::VaraChatClear,
+        ] {
+            let m = ClientMsg::Command(c);
+            let back: ClientMsg = decode(&encode(&m).unwrap()).unwrap();
+            assert_eq!(back, m);
+        }
         let m = ServerMsg::StationConfig(Box::new(sdroxide_types::StationConfig {
             net,
             ..Default::default()
@@ -2534,6 +2557,25 @@ mod tests {
                         desc: "BlackHole 2ch".into(),
                     }],
                     playback_devices: vec![],
+                },
+                chat: sdroxide_types::VaraChatStatus {
+                    state: sdroxide_types::ChatState::Connected,
+                    peer: "EA5XYZ".into(),
+                    plain: false,
+                    lines: vec![sdroxide_types::ChatLine {
+                        at: 1_793_000_000,
+                        kind: sdroxide_types::ChatLineKind::Them,
+                        text: "Hola, 73".into(),
+                    }],
+                    heard: vec![sdroxide_types::ChatCq {
+                        raw: "F6JON-2".into(),
+                        call: "F6JON".into(),
+                        offset_hz: -1500,
+                        beacon: false,
+                        bw: "2300".into(),
+                        at: 1_793_000_000,
+                    }],
+                    message: String::new(),
                 },
             }),
             ServerMsg::MailListing(sdroxide_types::MailListing {

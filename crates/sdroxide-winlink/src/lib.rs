@@ -14,6 +14,7 @@
 //! the protocol work has to be revisited when a radio transport arrives.
 
 pub mod b2f;
+pub mod chat_station;
 pub mod lzhuf;
 pub mod mailbox;
 pub mod manager;
@@ -23,6 +24,7 @@ pub mod session;
 pub mod tnc_process;
 pub mod transport;
 pub mod vara;
+pub mod varachat;
 
 pub use b2f::{Answer, Proposal, Sid};
 pub use lzhuf::{LzhufError, compress, decompress};

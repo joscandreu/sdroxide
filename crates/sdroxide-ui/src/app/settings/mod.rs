@@ -4100,8 +4100,13 @@ fn winlink_vara_settings(
         ui.add(egui::DragValue::new(&mut v.busy_wait_s).range(0..=600).suffix(" s"))
             .on_hover_text(tr!("settings-winlink-vara-busy-hover"));
     });
-    crate::chrome::checkbox(ui, &mut v.listen, tr!("settings-winlink-vara-listen"))
-        .on_hover_text(tr!("settings-winlink-vara-listen-hover"));
+    if crate::chrome::checkbox(ui, &mut v.listen, tr!("settings-winlink-vara-listen"))
+        .on_hover_text(tr!("settings-winlink-vara-listen-hover"))
+        .changed()
+        && v.listen
+    {
+        v.chat.enabled = false;
+    }
 
     ui.add_space(6.0);
     net_heading(ui, &tr!("settings-winlink-vara-my-stations"));
@@ -4166,7 +4171,45 @@ fn winlink_vara_settings(
     }
 
     ui.add_space(6.0);
+    vara_chat_settings(ui, v);
+    ui.add_space(6.0);
     managed_tnc_settings(ui, &mut v.managed, tnc);
+}
+
+/// Keyboard chat through the VARA TNC.
+fn vara_chat_settings(ui: &mut egui::Ui, v: &mut sdroxide_types::VaraTncConfig) {
+    use sdroxide_types::ChatFormat;
+    net_heading(ui, &tr!("settings-varachat-heading"));
+    let was = v.chat.enabled;
+    crate::chrome::checkbox(ui, &mut v.chat.enabled, tr!("settings-varachat-enabled"))
+        .on_hover_text(tr!("settings-varachat-enabled-hover"));
+    // One program on the TNC at a time: standing by for chat and answering
+    // Winlink peer-to-peer calls both want it, so turning one on turns the
+    // other off.
+    if v.chat.enabled && !was {
+        v.listen = false;
+    }
+    if v.listen && v.chat.enabled {
+        v.chat.enabled = false;
+    }
+    if !v.chat.enabled {
+        return;
+    }
+    ui.horizontal(|ui| {
+        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-varachat-format")));
+        ui.selectable_value(&mut v.chat.format, ChatFormat::Auto, tr!("settings-varachat-auto"))
+            .on_hover_text(tr!("settings-varachat-auto-hover"));
+        ui.selectable_value(&mut v.chat.format, ChatFormat::VarAc, "VarAC")
+            .on_hover_text(tr!("settings-varachat-varac-hover"));
+        ui.selectable_value(&mut v.chat.format, ChatFormat::Plain, tr!("settings-varachat-plain"))
+            .on_hover_text(tr!("settings-varachat-plain-hover"));
+    });
+    crate::chrome::checkbox(ui, &mut v.chat.send_profile, tr!("settings-varachat-profile"))
+        .on_hover_text(tr!("settings-varachat-profile-hover"));
+    if v.chat.send_profile {
+        net_row(ui, &tr!("settings-varachat-name"), &mut v.chat.name, 160.0);
+        net_row(ui, &tr!("settings-varachat-qth"), &mut v.chat.qth, 160.0);
+    }
 }
 
 /// sdroxide running xara itself: where it is, its audio, how it keys.

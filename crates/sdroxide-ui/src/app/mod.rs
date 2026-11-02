@@ -49,6 +49,7 @@ pub(in crate::app) mod spots;
 pub(in crate::app) mod top_bar;
 pub(in crate::app) mod tx_audio;
 pub(crate) mod util;
+mod varachat;
 pub(in crate::app) mod windows;
 pub(in crate::app) mod winlink;
 

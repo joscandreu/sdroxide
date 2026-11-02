@@ -39,6 +39,7 @@ or connects to a remote sdroxide server.
 9. [Web operation](#9-web-operation)
 10. [Spotting, awards, and QSL upload](#10-spotting-awards-and-qsl-upload)
 11. [Winlink radio email](#11-winlink-radio-email)
+    - [VARA chat](#vara-chat-beta)
 12. [Command-line reference](#12-command-line-reference)
 13. [Configuration files](#13-configuration-files)
 14. [Troubleshooting](#14-troubleshooting)
@@ -15348,6 +15349,68 @@ useful in emergency communications.
 Answering means transmitting, so it only reaches the air while the radio is in
 DIGU (or USB, or NFM for VARA FM). In any other mode the TNC's request to
 transmit is ignored, and sdroxide says so once.
+
+### VARA chat (beta)
+
+> **Beta.** Tested between two sdroxide stations over a real VARA modem link
+> (two xara TNCs), in both VarAC framing and plain text, and against a scripted
+> TNC. **Not yet tested against VarAC or VARA Chat themselves, and not on the
+> air.**
+
+The same VARA TNC also carries **keyboard chat**: a QSO typed line by line, as
+with EA5HVK's *VARA Chat* or 4Z1AC's *VarAC*. Open it with **VARA CHAT** in the
+MAIL window.
+
+**Setting up.** Under **Settings → Winlink**, with the route set to **Radio
+(VARA TNC)** and the TNC configured as above (or run by sdroxide), tick **Stand
+by for chat** and press **APPLY**. sdroxide then keeps the TNC in chat mode
+(`CHAT ON`), listening. That takes the TNC instead of **Answer peer-to-peer
+calls**, so ticking one unticks the other. A Winlink CONNECT still works while
+standing by: the chat steps aside and comes back afterwards. CONNECT is refused
+during a chat QSO.
+
+**In the window:**
+
+- The header says where the station stands: *Standing by*, *Calling…*, *In QSO
+  with EA5XYZ (VarAC)* or *(plain text)*.
+- Type a callsign and press **CALL**, or **CQ** to send a VARA CQ frame with
+  your callsign on the frequency you are on.
+- **Heard:** the CQ frames the TNC has decoded, newest first. VarAC writes the
+  slot its caller waits on as a callsign suffix: `F6JON-2` waits 1500 Hz below
+  the calling frequency, `F6JON-12` 1500 Hz above, and `-9` is a beacon. The
+  chip shows `F6JON -1500`. Click one to call it. Within two minutes of the CQ
+  (how long VarAC waits), sdroxide moves the dial to the slot, calls the plain
+  callsign, and puts the dial back when the QSO ends.
+- Type into the line at the bottom and press Enter. Your lines are green, the
+  other station's white, and notes about the QSO (signal reports, names,
+  connects) grey.
+- **HANG UP** ends the QSO. A VarAC station is sent VarAC's goodbye first, and
+  the link closes once it has gone.
+
+**Two ways of talking.** Programs put different things in the link:
+
+- **VarAC** frames every message with its length, and exchanges signal reports
+  and tags. Each side opens with `de CALL <R+05>` (the S/N it hears the other
+  at), then its name, QTH and locator. These show as notes ("EA5XYZ hears you at
+  -3 dB", "EA5XYZ name Ana; QTH Alicante"). Lines you type before the TNC has
+  measured the other station wait a few seconds and follow the opening report.
+- **Plain text**, as VARA Chat sends it: one line per message, ending in CR.
+
+**Format** chooses between them. *Auto* (the default) talks VarAC, and switches
+to plain text for the rest of the QSO as soon as the other station sends
+unframed text. A VARA Chat user may see one line of VarAC's opening report
+first. Choose *Plain text* to talk to VARA Chat stations only, or *VarAC* to
+never switch. **Send my name and QTH to VarAC stations** adds the profile
+after the opening report; the locator is the Winlink one.
+
+**What is not there yet:** VarAC's in-QSO frequency change (a request to move
+shows as a note, so agree a frequency in the chat instead), calling CQ on a
+VarAC slot, beacons, VMail and file transfer.
+
+VarAC's formats are not published. sdroxide follows the descriptions that
+Saul St John, W9SSJ, worked out from on-air recordings for his hfmodem project
+([hfmodem.ssj.lol](https://hfmodem.ssj.lol/), CC BY 4.0). The code is
+sdroxide's own.
 
 ### Choosing a gateway
 
