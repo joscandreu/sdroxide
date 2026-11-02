@@ -18,6 +18,8 @@
 //! of them, not a port of hfmodem's (AGPL) code. VarAC's QSY handshake,
 //! beacons, VMail and file transfer are not implemented.
 
+use sdroxide_types::ChatSaid;
+
 /// The step between VarAC's slots.
 pub const SLOT_STEP_HZ: i32 = 750;
 /// VarAC's beacon suffix.
@@ -154,56 +156,43 @@ fn latin1(b: &[u8]) -> String {
 /// A received message, ready for the conversation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rendered {
-    /// What to show. Tags are put into words; unknown ones are left as sent.
+    /// What was said, the tags taken out; unknown tags are left as sent.
     pub text: String,
+    /// What the tags said, for the window to put into words.
+    pub said: Vec<ChatSaid>,
     /// Nothing but tags: a note about the QSO rather than something said.
     pub note: bool,
     /// The station is closing the QSO.
     pub disc: bool,
 }
 
-/// What a tag says, in words, or `None` to show it as it was sent.
-fn describe(name: &str, value: Option<&str>) -> Option<String> {
-    let services = |v: &str| {
-        v.chars()
-            .map(|c| match c {
-                'V' => "VMail",
-                'E' => "email",
-                'A' => "AI",
-                'B' => "BBS",
-                'N' => "nothing",
-                _ => "?",
-            })
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
+/// What a tag says, or `None` to show it as it was sent.
+fn describe(name: &str, value: Option<&str>) -> Option<ChatSaid> {
+    let v = || value.unwrap_or_default().trim().to_string();
     Some(match (name, value) {
-        ("NAME", Some(v)) => format!("name {v}"),
-        ("QTH", Some(v)) => format!("QTH {v}"),
-        ("LOC", Some(v)) => format!("locator {v}"),
-        ("EM", Some(v)) => format!("email {v}"),
-        ("S", Some(v)) => format!("offers {}", services(v)),
-        ("Q", Some(v)) => {
-            let n: i64 = v.trim().parse().ok()?;
-            format!("asks to move {:+} Hz", n * 10)
-        }
-        ("QF", Some(v)) => format!("is on {} Hz", v.trim()),
-        ("DISC", None) => "is closing the QSO".into(),
-        ("AWAY", None) => "is away".into(),
-        ("AWQ", None) => "is away (leave a VMail)".into(),
-        ("Q", None) => "is at the station".into(),
-        ("TL", None) => "has arrived on the new frequency".into(),
-        ("QSYR", None) => "is ready on the new frequency".into(),
-        ("QSYU", None) => "asks to move up 750 Hz".into(),
-        ("QSYD", None) => "asks to move down 750 Hz".into(),
+        ("NAME", Some(_)) => ChatSaid::Name(v()),
+        ("QTH", Some(_)) => ChatSaid::Qth(v()),
+        ("LOC", Some(_)) => ChatSaid::Locator(v()),
+        ("EM", Some(_)) => ChatSaid::Email(v()),
+        ("S", Some(_)) => ChatSaid::Offers(v()),
+        ("Q", Some(n)) => ChatSaid::QsyBy(n.trim().parse::<i64>().ok()? * 10),
+        ("QF", Some(_)) => ChatSaid::IsOn(v()),
+        ("DISC", None) => ChatSaid::Closing,
+        ("AWAY", None) => ChatSaid::Away,
+        ("AWQ", None) => ChatSaid::AwayVmail,
+        ("Q", None) => ChatSaid::AtStation,
+        ("TL", None) => ChatSaid::Arrived,
+        ("QSYR", None) => ChatSaid::ReadyNew,
+        ("QSYU", None) => ChatSaid::QsyUp,
+        ("QSYD", None) => ChatSaid::QsyDown,
         _ => return None,
     })
 }
 
-/// Put a VarAC message into words for `from` (a callsign).
-pub fn render(message: &str, from: &str) -> Rendered {
+/// Take a VarAC message apart: what was said, and what its tags say.
+pub fn render(message: &str) -> Rendered {
     let mut text = String::new();
-    let mut said: Vec<String> = Vec::new();
+    let mut said: Vec<ChatSaid> = Vec::new();
     let mut disc = false;
     let mut rest = message;
     while let Some(open) = rest.find('<') {
@@ -221,14 +210,14 @@ pub fn render(message: &str, from: &str) -> Rendered {
                 && (r.starts_with('+') || r.starts_with('-'))
                 && r[1..].bytes().all(|b| b.is_ascii_digit())
         }) {
-            Some(format!("hears you at {} dB", r.parse::<i32>().unwrap_or(0)))
+            Some(ChatSaid::Report(r.parse::<i32>().unwrap_or(0)))
         } else if tag == "QSYF" {
             // `<QSYF>014105750</QSYF>`: a frequency to move to.
             match after[consumed..].find("</QSYF>") {
                 Some(end) => {
                     let hz = &after[consumed..consumed + end];
                     consumed += end + "</QSYF>".len();
-                    Some(format!("asks to move to {} Hz", hz.trim_start_matches('0')))
+                    Some(ChatSaid::QsyTo(hz.trim().trim_start_matches('0').to_string()))
                 }
                 None => None,
             }
@@ -258,16 +247,9 @@ pub fn render(message: &str, from: &str) -> Rendered {
         && words_only.to_ascii_lowercase().starts_with("de ")
         && words_only.split_whitespace().count() == 2;
     let text: String = if opening { String::new() } else { clean(&text) };
-    if text.trim().is_empty() {
-        let note =
-            if said.is_empty() { String::new() } else { format!("{from} {}", said.join("; ")) };
-        return Rendered { text: note, note: true, disc };
-    }
-    let mut out = text.trim_end().to_string();
-    if !said.is_empty() {
-        out.push_str(&format!(" ({})", said.join("; ")));
-    }
-    Rendered { text: out, note: false, disc }
+    let text = text.trim_end().to_string();
+    let note = text.trim().is_empty();
+    Rendered { text: if note { String::new() } else { text }, said, note, disc }
 }
 
 /// Line breaks as `\n`, other control characters dropped.
@@ -368,28 +350,41 @@ mod tests {
 
     #[test]
     fn tags_are_put_into_words() {
-        let r = render("de EA5XYZ <R-05>", "EA5XYZ");
-        assert_eq!(
-            r,
-            Rendered { text: "EA5XYZ hears you at -5 dB".into(), note: true, disc: false }
-        );
-        let r = render("<NAME:Ana>\r\n<QTH:Alicante>\r\n<LOC:IM98>", "EA5XYZ");
-        assert_eq!(r.text, "EA5XYZ name Ana; QTH Alicante; locator IM98");
-        assert!(r.note);
-        let r = render("Thanks for the QSO, 73 <DISC>", "EA5XYZ");
+        let r = render("de EA5XYZ <R-05>");
         assert_eq!(
             r,
             Rendered {
-                text: "Thanks for the QSO, 73 (is closing the QSO)".into(),
+                text: String::new(),
+                said: vec![ChatSaid::Report(-5)],
+                note: true,
+                disc: false
+            }
+        );
+        let r = render("<NAME:Ana>\r\n<QTH:Alicante>\r\n<LOC:IM98>");
+        assert_eq!(
+            r.said,
+            vec![
+                ChatSaid::Name("Ana".into()),
+                ChatSaid::Qth("Alicante".into()),
+                ChatSaid::Locator("IM98".into())
+            ]
+        );
+        assert!(r.note);
+        let r = render("Thanks for the QSO, 73 <DISC>");
+        assert_eq!(
+            r,
+            Rendered {
+                text: "Thanks for the QSO, 73".into(),
+                said: vec![ChatSaid::Closing],
                 note: false,
                 disc: true
             }
         );
-        assert_eq!(render("<Q:-75>", "X").text, "X asks to move -750 Hz");
-        assert_eq!(render("<QSYF>014105750</QSYF>", "X").text, "X asks to move to 14105750 Hz");
-        // Not a tag VarAC uses: left as it was written.
-        assert_eq!(render("a <b> c", "X").text, "a <b> c");
-        assert_eq!(render("x < y", "X").text, "x < y");
+        assert_eq!(render("<Q:-75>").said, vec![ChatSaid::QsyBy(-750)]);
+        assert_eq!(render("<QSYF>014105750</QSYF>").said, vec![ChatSaid::QsyTo("14105750".into())]);
+        // Not tags: left as they were.
+        assert_eq!(render("a <b> c").text, "a <b> c");
+        assert_eq!(render("x < y").text, "x < y");
     }
 
     #[test]

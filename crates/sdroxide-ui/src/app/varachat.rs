@@ -7,7 +7,7 @@
 
 use crate::i18n::tr;
 use eframe::egui::{self, RichText};
-use sdroxide_types::{ChatLineKind, ChatState, Command};
+use sdroxide_types::{ChatLine, ChatLineKind, ChatSaid, ChatState, Command};
 
 impl crate::app::SdroxideApp {
     pub(in crate::app) fn vara_chat_window(
@@ -156,15 +156,16 @@ impl crate::app::SdroxideApp {
                                 .size(10.0)
                                 .color(crate::theme::CYAN_DIM()),
                         );
+                        let text = line_words(l);
                         match l.kind {
                             ChatLineKind::Me => {
-                                ui.label(RichText::new(&l.text).color(crate::theme::GREEN()));
+                                ui.label(RichText::new(text).color(crate::theme::GREEN()));
                             }
                             ChatLineKind::Them => {
-                                ui.label(RichText::new(&l.text).color(crate::theme::TEXT_STRONG()));
+                                ui.label(RichText::new(text).color(crate::theme::TEXT_STRONG()));
                             }
                             ChatLineKind::Note => {
-                                ui.label(RichText::new(&l.text).italics().weak());
+                                ui.label(RichText::new(text).italics().weak());
                             }
                         }
                     });
@@ -194,5 +195,105 @@ impl crate::app::SdroxideApp {
                 resp.request_focus();
             }
         });
+    }
+}
+
+/// A conversation line as shown: what was said, and what its tags or the link
+/// said, in the viewer's language.
+fn line_words(l: &ChatLine) -> String {
+    if l.said.is_empty() {
+        return l.text.clone();
+    }
+    // Link events are whole sentences; a station's tags read after its name.
+    let (events, tags): (Vec<&ChatSaid>, Vec<&ChatSaid>) =
+        l.said.iter().partition(|s| event(s).is_some());
+    let mut parts: Vec<String> = events.iter().filter_map(|s| event(s)).collect();
+    if !tags.is_empty() {
+        let what = tags.iter().map(|s| tag_words(s)).collect::<Vec<_>>().join("; ");
+        if l.text.trim().is_empty() {
+            parts.push(tr!("varachat-said-by", call = l.from.clone(), what = what));
+        } else {
+            parts.push(format!("{} ({what})", l.text.trim_end()));
+        }
+    } else if !l.text.trim().is_empty() {
+        parts.insert(0, l.text.clone());
+    }
+    parts.join(" ")
+}
+
+/// What happened on the link, as a sentence.
+fn event(s: &ChatSaid) -> Option<String> {
+    Some(match s {
+        ChatSaid::Calling(c) => tr!("varachat-ev-calling", call = c.clone()),
+        ChatSaid::CallStopped(c) => tr!("varachat-ev-call-stopped", call = c.clone()),
+        ChatSaid::ConnectedTo(c) => tr!("varachat-ev-connected", call = c.clone()),
+        ChatSaid::Called(c) => tr!("varachat-ev-called", call = c.clone()),
+        ChatSaid::LinkClosed(c) => tr!("varachat-ev-closed", call = c.clone()),
+        ChatSaid::NoAnswer(c) => tr!("varachat-ev-no-answer", call = c.clone()),
+        ChatSaid::PlainPeer(c) => tr!("varachat-ev-plain", call = c.clone()),
+        ChatSaid::CqSent => tr!("varachat-ev-cq-sent"),
+        _ => return None,
+    })
+}
+
+/// What one of a station's tags says about it, to follow its callsign.
+fn tag_words(s: &ChatSaid) -> String {
+    match s {
+        ChatSaid::Report(db) => tr!("varachat-tag-report", db = *db),
+        ChatSaid::Name(v) => tr!("varachat-tag-name", value = v.clone()),
+        ChatSaid::Qth(v) => tr!("varachat-tag-qth", value = v.clone()),
+        ChatSaid::Locator(v) => tr!("varachat-tag-locator", value = v.clone()),
+        ChatSaid::Email(v) => tr!("varachat-tag-email", value = v.clone()),
+        ChatSaid::Offers(letters) => {
+            let what = letters
+                .chars()
+                .map(|c| match c {
+                    'V' => "VMail".to_string(),
+                    'E' => tr!("varachat-svc-email"),
+                    'A' => "AI".to_string(),
+                    'B' => "BBS".to_string(),
+                    'N' => tr!("varachat-svc-nothing"),
+                    _ => "?".to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            tr!("varachat-tag-offers", what = what)
+        }
+        ChatSaid::QsyBy(hz) => tr!("varachat-tag-qsy-by", hz = format!("{hz:+}")),
+        ChatSaid::QsyTo(hz) => tr!("varachat-tag-qsy-to", hz = hz.clone()),
+        ChatSaid::IsOn(hz) => tr!("varachat-tag-is-on", hz = hz.clone()),
+        ChatSaid::Closing => tr!("varachat-tag-closing"),
+        ChatSaid::Away => tr!("varachat-tag-away"),
+        ChatSaid::AwayVmail => tr!("varachat-tag-away-vmail"),
+        ChatSaid::AtStation => tr!("varachat-tag-at-station"),
+        ChatSaid::Arrived => tr!("varachat-tag-arrived"),
+        ChatSaid::ReadyNew => tr!("varachat-tag-ready"),
+        ChatSaid::QsyUp => tr!("varachat-tag-qsy-up"),
+        ChatSaid::QsyDown => tr!("varachat-tag-qsy-down"),
+        // Events are worded by `event`.
+        other => event(other).unwrap_or_default(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn line(text: &str, said: Vec<ChatSaid>) -> ChatLine {
+        ChatLine { at: 0, kind: ChatLineKind::Note, text: text.into(), from: "EA5XYZ".into(), said }
+    }
+
+    #[test]
+    fn tags_and_events_are_put_into_words() {
+        assert_eq!(line_words(&line("hola", vec![])), "hola");
+        assert_eq!(
+            line_words(&line("", vec![ChatSaid::Report(-3), ChatSaid::Name("Ana".into())])),
+            "EA5XYZ hears you at -3 dB; name Ana"
+        );
+        assert_eq!(line_words(&line("73", vec![ChatSaid::Closing])), "73 (is closing the QSO)");
+        assert_eq!(
+            line_words(&line("", vec![ChatSaid::ConnectedTo("F6JON".into())])),
+            "Connected to F6JON."
+        );
     }
 }

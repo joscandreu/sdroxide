@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
 use crossbeam_channel::{Receiver, Sender};
-use sdroxide_types::{ChatCq, ChatFormat, ChatLine, ChatLineKind, ChatState};
+use sdroxide_types::{ChatCq, ChatFormat, ChatLine, ChatLineKind, ChatSaid, ChatState};
 
 use crate::vara::{TncEvent, VaraListen, VaraTransport};
 use crate::varachat::{self, Parser};
@@ -101,7 +101,22 @@ impl Station {
     }
 
     fn line(&self, kind: ChatLineKind, text: impl Into<String>) {
-        self.send(ChatEvent::Line(ChatLine { at: now_unix(), kind, text: text.into() }));
+        self.send(ChatEvent::Line(ChatLine {
+            at: now_unix(),
+            kind,
+            text: text.into(),
+            ..ChatLine::default()
+        }));
+    }
+
+    /// A note about the link, for the window to word.
+    fn note(&self, said: ChatSaid) {
+        self.send(ChatEvent::Line(ChatLine {
+            at: now_unix(),
+            kind: ChatLineKind::Note,
+            said: vec![said],
+            ..ChatLine::default()
+        }));
     }
 
     fn state(&self, state: ChatState) {
@@ -132,7 +147,7 @@ impl Station {
                 }
                 match t.command(&format!("CONNECT {} {call}", self.mycall)) {
                     Ok(()) => {
-                        self.line(ChatLineKind::Note, format!("Calling {call}…"));
+                        self.note(ChatSaid::Calling(call.clone()));
                         self.calling = Some((call, Instant::now()));
                         self.state(ChatState::Calling);
                     }
@@ -170,7 +185,7 @@ impl Station {
                 if let Some((call, _)) = self.calling.take() {
                     let _ = t.command("ABORT");
                     t.link_reset();
-                    self.line(ChatLineKind::Note, format!("Call to {call} stopped."));
+                    self.note(ChatSaid::CallStopped(call));
                     self.state(ChatState::Standby);
                     return;
                 }
@@ -197,7 +212,7 @@ impl Station {
                     None => format!("CQFRAME {}", self.mycall),
                 };
                 match t.command(&line) {
-                    Ok(()) => self.line(ChatLineKind::Note, "CQ sent."),
+                    Ok(()) => self.note(ChatSaid::CqSent),
                     Err(e) => self.send(ChatEvent::Problem(format!("CQ: {e}"))),
                 }
             }
@@ -249,9 +264,7 @@ impl Station {
                     since: Instant::now(),
                     held: Vec::new(),
                 });
-                let note =
-                    if ours { format!("Connected to {peer}.") } else { format!("{peer} called.") };
-                self.line(ChatLineKind::Note, note);
+                self.note(if ours { ChatSaid::ConnectedTo(peer) } else { ChatSaid::Called(peer) });
                 self.state(ChatState::Connected);
                 self.maybe_open(t, false);
             }
@@ -260,9 +273,9 @@ impl Station {
                     if !l.plain_buf.trim().is_empty() {
                         self.line(ChatLineKind::Them, l.plain_buf.trim_end());
                     }
-                    self.line(ChatLineKind::Note, format!("Link with {} closed.", l.peer));
+                    self.note(ChatSaid::LinkClosed(l.peer));
                 } else if let Some((call, _)) = self.calling.take() {
-                    self.line(ChatLineKind::Note, format!("{call} did not answer."));
+                    self.note(ChatSaid::NoAnswer(call));
                 }
                 t.link_reset();
                 self.state(ChatState::Standby);
@@ -302,11 +315,14 @@ impl Station {
             l.parser.feed(bytes)
         };
         let peer = l.peer.clone();
-        let mut out: Vec<(ChatLineKind, String)> = Vec::new();
+        let mut out: Vec<ChatLine> = Vec::new();
+        let said =
+            |kind, text, said| ChatLine { at: now_unix(), kind, text, from: peer.clone(), said };
         for m in fed.messages {
-            let r = varachat::render(&m, &peer);
-            if !r.text.is_empty() {
-                out.push((if r.note { ChatLineKind::Note } else { ChatLineKind::Them }, r.text));
+            let r = varachat::render(&m);
+            if !r.text.is_empty() || !r.said.is_empty() {
+                let kind = if r.note { ChatLineKind::Note } else { ChatLineKind::Them };
+                out.push(said(kind, r.text, r.said));
             }
         }
         if !fed.plain.is_empty() {
@@ -315,7 +331,7 @@ impl Station {
                 let line: String = l.plain_buf.drain(..=i).collect();
                 let line = line.trim_end().to_string();
                 if !line.is_empty() {
-                    out.push((ChatLineKind::Them, line));
+                    out.push(said(ChatLineKind::Them, line, Vec::new()));
                 }
             }
         }
@@ -325,13 +341,10 @@ impl Station {
             // The state first, so the window knows how it is talking before
             // it shows what was said.
             self.state(ChatState::Connected);
-            self.line(
-                ChatLineKind::Note,
-                format!("{peer} sends plain text; answering in plain text."),
-            );
+            self.note(ChatSaid::PlainPeer(peer.clone()));
         }
-        for (k, t) in out {
-            self.line(k, t);
+        for l in out {
+            self.send(ChatEvent::Line(l));
         }
     }
 
@@ -368,7 +381,7 @@ impl Station {
             self.calling = None;
             let _ = t.command("ABORT");
             t.link_reset();
-            self.line(ChatLineKind::Note, format!("{call} did not answer."));
+            self.note(ChatSaid::NoAnswer(call));
             self.state(ChatState::Standby);
         }
     }
@@ -542,7 +555,7 @@ mod tests {
         );
         assert!(
             seen.iter().any(
-                |e| matches!(e, ChatEvent::Line(l) if l.text == "EA5XYZ-10 hears you at -3 dB")
+                |e| matches!(e, ChatEvent::Line(l) if l.said == [ChatSaid::Report(-3)] && l.from == "EA5XYZ-10")
             ),
             "{seen:?}"
         );
@@ -642,7 +655,11 @@ mod tests {
             other => panic!("{other:?}"),
         }
         r.cmds.send(ChatCmd::Cq).unwrap();
-        wait_for(&r, "CQ sent", |e| matches!(e, ChatEvent::Line(l) if l.text == "CQ sent."));
+        wait_for(
+            &r,
+            "CQ sent",
+            |e| matches!(e, ChatEvent::Line(l) if l.said == [ChatSaid::CqSent]),
+        );
         assert!(tnc.got.try_iter().any(|l| l == "CQFRAME EA5ABC 2300"));
         r.stop.store(true, Ordering::SeqCst);
         r.handle.join().unwrap();

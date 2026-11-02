@@ -1647,7 +1647,9 @@ use sdroxide_types::{
 /// v194: keyboard chat over VARA. `VaraTncConfig` gains `chat`
 /// (`VaraChatConfig`) and `WinlinkStatus` gains `chat` (`VaraChatStatus`), on
 /// their tails; `Command` gains `VaraChatCall`, `VaraChatSend`,
-/// `VaraChatHangUp`, `VaraChatCq` and `VaraChatClear`, appended.
+/// `VaraChatHangUp`, `VaraChatCq` and `VaraChatClear`, appended. A chat line
+/// carries `ChatSaid` events rather than English sentences, so each client
+/// words them in its own language.
 pub const PROTO_VERSION: u16 = 194;
 const VERSION_BYTE: u8 = 0x12;
 
@@ -2566,6 +2568,11 @@ mod tests {
                         at: 1_793_000_000,
                         kind: sdroxide_types::ChatLineKind::Them,
                         text: "Hola, 73".into(),
+                        from: "EA5XYZ".into(),
+                        said: vec![
+                            sdroxide_types::ChatSaid::Report(-5),
+                            sdroxide_types::ChatSaid::QsyTo("014105750".into()),
+                        ],
                     }],
                     heard: vec![sdroxide_types::ChatCq {
                         raw: "F6JON-2".into(),

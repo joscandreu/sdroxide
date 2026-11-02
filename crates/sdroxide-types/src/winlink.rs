@@ -294,11 +294,66 @@ pub enum ChatLineKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ChatLine {
     /// Unix seconds.
     pub at: i64,
     pub kind: ChatLineKind,
+    /// What was typed or received, as it was: VarAC's tags taken out into
+    /// [`said`](Self::said). Empty on a note that is only `said`.
     pub text: String,
+    /// The station that said it, where `said` needs a name to put first.
+    pub from: String,
+    /// What the window puts into words, in the viewer's language.
+    pub said: Vec<ChatSaid>,
+}
+
+/// Something a chat line says that the window words in the viewer's own
+/// language: a VarAC tag the other station sent, or what happened on the
+/// link. The station writes these instead of English sentences so that a
+/// client in Spanish shows Spanish.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChatSaid {
+    // What the other station's tags say about it.
+    /// It hears us at this many dB.
+    Report(i32),
+    Name(String),
+    Qth(String),
+    Locator(String),
+    Email(String),
+    /// The services it offers, as VarAC's letters (V, E, A, B, N).
+    Offers(String),
+    /// It asks to move this many Hz.
+    QsyBy(i64),
+    /// It asks to move to this frequency, in Hz as sent.
+    QsyTo(String),
+    /// It is on this frequency, in Hz as sent.
+    IsOn(String),
+    /// It is closing the QSO.
+    Closing,
+    Away,
+    /// Away, and asks for a VMail.
+    AwayVmail,
+    /// Back at the station.
+    AtStation,
+    /// It has arrived on the new frequency.
+    Arrived,
+    /// It is ready on the new frequency.
+    ReadyNew,
+    QsyUp,
+    QsyDown,
+    // What happened on the link, each with the station it concerns.
+    Calling(String),
+    CallStopped(String),
+    ConnectedTo(String),
+    /// This station called us.
+    Called(String),
+    LinkClosed(String),
+    NoAnswer(String),
+    /// It sends plain text, and we answer in plain text.
+    PlainPeer(String),
+    /// Our CQ frame went out.
+    CqSent,
 }
 
 /// A CQ frame heard while standing by.
@@ -393,6 +448,17 @@ impl TncMode {
 
     pub fn is_fm(self) -> bool {
         matches!(self, TncMode::FmNarrow | TncMode::FmWide)
+    }
+
+    /// The bandwidth a Winlink call through this modem asks for: its own on
+    /// HF, and none on FM, which has no bandwidth command.
+    pub fn bandwidth(self) -> Option<crate::VaraBandwidth> {
+        match self {
+            TncMode::Hf500 => Some(crate::VaraBandwidth::Hz500),
+            TncMode::Hf2300 => Some(crate::VaraBandwidth::Hz2300),
+            TncMode::Hf2750 => Some(crate::VaraBandwidth::Hz2750),
+            TncMode::FmNarrow | TncMode::FmWide => None,
+        }
     }
 
     pub fn label(self) -> &'static str {

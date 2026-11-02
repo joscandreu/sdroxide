@@ -27,6 +27,7 @@ pub(in crate::app) mod remote;
 pub(in crate::app) mod servers;
 pub(in crate::app) mod tle;
 pub(in crate::app) mod ui_tab;
+pub(in crate::app) mod vara;
 pub(in crate::app) mod wavelog;
 
 pub(in crate::app) mod alerts;
@@ -179,7 +180,7 @@ pub(in crate::app) struct SettingsIo<'a> {
     /// Where the antenna is, buffered until Apply — see
     /// `SdroxideApp::rx_site_edit`.
     rx_site: &'a mut Option<sdroxide_types::RxSite>,
-    audio_pick: &'a mut Option<(bool, Option<String>)>,
+    audio_pick: &'a mut Vec<(bool, Option<String>)>,
     /// Which speaker channel(s) the received audio reaches, applied after the
     /// window closure (#654).
     routing_pick: &'a mut Option<sdroxide_types::AudioRouting>,
@@ -975,7 +976,7 @@ impl SdroxideApp {
         }
         // Edits collected here and applied after the window closure, which
         // borrows `&self` and so can't touch `&mut self.ctrl`.
-        let mut audio_pick: Option<(bool, Option<String>)> = None;
+        let mut audio_pick: Vec<(bool, Option<String>)> = Vec::new();
         let mut routing_pick: Option<sdroxide_types::AudioRouting> = None;
         let mut profile_name = std::mem::take(&mut self.profile_name_edit);
         let mut digi_reseed = false;
@@ -1369,7 +1370,7 @@ impl SdroxideApp {
         if bc_reload {
             self.reload_broadcast_stations();
         }
-        if let Some((output, name)) = audio_pick {
+        for (output, name) in audio_pick {
             self.ctrl.set_audio_device(output, name);
             self.audio_devices_queried = false;
         }
@@ -2749,7 +2750,29 @@ impl SdroxideApp {
                 });
 
                 if wl.lane == sdroxide_types::WinlinkLane::Vara {
-                    winlink_vara_settings(ui, &mut wl.vara, io.tnc_status);
+                    let env = vara::VaraEnv {
+                        callsign: &wl.callsign,
+                        local: !self.ctrl.engine_is_remote(),
+                        mode: self.state.rx[0].mode,
+                        audio: self.audio_devices.as_ref(),
+                        rigctld_on: io.rigctld_edit.enabled,
+                    };
+                    let callsign = env.callsign.to_string();
+                    let env = vara::VaraEnv { callsign: &callsign, ..env };
+                    let fixes = vara::winlink_vara_settings(ui, &mut wl.vara, io.tnc_status, &env);
+                    if fixes.output.is_some() {
+                        io.audio_pick.push((true, fixes.output));
+                    }
+                    if fixes.input.is_some() {
+                        io.audio_pick.push((false, fixes.input));
+                    }
+                    if fixes.rigctld_on {
+                        io.rigctld_edit.enabled = true;
+                        *io.rigctld_apply = true;
+                    }
+                    if let Some(mode) = fixes.mode {
+                        cmds.push(Command::SetMode { rx: sdroxide_types::RxId::Main, mode });
+                    }
                 }
 
                 if wl.lane == sdroxide_types::WinlinkLane::Packet {
@@ -4048,281 +4071,4 @@ mod tests {
         assert!(iface_opts(true).contains(&sdroxide_types::Backend::Soapy));
         assert!(!iface_opts(false).contains(&sdroxide_types::Backend::Soapy));
     }
-}
-
-/// The Winlink VARA lane: the external TNC, the gateway, and how the
-/// transmitter is keyed.
-fn winlink_vara_settings(
-    ui: &mut egui::Ui,
-    v: &mut sdroxide_types::VaraTncConfig,
-    tnc: &sdroxide_types::ManagedTncStatus,
-) {
-    ui.add_space(4.0);
-    ui.label(RichText::new(tr!("settings-winlink-vara-intro")).weak());
-    net_row(ui, &tr!("settings-winlink-vara-tnc"), &mut v.address, 160.0);
-    ui.label(RichText::new(tr!("settings-winlink-vara-tnc-hint")).weak());
-    // Upper-cased where it is used, as the packet lane's is.
-    net_row(ui, &tr!("settings-gateway"), &mut v.gateway, 140.0);
-    ui.horizontal(|ui| {
-        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-winlink-vara-bandwidth")));
-        for bw in sdroxide_types::VaraBandwidth::ALL {
-            ui.selectable_value(&mut v.bandwidth, Some(bw), format!("{} Hz", bw.hz()));
-        }
-        ui.selectable_value(&mut v.bandwidth, None, tr!("settings-winlink-vara-tnc-setting"))
-            .on_hover_text(tr!("settings-winlink-vara-tnc-setting-hover"));
-    });
-    let mut mhz = v.freq_hz / 1e6;
-    ui.horizontal(|ui| {
-        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-frequency")));
-        if ui
-            .add(
-                egui::DragValue::new(&mut mhz)
-                    .speed(0.001)
-                    .range(0.0..=1300.0)
-                    .max_decimals(4)
-                    .suffix(" MHz"),
-            )
-            .changed()
-        {
-            v.freq_hz = mhz * 1e6;
-        }
-        if v.freq_hz > 0.0 && ui.button(tr!("settings-clear")).clicked() {
-            v.freq_hz = 0.0;
-        }
-    });
-    ui.label(RichText::new(tr!("settings-winlink-vara-dial-hint")).weak());
-    crate::chrome::checkbox(ui, &mut v.p2p, tr!("settings-winlink-vara-p2p"))
-        .on_hover_text(tr!("settings-winlink-vara-p2p-hover"));
-    crate::chrome::checkbox(ui, &mut v.key_ptt, tr!("settings-winlink-vara-key-ptt"))
-        .on_hover_text(tr!("settings-winlink-vara-key-ptt-hover"));
-    ui.horizontal(|ui| {
-        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-winlink-vara-busy")));
-        ui.add(egui::DragValue::new(&mut v.busy_wait_s).range(0..=600).suffix(" s"))
-            .on_hover_text(tr!("settings-winlink-vara-busy-hover"));
-    });
-    if crate::chrome::checkbox(ui, &mut v.listen, tr!("settings-winlink-vara-listen"))
-        .on_hover_text(tr!("settings-winlink-vara-listen-hover"))
-        .changed()
-        && v.listen
-    {
-        v.chat.enabled = false;
-    }
-
-    ui.add_space(6.0);
-    net_heading(ui, &tr!("settings-winlink-vara-my-stations"));
-    let mut remove = None;
-    let mut pick = None;
-    for (i, g) in v.gateways.iter().enumerate() {
-        ui.horizontal(|ui| {
-            if ui
-                .button(tr!("settings-use-2"))
-                .on_hover_text(tr!("settings-call-one-next-connect"))
-                .clicked()
-            {
-                pick = Some(i);
-            }
-            let freq = if g.freq_hz > 0.0 {
-                format!("{:.4} MHz", g.freq_hz / 1e6)
-            } else {
-                tr!("settings-current-dial")
-            };
-            let bw = match g.bandwidth {
-                Some(b) => format!("{} Hz", b.hz()),
-                None => tr!("settings-winlink-vara-tnc-setting"),
-            };
-            let kind = if g.p2p { tr!("settings-winlink-vara-peer") } else { String::new() };
-            ui.label(format!(
-                "{}{kind} — {freq}, {bw}{}{}",
-                g.callsign,
-                if g.label.is_empty() { "" } else { " — " },
-                g.label,
-            ));
-            if ui
-                .button(tr!("settings-forget"))
-                .on_hover_text(tr!("settings-forget-gateway"))
-                .clicked()
-            {
-                remove = Some(i);
-            }
-        });
-    }
-    if let Some(i) = pick {
-        v.select_gateway(i);
-    }
-    if let Some(i) = remove {
-        v.gateways.remove(i);
-    }
-    ui.add_space(4.0);
-    if ui
-        .button(tr!("settings-add-gateway"))
-        .on_hover_text(tr!("settings-save-gateway-above-list"))
-        .clicked()
-        && !v.gateway.trim().is_empty()
-    {
-        let entry = v.current_entry();
-        // Saving the same callsign again updates it rather than listing it twice.
-        match v.gateways.iter_mut().find(|g| g.callsign == entry.callsign) {
-            Some(g) => {
-                let label = std::mem::take(&mut g.label);
-                *g = sdroxide_types::VaraGateway { label, ..entry };
-            }
-            None => v.gateways.push(entry),
-        }
-    }
-
-    ui.add_space(6.0);
-    vara_chat_settings(ui, v);
-    ui.add_space(6.0);
-    managed_tnc_settings(ui, &mut v.managed, tnc);
-}
-
-/// Keyboard chat through the VARA TNC.
-fn vara_chat_settings(ui: &mut egui::Ui, v: &mut sdroxide_types::VaraTncConfig) {
-    use sdroxide_types::ChatFormat;
-    net_heading(ui, &tr!("settings-varachat-heading"));
-    let was = v.chat.enabled;
-    crate::chrome::checkbox(ui, &mut v.chat.enabled, tr!("settings-varachat-enabled"))
-        .on_hover_text(tr!("settings-varachat-enabled-hover"));
-    // One program on the TNC at a time: standing by for chat and answering
-    // Winlink peer-to-peer calls both want it, so turning one on turns the
-    // other off.
-    if v.chat.enabled && !was {
-        v.listen = false;
-    }
-    if v.listen && v.chat.enabled {
-        v.chat.enabled = false;
-    }
-    if !v.chat.enabled {
-        return;
-    }
-    ui.horizontal(|ui| {
-        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-varachat-format")));
-        ui.selectable_value(&mut v.chat.format, ChatFormat::Auto, tr!("settings-varachat-auto"))
-            .on_hover_text(tr!("settings-varachat-auto-hover"));
-        ui.selectable_value(&mut v.chat.format, ChatFormat::VarAc, "VarAC")
-            .on_hover_text(tr!("settings-varachat-varac-hover"));
-        ui.selectable_value(&mut v.chat.format, ChatFormat::Plain, tr!("settings-varachat-plain"))
-            .on_hover_text(tr!("settings-varachat-plain-hover"));
-    });
-    crate::chrome::checkbox(ui, &mut v.chat.send_profile, tr!("settings-varachat-profile"))
-        .on_hover_text(tr!("settings-varachat-profile-hover"));
-    if v.chat.send_profile {
-        net_row(ui, &tr!("settings-varachat-name"), &mut v.chat.name, 160.0);
-        net_row(ui, &tr!("settings-varachat-qth"), &mut v.chat.qth, 160.0);
-    }
-}
-
-/// sdroxide running xara itself: where it is, its audio, how it keys.
-fn managed_tnc_settings(
-    ui: &mut egui::Ui,
-    m: &mut sdroxide_types::ManagedTncConfig,
-    tnc: &sdroxide_types::ManagedTncStatus,
-) {
-    use sdroxide_types::{TncAudio, TncMode, TncPtt, TncState};
-    net_heading(ui, &tr!("settings-tnc-heading"));
-    crate::chrome::checkbox(ui, &mut m.enabled, tr!("settings-tnc-enabled"))
-        .on_hover_text(tr!("settings-tnc-enabled-hover"));
-    if !m.enabled {
-        return;
-    }
-    // Where it stands, first: a TNC that will not start is the thing to fix.
-    let (text, color) = match tnc.state {
-        TncState::Off => (tr!("settings-tnc-off"), crate::theme::CYAN_DIM()),
-        TncState::Starting => (tr!("winlink-tnc-starting"), crate::theme::YELLOW()),
-        TncState::Running => {
-            (tr!("settings-tnc-running", version = tnc.version.clone()), crate::theme::GREEN())
-        }
-        TncState::Failed => {
-            (tr!("winlink-tnc-failed", why = tnc.message.clone()), crate::theme::ALERT())
-        }
-    };
-    ui.colored_label(color, text);
-
-    net_row(ui, &tr!("settings-tnc-program"), &mut m.exe, 260.0);
-    ui.horizontal(|ui| {
-        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-tnc-audio")));
-        for a in TncAudio::ALL {
-            let label = match a.arg() {
-                Some(name) => name.to_string(),
-                None => tr!("settings-tnc-audio-default"),
-            };
-            ui.selectable_value(&mut m.audio, a, label);
-        }
-    });
-    device_picker(
-        ui,
-        "tnc-capture",
-        &tr!("settings-tnc-capture"),
-        &mut m.capture,
-        &tnc.capture_devices,
-    );
-    ui.label(RichText::new(tr!("settings-tnc-capture-hint")).weak());
-    device_picker(
-        ui,
-        "tnc-playback",
-        &tr!("settings-tnc-playback"),
-        &mut m.playback,
-        &tnc.playback_devices,
-    );
-    ui.label(RichText::new(tr!("settings-tnc-playback-hint")).weak());
-
-    ui.horizontal(|ui| {
-        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-tnc-mode")));
-        for mode in TncMode::ALL {
-            ui.selectable_value(&mut m.mode, mode, mode.label());
-        }
-    });
-    ui.horizontal(|ui| {
-        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-tnc-ptt")));
-        ui.selectable_value(&mut m.ptt, TncPtt::Notices, tr!("settings-tnc-ptt-notices"))
-            .on_hover_text(tr!("settings-tnc-ptt-notices-hover"));
-        ui.selectable_value(&mut m.ptt, TncPtt::Rigctld, tr!("settings-tnc-ptt-rigctld"))
-            .on_hover_text(tr!("settings-tnc-ptt-rigctld-hover"));
-    });
-    ui.horizontal(|ui| {
-        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-tnc-lead")));
-        ui.add(egui::DragValue::new(&mut m.ptt_lead_ms).range(0..=1000).suffix(" ms"))
-            .on_hover_text(tr!("settings-tnc-lead-hover"));
-        ui.add_sized([60.0, 22.0], egui::Label::new(tr!("settings-tnc-drive")));
-        ui.add(egui::DragValue::new(&mut m.drive_db).range(-30.0..=0.0).speed(0.5).suffix(" dB"));
-    });
-    ui.horizontal(|ui| {
-        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-tnc-kiss")));
-        ui.add(egui::DragValue::new(&mut m.kiss_port).range(0..=65535))
-            .on_hover_text(tr!("settings-tnc-kiss-hover"));
-    });
-    net_row(ui, &tr!("settings-tnc-extra"), &mut m.extra_args, 260.0);
-    ui.label(RichText::new(tr!("settings-tnc-audio-routing")).weak());
-}
-
-/// A device field: a picker from the TNC's own list when it gave one, and the
-/// text field always, for a device it did not list.
-fn device_picker(
-    ui: &mut egui::Ui,
-    salt: &str,
-    label: &str,
-    value: &mut String,
-    devices: &[sdroxide_types::TncDevice],
-) {
-    ui.horizontal(|ui| {
-        ui.add_sized([96.0, 22.0], egui::Label::new(label));
-        crate::chrome::field(ui, egui::TextEdit::singleline(value).desired_width(200.0));
-        if !devices.is_empty() {
-            let shown = devices
-                .iter()
-                .find(|d| d.id == *value)
-                .map(|d| if d.desc.is_empty() { d.id.clone() } else { d.desc.clone() })
-                .unwrap_or_else(|| tr!("settings-tnc-pick"));
-            egui::ComboBox::from_id_salt(salt).selected_text(shown).show_ui(ui, |ui| {
-                for d in devices {
-                    let name = if d.desc.is_empty() {
-                        d.id.clone()
-                    } else {
-                        format!("{} — {}", d.desc, d.id)
-                    };
-                    ui.selectable_value(value, d.id.clone(), name);
-                }
-            });
-        }
-    });
 }

@@ -326,7 +326,7 @@ pub use wefax::{
     WEFAX_STATIONS, WefaxChartMeta, WefaxIoc, WefaxLpm, WefaxStation, WefaxStatus, shift_fax_rows,
 };
 pub use winlink::{
-    CHAT_CQ_MAX, CHAT_LINES_MAX, ChatCq, ChatFormat, ChatLine, ChatLineKind, ChatState,
+    CHAT_CQ_MAX, CHAT_LINES_MAX, ChatCq, ChatFormat, ChatLine, ChatLineKind, ChatSaid, ChatState,
     DEFAULT_CMS_ADDRESS, DEFAULT_VARA_TNC, MAIL_PAGE_MAX, MailAttachment, MailDraft, MailEntry,
     MailFolder, MailListing, MailMessage, ManagedTncConfig, ManagedTncStatus, TncAudio, TncDevice,
     TncMode, TncPtt, TncState, VaraChatConfig, VaraChatStatus, VaraGateway, VaraTncConfig,

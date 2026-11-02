@@ -461,7 +461,7 @@ impl SdroxideApp {
     pub(in crate::app) fn settings_user_audio(
         &self,
         ui: &mut egui::Ui,
-        audio_pick: &mut Option<(bool, Option<String>)>,
+        audio_pick: &mut Vec<(bool, Option<String>)>,
         routing_pick: &mut Option<sdroxide_types::AudioRouting>,
     ) {
         let Some(devs) = &self.audio_devices else {
@@ -471,7 +471,7 @@ impl SdroxideApp {
         egui::Grid::new("user-audio").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
             ui.label(tr!("settings-general-output"));
             device_combo(ui, "u-out", &devs.outputs, &devs.selected_output, |n| {
-                *audio_pick = Some((true, n))
+                audio_pick.push((true, n))
             });
             ui.end_row();
             // Which channel(s) the received audio reaches (#654). Applied live,
@@ -494,7 +494,7 @@ impl SdroxideApp {
             ui.end_row();
             ui.label(tr!("settings-general-input"));
             device_combo(ui, "u-in", &devs.inputs, &devs.selected_input, |n| {
-                *audio_pick = Some((false, n))
+                audio_pick.push((false, n))
             });
             ui.end_row();
         });

@@ -15248,13 +15248,43 @@ that starts clipped is one the gateway may not decode. Try 50 ms and raise it if
 the first connect attempts go unanswered.
 
 **In sdroxide**, under **Settings → Winlink**, set the route to **Radio (VARA
-TNC)** and fill in:
+TNC)**. The settings are in the order you meet them: **1 · The TNC**, **2 ·
+Calling a gateway**, **3 · Being called**, and a closed **Advanced** section
+whose defaults suit most stations.
+
+**Setup check.** At the top, sdroxide lists what is still missing for VARA to
+work. It looks beyond this tab: the Winlink callsign, whether xara is found and
+running, sdroxide's own audio devices against xara's cables, the rigctld server,
+the bandwidth against xara's modem, and the radio's mode. A ⚠ line must be put
+right; a • line is worth knowing. Where sdroxide can fix something itself, the
+line has a button:
+
+- **USE IT** — sdroxide found a copy of xara in the usual places (`PATH`,
+  `~/.cargo/bin`, a `xara/target/release` folder in your home directory).
+- **SET SDROXIDE'S AUDIO** — points sdroxide's output at xara's capture cable and
+  its microphone input at xara's playback cable, matching them by name.
+- **TURN RIGCTLD ON**, **KEY ON THE TNC'S PTT** — whichever keying you chose
+  needs.
+- **MATCH THE MODEM** — makes the call ask for the bandwidth xara runs.
+- **SWITCH TO DIGU** (or NFM for VARA FM) — puts the radio in a mode VARA can
+  go out in.
+
+When nothing is missing it says so. Press **APPLY** to save.
+
+The fields under **1 · The TNC** depend on who starts it: **sdroxide starts
+xara** (see *Letting sdroxide run xara* below), or **I start the TNC myself**,
+which asks for:
 
 - **TNC** — the command port as `host:port` (`127.0.0.1:8300` for a TNC on this
   machine).
-- **Gateway** — the RMS gateway's callsign, e.g. `EA5XYZ-10`.
-- **Bandwidth** — 500, 2300 or 2750 Hz, as the gateway lists. **TNC's setting**
-  sends no bandwidth command, which is what VARA FM needs.
+
+Under **2 · Calling a gateway**:
+
+- **Gateway** — the RMS gateway's callsign, e.g. `EA5XYZ-10`. The gateway map on
+  winlink.org, or `pat rmslist`, shows which gateways run VARA and where.
+- **Bandwidth** — 500, 2300 or 2750 Hz, as the gateway lists; 2300 Hz when in
+  doubt. **TNC's setting** sends no bandwidth command, which is what VARA FM
+  needs. With sdroxide running xara, changing xara's modem sets this to match.
 - **Frequency** — the gateway's dial. Zero leaves the radio where it is.
 
 Press **APPLY**, then **CONNECT** in the MAIL window. The session transcript
@@ -15264,25 +15294,27 @@ and hangs up a link gracefully. VARA sends what it still holds before it
 disconnects.
 
 **Letting sdroxide run xara.** Rather than start xara in a terminal and keep it
-running, tick **sdroxide starts and watches the xara TNC** under the VARA route.
-sdroxide then starts your copy of xara with the settings in that section, on
-the **TNC** address above (it has to be this machine, `127.0.0.1:8300`), with the
-Winlink callsign. It restarts xara when you change a setting and press
-**APPLY**, and stops it when you untick the box or quit. If xara stops on its
+running, choose **sdroxide starts xara** under **1 · The TNC**. sdroxide then
+starts your copy of xara with the settings in that section, with the Winlink
+callsign, on ports 8300 and 8301 of this machine (**Advanced** changes them). It
+restarts xara when you change a setting and press **APPLY**, and stops it when
+you choose **I start the TNC myself** or quit. If xara stops on its
 own, sdroxide shows its last words and tries again after 5 seconds, then 10,
 20, up to a minute between tries. CONNECT and the peer-to-peer listener wait
 until xara reports that its ports are open.
 
 - **Program** — the full path to `xara` (from `cargo install`, usually
   `~/.cargo/bin/xara`).
-- **Audio system** — xara's default (CoreAudio on macOS, PulseAudio on Linux and
-  FreeBSD), or PulseAudio, ALSA or CoreAudio by name.
 - **Capture** and **Playback** — once the program is set, sdroxide asks xara which
-  devices it can open, and offers them in the pickers. The text field takes any
+  devices it can open, and offers them in the pickers, virtual cables first. The
+  **Audio system** under **Advanced** is xara's default (CoreAudio on macOS,
+  PulseAudio on Linux and FreeBSD) unless you name one. The text field takes any
   name it did not list. Capture is the cable sdroxide's audio output plays into;
   playback is the cable sdroxide's microphone input listens to. They must be two
   different cables, or xara hears itself.
-- **Modem** — HF 500, 2300 or 2750 Hz, or FM narrow or wide.
+- **Modem** — HF 500, 2300 or 2750 Hz, or FM narrow or wide. HF 2300 is what
+  most HF gateways and VarAC stations use; FM is for VHF/UHF gateways, with the
+  radio in NFM.
 - **Keying** — *Through sdroxide's Winlink* runs xara with `--ptt vox`, and
   sdroxide keys on xara's `PTT ON`/`PTT OFF` while its own Winlink session or
   listener is connected. This is the simplest choice, but nothing else can
@@ -15291,8 +15323,9 @@ until xara reports that its ports are open.
   rigctld server (turn that on in **Settings**). Pat, LinBPQ or VarAC connected
   to xara's ports then transmit too. Those overs, in DIGU, skip the TX Audio
   chain as the Winlink ones do.
-- **PTT lead**, **Drive**, **KISS port** (0 leaves it off) and **Extra
-  arguments** are passed to xara as given. sdroxide never adds `--registered`.
+- Under **Advanced**: **Audio system**, **PTT lead**, **Drive**, **KISS port**
+  (0 leaves it off) and **Extra arguments**, passed to xara as given. sdroxide
+  never adds `--registered`.
 
 The audio cables are yours to create. sdroxide does not change your system's
 audio setup.
@@ -15317,7 +15350,8 @@ audio setup.
 The MAIL window says when xara is starting or has stopped, and why.
 
 **A busy channel.** VARA's busy detector says when it hears another signal in
-the passband. Before calling, sdroxide waits up to **Busy wait** seconds (30 by
+the passband. Before calling, sdroxide waits up to **Busy wait** seconds (under
+**Advanced**; 30 by
 default) for the channel to clear. If it does not clear, sdroxide gives up with
 "the channel stayed busy" rather than transmitting over someone else's link. The
 wait shows in the transcript. Set it to zero to call straight away.
@@ -15363,9 +15397,9 @@ MAIL window.
 
 **Setting up.** Under **Settings → Winlink**, with the route set to **Radio
 (VARA TNC)** and the TNC configured as above (or run by sdroxide), tick **Stand
-by for chat** and press **APPLY**. sdroxide then keeps the TNC in chat mode
-(`CHAT ON`), listening. That takes the TNC instead of **Answer peer-to-peer
-calls**, so ticking one unticks the other. A Winlink CONNECT still works while
+by for chat** under **3 · Being called** and press **APPLY**. sdroxide then
+keeps the TNC in chat mode (`CHAT ON`), listening. That takes the TNC instead
+of **Answer peer-to-peer calls**, so ticking one unticks the other. A Winlink CONNECT still works while
 standing by: the chat steps aside and comes back afterwards. CONNECT is refused
 during a chat QSO.
 
