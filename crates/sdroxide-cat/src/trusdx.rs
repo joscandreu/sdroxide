@@ -205,6 +205,7 @@ fn mode_digit(m: Mode) -> char {
         | Mode::PacketHf
         | Mode::AtChat
         | Mode::Jtty
+        | Mode::VaraMon
         | Mode::Rade => '2',
     }
 }

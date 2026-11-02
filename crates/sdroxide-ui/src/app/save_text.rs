@@ -13,7 +13,7 @@
 
 use sdroxide_types::{
     AcarsStatus, DigiStatus, HfdlDecode, JttyStatus, NavtexStatus, Pi4Spot, SkimmerSpot,
-    Vdl2Message, WsprSpot,
+    VaraMonStatus, Vdl2Message, WsprSpot,
 };
 
 /// A UTC timestamp as a log line wants it.
@@ -51,6 +51,7 @@ pub fn digi_has_log(status: &DigiStatus) -> bool {
         || status.acars.as_ref().is_some_and(|a| !a.messages.is_empty())
         || status.navtex.as_ref().is_some_and(|n| !n.messages.is_empty())
         || status.jtty.as_ref().is_some_and(|j| !j.messages.is_empty())
+        || status.vara_mon.as_ref().is_some_and(|v| !v.lines.is_empty())
         || !status.fsq_messages.is_empty()
         || status.packet.as_ref().is_some_and(|p| !p.heard.is_empty())
         || status.js8.as_ref().is_some_and(|j| !j.messages.is_empty())
@@ -101,6 +102,11 @@ pub fn digi_log(status: &DigiStatus) -> Option<(String, String)> {
         && !j.messages.is_empty()
     {
         return Some((format!("sdroxide-{}-log.txt", slug(status)), jtty_text(j)));
+    }
+    if let Some(v) = &status.vara_mon
+        && !v.lines.is_empty()
+    {
+        return Some((format!("sdroxide-{}-log.txt", slug(status)), vara_mon_text(v)));
     }
     if let Some(p) = &status.packet
         && !p.heard.is_empty()
@@ -205,6 +211,22 @@ fn jtty_text(j: &JttyStatus) -> String {
             if m.complete { "yes" } else { "no" },
             tsv(&m.text)
         ));
+    }
+    out
+}
+
+/// The VARA monitor's traffic log, one line per record. A payload the operator
+/// chose to show follows its line, indented.
+fn vara_mon_text(v: &VaraMonStatus) -> String {
+    let mut out = String::from("utc\tsnr_db\trecord\n");
+    for l in &v.lines {
+        let snr = l.snr_db.map(|s| format!("{s:+.1}")).unwrap_or_default();
+        out.push_str(&format!("{}\t{snr}\t{}\n", stamp(l.at), tsv(l.text.trim())));
+        if let Some(p) = &l.payload {
+            for line in p.lines() {
+                out.push_str(&format!("\t\t    {}\n", tsv(line)));
+            }
+        }
     }
     out
 }

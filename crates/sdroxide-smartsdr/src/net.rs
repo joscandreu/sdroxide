@@ -1794,7 +1794,9 @@ fn mode_to_flex(m: Mode) -> &'static str {
         | Mode::Hell
         | Mode::PacketHf
         | Mode::AtChat
-        | Mode::Rade => "DIGU",
+        | Mode::Rade
+        // A data monitor: the Flex's data mode is what routes its audio out.
+        | Mode::VaraMon => "DIGU",
         Mode::Usb | Mode::Sstv | Mode::Wefax | Mode::Navtex | Mode::RfPaint | Mode::Spec | Mode::Hfdl
         | Mode::Jtty => "USB",
     }

@@ -76,6 +76,10 @@ pub fn make_modulator(mode: Mode, rate: f64, passband: (f32, f32)) -> Option<Box
         Mode::Isb => None,
         // ACARS is receive only — an airline service, not an amateur one.
         Mode::Acars => None,
+        // VARA-MON is a monitor of other stations' links: it has no
+        // transmitter. Without a modulator, a manual PTT is refused rather than
+        // keying a carrier under its label.
+        Mode::VaraMon => None,
         // VHF SSTV modulates the carrier through the voice FM path — see the
         // demodulator, which is its other half: the picture goes into an FM
         // transmitter exactly as speech would.

@@ -1622,7 +1622,13 @@ use sdroxide_types::{
 ///
 /// v189: [`sdroxide_types::Command`] gains `ClearMemories`, appended; a v188
 /// peer has no variant to decode it into.
-pub const PROTO_VERSION: u16 = 189;
+///
+/// v190: VARA-MON, the external VARA-compatible HF monitor. `Mode::VaraMon` is
+/// appended to that enum, `DigiStatus` gains `vara_mon`
+/// (`Option<VaraMonStatus>`) on its tail, `StationConfig` gains `vara_mon`
+/// (`VaraMonConfig`) on its tail and `Command` gains `SetVaraMonConfig` — all
+/// appended, so a v189 peer reads them out of step.
+pub const PROTO_VERSION: u16 = 190;
 const VERSION_BYTE: u8 = 0x12;
 
 #[derive(Debug, thiserror::Error)]
@@ -2201,6 +2207,25 @@ mod tests {
         assert_eq!(back, m);
         let m = ServerMsg::StationConfig(Box::new(sdroxide_types::StationConfig {
             picture_upload: cfg,
+            ..Default::default()
+        }));
+        let back: ServerMsg = decode(&encode(&m).unwrap()).unwrap();
+        assert_eq!(back, m);
+
+        // The VARA-compatible monitor: its settings command, the settings on
+        // the station bundle's tail.
+        let vm = sdroxide_types::VaraMonConfig {
+            exe: "/opt/xara/bin/xara-monitor".into(),
+            bandwidth: sdroxide_types::VaraBandwidth::Hz500,
+            calls: "EA5ABC K1ABC".into(),
+            show_payload: true,
+            ..Default::default()
+        };
+        let c = ClientMsg::Command(Command::SetVaraMonConfig(Box::new(vm.clone())));
+        let back: ClientMsg = decode(&encode(&c).unwrap()).unwrap();
+        assert_eq!(back, c);
+        let m = ServerMsg::StationConfig(Box::new(sdroxide_types::StationConfig {
+            vara_mon: vm,
             ..Default::default()
         }));
         let back: ServerMsg = decode(&encode(&m).unwrap()).unwrap();

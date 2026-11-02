@@ -799,6 +799,8 @@ impl eframe::App for SdroxideApp {
                                     self.navtex_panel(ui, &mut cmds, panel_h);
                                 } else if mode == Mode::Acars {
                                     self.acars_panel(ui, &mut cmds, panel_h);
+                                } else if mode == Mode::VaraMon {
+                                    self.vara_mon_panel(ui, &mut cmds, panel_h);
                                 } else if mode.is_image() {
                                     self.image_panel(ui, &mut cmds, mode);
                                 } else if mode.is_rf_paint() {
@@ -1739,6 +1741,10 @@ impl SdroxideApp {
                     if !self.picup_seeded {
                         self.picup_edit = c.picture_upload.clone();
                         self.picup_seeded = true;
+                    }
+                    if !self.vara_mon_seeded {
+                        self.vara_mon_edit = c.vara_mon.clone();
+                        self.vara_mon_seeded = true;
                     }
                     if !self.sat_cfg_seeded {
                         self.sat_cfg_edit = c.sat.clone();

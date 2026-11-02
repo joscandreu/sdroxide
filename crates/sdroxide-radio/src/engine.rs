@@ -19,9 +19,9 @@ use sdroxide_config::BandStacks;
 use sdroxide_digi::{
     AcarsController, AprsController, AtChatController, CwController, DigiAction, DigiController,
     DigiEngine, Fsk441Controller, FsqController, Fst4Controller, HellController, Js8Controller,
-    JtController, JttyController, Msk144Controller, NavtexController, PacketController, Pi4Controller,
-    Q65Controller, RadeController, RfPaintController, RifpController, SstvController,
-    TextModemController, WefaxController, WsprController,
+    JtController, JttyController, Msk144Controller, NavtexController, PacketController,
+    Pi4Controller, Q65Controller, RadeController, RfPaintController, RifpController,
+    SstvController, TextModemController, VaraMonController, WefaxController, WsprController,
 };
 use sdroxide_drm::DrmDemod;
 use sdroxide_dsp::{
@@ -3289,6 +3289,10 @@ struct Engine {
     /// Uploading received pictures to an FTP server (`picupload.json`),
     /// announced in the station bundle like the rotator's.
     picup_cfg: sdroxide_types::PictureUploadConfig,
+    /// The VARA-compatible monitor's settings (`varamon.json`): which
+    /// `xara-monitor` to run and how. Handed to the controller when the mode is
+    /// selected, and announced in the station bundle.
+    vara_mon_cfg: sdroxide_types::VaraMonConfig,
     /// The upload thread. Always there; it does nothing until enabled.
     picup: sdroxide_picup::PictureUploader,
     /// An SSTV picture held back for the FSK ID that follows it — see
@@ -4583,6 +4587,7 @@ fn engine_thread(
         sat_lock: None,
         rot_cfg: sdroxide_types::RotatorConfig::default(),
         picup_cfg: sdroxide_types::PictureUploadConfig::default(),
+        vara_mon_cfg: sdroxide_types::VaraMonConfig::default(),
         picup: sdroxide_picup::PictureUploader::new(),
         picup_pending: None,
         picup_noticed: None,
@@ -4645,6 +4650,9 @@ fn engine_thread(
     // And the transmit-image presets — five pictures the operator arranged once
     // and expects to find wherever they next sit down.
     engine.emit_image_presets();
+    // Before the controller below: a session left in VARA-MON starts its
+    // monitor from these settings, and defaults would leave it not set up.
+    engine.vara_mon_cfg = sdroxide_config::load_vara_mon_config();
     // If we start up already in a digital mode, spin up the controller.
     engine.sync_digi_mode();
     if !audio_mode {
@@ -7209,6 +7217,16 @@ impl Engine {
             // nothing further down would notice it had been handed an airline
             // datalink rather than a radio amateur's text.
             Box::new(AcarsController::new(self.digi_config.clone(), tap_rate))
+        } else if mode == Mode::VaraMon {
+            // Ahead of the fall-through: a sideband data mode with no
+            // transmitter, whose decoder is the operator's own `xara-monitor`
+            // run as a child process. FT8's decoder would listen for ever and
+            // never start it.
+            Box::new(VaraMonController::new(
+                self.digi_config.clone(),
+                self.vara_mon_cfg.clone(),
+                tap_rate,
+            ))
         } else if mode.is_rifp() {
             Box::new(RifpController::new(self.digi_config.clone(), tap_rate))
         } else if mode.is_aprs() {
@@ -10262,6 +10280,17 @@ impl Engine {
                 self.picup.test(*cfg);
                 return;
             }
+            SetVaraMonConfig(cfg) => {
+                if let Err(e) = sdroxide_config::save_vara_mon_config(&cfg) {
+                    warn!("saving VARA monitor config: {e}");
+                }
+                self.vara_mon_cfg = *cfg;
+                if let Some(d) = self.digi.as_mut() {
+                    d.set_vara_mon_config(self.vara_mon_cfg.clone());
+                }
+                self.emit_station_config();
+                return;
+            }
             SetRelayConfig(cfg) => {
                 if let Err(e) = sdroxide_config::save_relay_config(&cfg) {
                     warn!("saving T/R switch config: {e}");
@@ -12639,6 +12668,7 @@ impl Engine {
                 band_plan: sdroxide_types::band_plan().clone(),
                 digi_presets: sdroxide_types::digi_presets().to_vec(),
                 picture_upload: self.picup_cfg.clone(),
+                vara_mon: self.vara_mon_cfg.clone(),
             },
         )));
     }
@@ -18771,6 +18801,7 @@ fn rig_mode_class(m: Mode) -> u8 {
         | Mode::Fsk441
         | Mode::Hfdl
         | Mode::Jtty
+        | Mode::VaraMon
         | Mode::Spec => 1,
         // DRM sits on the dial in a channel about as wide as AM's, and a
         // rig has no DRM setting to report back — see `to_hamlib_mode`.

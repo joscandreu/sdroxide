@@ -372,6 +372,14 @@ pub enum Mode {
     /// convolutional code, so it copies where 45.45-baud RTTY goes marginal.
     /// Appended for the same reason as [`Mode::Hell`].
     Jtty,
+    /// VARA-MON — a passive monitor for VARA HF traffic (Winlink gateways,
+    /// peer-to-peer links, CQ frames) on an upper-sideband channel.
+    ///
+    /// Receive only, and not decoded here: the digi controller runs the
+    /// operator's own copy of `xara-monitor` (from the MIT-licensed xara
+    /// project) and shows what it reports — see [`crate::VaraMonConfig`].
+    /// Appended for the same reason as [`Mode::Hell`].
+    VaraMon,
 }
 
 /// The bands on which a mode that keeps phone practice rides the lower
@@ -392,7 +400,7 @@ const PHONE_LSB_BANDS: [(f64, f64); 3] =
 impl Mode {
     /// Every mode, in the order they cycle and appear in the picker — which is
     /// deliberately *not* the enum's declaration order (see [`Mode::Hell`]).
-    pub const ALL: [Mode; 50] = [
+    pub const ALL: [Mode; 51] = [
         Mode::Lsb,
         Mode::Usb,
         Mode::Cw,
@@ -443,6 +451,7 @@ impl Mode {
         Mode::Q65,
         Mode::Fsk441,
         Mode::Jtty,
+        Mode::VaraMon,
     ];
 
     /// The digital modes handled by a dedicated decode/encode engine (the
@@ -450,7 +459,7 @@ impl Mode {
     /// packet, RF Paint). All are USB underneath except RIFP, VHF packet and
     /// VHF SSTV, which frequency-modulate the carrier, and ACARS, which is
     /// received in AM.
-    pub const DIGITAL: [Mode; 32] = [
+    pub const DIGITAL: [Mode; 33] = [
         Mode::Ft8,
         Mode::Ft4,
         Mode::Ft2,
@@ -483,6 +492,7 @@ impl Mode {
         Mode::Packet,
         Mode::PacketHf,
         Mode::Aprs,
+        Mode::VaraMon,
     ];
 
     /// True for modes that use a dedicated decode/QSO layer over USB.
@@ -521,6 +531,7 @@ impl Mode {
                 | Mode::Q65
                 | Mode::Fsk441
                 | Mode::Jtty
+                | Mode::VaraMon
         )
     }
 
@@ -891,6 +902,9 @@ impl Mode {
                 | Mode::Jt9
                 | Mode::Fst4
                 | Mode::Q65
+                // A monitor of other stations' links: it has no transmitter,
+                // and xara's own modem is a separate program.
+                | Mode::VaraMon
         )
     }
 
@@ -975,6 +989,7 @@ impl Mode {
             Mode::Q65 => "Q65",
             Mode::Fsk441 => "FSK441",
             Mode::Jtty => "JTTY",
+            Mode::VaraMon => "VARA-MON",
         }
     }
 
@@ -1039,6 +1054,7 @@ impl Mode {
                 | Mode::Q65
                 | Mode::Fsk441
                 | Mode::Jtty
+                | Mode::VaraMon
         );
         crate::ModeProfile {
             agc: Some(if weak_digi { AgcMode::Slow } else { AgcMode::Med }),
@@ -1138,6 +1154,10 @@ impl Mode {
             // either side leaves room for a receiver that is not exactly on the
             // channel, which is the usual state of a signal found by ear.
             Mode::Navtex => (1300.0, 2100.0),
+            // VARA HF is centred on 1500 Hz at every bandwidth; the widest
+            // (2750) reaches from about 125 to 2875 Hz, so this keeps all three
+            // whole with a little room for a dial that is not exactly on.
+            Mode::VaraMon => (50.0, 2950.0),
             // ACARS' MSK sits at 1200 and 2400 Hz on the AM carrier, so the
             // passband has to keep both tones and the carrier between them.
             Mode::Acars => (-3000.0, 3000.0),
@@ -1376,7 +1396,8 @@ impl Mode {
             | Mode::Fst4
             | Mode::Q65
             | Mode::Fsk441
-            | Mode::Jtty => C::Data,
+            | Mode::Jtty
+            | Mode::VaraMon => C::Data,
         }
     }
 
@@ -1617,7 +1638,8 @@ impl Mode {
             | Mode::Fst4
             | Mode::Q65
             | Mode::Fsk441
-            | Mode::Jtty => &[],
+            | Mode::Jtty
+            | Mode::VaraMon => &[],
         }
     }
 }
@@ -2192,6 +2214,7 @@ mod tests {
             (Mode::Q65, 47),
             (Mode::Fsk441, 48),
             (Mode::Jtty, 49),
+            (Mode::VaraMon, 50),
         ];
         for (mode, index) in pinned {
             assert_eq!(mode as u8, index, "{} moved", mode.label());
@@ -2238,7 +2261,7 @@ mod tests {
         // dropped and nothing listed twice.
         // The last variant *by discriminant*, which is the one appended most
         // recently — not the one that reads last in the picker.
-        let last = Mode::Jtty as u8;
+        let last = Mode::VaraMon as u8;
         for i in 0..=last {
             let present = Mode::ALL.iter().filter(|m| **m as u8 == i).count();
             assert_eq!(present, 1, "discriminant {i} appears {present} times in Mode::ALL");

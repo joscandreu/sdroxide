@@ -568,6 +568,11 @@ pub struct DigiStatus {
     /// after `tx_refused` for the same positional reason.
     #[serde(default)]
     pub jtty: Option<crate::JttyStatus>,
+    /// VARA-MON: the external monitor's state, the traffic it reported and the
+    /// stations it heard. `None` in every other mode. Appended after `jtty`
+    /// for the same positional reason.
+    #[serde(default)]
+    pub vara_mon: Option<crate::VaraMonStatus>,
 }
 
 /// The running detail of the contact in progress: when it started and what has
@@ -1082,6 +1087,7 @@ impl DigiStatus {
             navtex: None,
             acars: None,
             jtty: None,
+            vara_mon: None,
             aprs: None,
             js8: None,
             atchat: None,

@@ -1978,6 +1978,17 @@ pub fn save_picture_upload_config(
     save_json("picupload.json", cfg)
 }
 
+/// The VARA-compatible monitor: where the operator's `xara-monitor` is and how
+/// to run it. Station-wide, like the picture upload above: the path names a
+/// file on the machine with the radio.
+pub fn load_vara_mon_config() -> sdroxide_types::VaraMonConfig {
+    load_json("varamon.json")
+}
+
+pub fn save_vara_mon_config(cfg: &sdroxide_types::VaraMonConfig) -> Result<(), ConfigError> {
+    save_json("varamon.json", cfg)
+}
+
 /// The external transmit/receive switch — the relay board or contact closure
 /// that grounds the SDR's antenna while the station transmits. Owned by the
 /// engine, like the rotator above, and for the same reason: it is a fact about

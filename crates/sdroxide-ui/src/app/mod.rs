@@ -920,6 +920,13 @@ pub struct SdroxideApp {
     /// UI-owned editable copy, seeded from the engine like the configs above.
     picup_edit: sdroxide_types::PictureUploadConfig,
     picup_seeded: bool,
+    // ── VARA-MON ──
+    /// UI-owned editable copy of the monitor's settings, seeded from the
+    /// engine like the configs above and sent back by the panel's APPLY.
+    vara_mon_edit: sdroxide_types::VaraMonConfig,
+    vara_mon_seeded: bool,
+    /// The panel's setup rows are open (they always are until it is set up).
+    vara_mon_setup_open: bool,
     /// When a TEST went out, while its answer is awaited. Cleared by the
     /// answer, or after a while if none comes (the station may have gone).
     picup_test_pending: Option<f64>,
@@ -1686,6 +1693,9 @@ impl SdroxideApp {
             wsjtx_seeded: false,
             picup_edit: sdroxide_types::PictureUploadConfig::default(),
             picup_seeded: false,
+            vara_mon_edit: sdroxide_types::VaraMonConfig::default(),
+            vara_mon_seeded: false,
+            vara_mon_setup_open: false,
             picup_test_pending: None,
             picup_test: None,
             picup_last: None,

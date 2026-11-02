@@ -322,6 +322,7 @@ fn mode_digit(m: Mode) -> char {
         | Mode::Wefax
         | Mode::Navtex
         | Mode::Jtty
+        | Mode::VaraMon
         | Mode::RfPaint => '2',
     }
 }

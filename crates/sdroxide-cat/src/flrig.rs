@@ -601,6 +601,7 @@ fn candidates(m: Mode) -> &'static [&'static str] {
         | Mode::PacketHf
         | Mode::AtChat
         | Mode::Jtty
+        | Mode::VaraMon
         | Mode::Rade => {
             &["DATA", "DATA-U", "DIGU", "PKT-USB", "PKTUSB", "PKT-U", "USB-D", "DIG", "PKT", "USB"]
         }

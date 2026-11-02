@@ -47,6 +47,7 @@ pub mod scheduler;
 pub mod squelch;
 pub mod sstv_controller;
 pub mod text_modem;
+pub mod vara_mon_controller;
 pub mod wefax_controller;
 pub mod wspr;
 pub mod wspr_controller;
@@ -82,6 +83,7 @@ pub use rifp_controller::RifpController;
 pub use scheduler::SlotScheduler;
 pub use sstv_controller::SstvController;
 pub use text_modem::TextModemController;
+pub use vara_mon_controller::VaraMonController;
 pub use wefax_controller::WefaxController;
 pub use wspr_controller::WsprController;
 
@@ -222,6 +224,9 @@ pub trait DigiEngine: Send {
     /// for the modes that receive no text at all (the image modes, digital
     /// voice), which is why it defaults to nothing.
     fn clear_rx(&mut self) {}
+    /// VARA-MON: new settings for the external monitor. Restarts it when they
+    /// change, or when it is not running. Inert in every other mode.
+    fn set_vara_mon_config(&mut self, _cfg: sdroxide_types::VaraMonConfig) {}
     /// SSTV: select the mode (`None` = auto-detect on RX, Martin 1 on TX).
     fn set_sstv_mode(&mut self, _mode: Option<SstvMode>) {}
     /// SSTV: queue a composed image (interleaved RGB) and start transmitting.
@@ -357,6 +362,8 @@ mod dispatch_tests {
             "navtex"
         } else if mode == Mode::Acars {
             "acars"
+        } else if mode == Mode::VaraMon {
+            "varamon"
         } else if mode.is_rifp() {
             "rifp"
         } else if mode.is_aprs() {
@@ -424,6 +431,9 @@ mod dispatch_tests {
         assert_eq!(pick(Mode::Wefax), "wefax");
         assert_eq!(pick(Mode::Navtex), "navtex");
         assert_eq!(pick(Mode::Acars), "acars");
+        // A sideband data mode with no transmitter: the fall-through would hand
+        // it FT8's decoder and the external monitor would never be started.
+        assert_eq!(pick(Mode::VaraMon), "varamon");
         // Both packet modes reach the one packet controller. HF packet is the
         // quiet trap of the pair: it is a keyboard-shaped mode on a sideband,
         // so `is_text_modem` further down would look like a plausible home and

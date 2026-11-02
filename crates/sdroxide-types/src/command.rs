@@ -1236,4 +1236,10 @@ pub enum Command {
     ///
     /// Appended for the usual reason — postcard numbers variants by position.
     ClearMemories,
+    /// Replace the VARA-compatible monitor's settings (`varamon.json`) and
+    /// restart the monitor if it is the mode in use. Sent with unchanged
+    /// settings, it restarts a monitor that has stopped.
+    ///
+    /// Appended for the usual reason — postcard numbers variants by position.
+    SetVaraMonConfig(Box<crate::VaraMonConfig>),
 }

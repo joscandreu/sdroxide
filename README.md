@@ -99,7 +99,11 @@ One binary, three ways to run it:
   carrier on the shared airline channels (131.550, 131.725 MHz and friends) — and
   receive-only **HFDL**, the shortwave ground network airliners use where no VHF
   receiver can hear them, one assigned channel at a time between 2.8 and 22 MHz,
-  with a decode log and a map of the aircraft positions it carries.
+  with a decode log and a map of the aircraft positions it carries — and, as a
+  beta, receive-only **VARA-MON**: VARA HF traffic (Winlink gateways and
+  peer-to-peer links) watched through your own copy of `xara-monitor` from the
+  MIT-licensed [xara](https://github.com/x0rro/xara) project, which sdroxide
+  runs and feeds with the receiver's audio. No VARA decoder is bundled.
 - **Receiver** — hang AGC, draggable passband filter edges (on the spectrum and
   the waterfall), noise blanker, auto-notch, **five noise-reduction engines**
   (RNNoise, DeepFilterNet3, a libspecbleach port, a port of WDSP's NR2 and the
@@ -1671,7 +1675,7 @@ way.
 | `--freq <HZ>` | Center frequency in Hz (default: where the last session was left; `14200000` on a first run). |
 | `--rate <HZ>` | Sample rate in Hz (default: from config). |
 | `--gain <DB>` | Overall RX gain in dB (default: hardware AGC / moderate). |
-| `--mode <MODE>` | Initial mode, case-insensitive: `LSB USB CW AM SAM NFM WFM DRM ADS-B VDL2 AIS DIGU DIGL DSB ISB SPEC FT8 FT4 FT2 JS8 WSPR PI4 MSK144 JT65 JT9 FST4 Q65 FSK441 PSK RTTY RTTY-FM PACKET PACKET-HF APRS SSTV SSTV-FM RIFP WEFAX NAVTEX ACARS OLIVIA THOR FSQ ATCHAT HELL RFPAINT RADE HFDL`, and `"HD RADIO"` (the one name with a space in it, so it needs the quotes). Default: the mode the last session was left in. |
+| `--mode <MODE>` | Initial mode, case-insensitive: `LSB USB CW AM SAM NFM WFM DRM ADS-B VDL2 AIS DIGU DIGL DSB ISB SPEC FT8 FT4 FT2 JS8 WSPR PI4 MSK144 JT65 JT9 FST4 Q65 FSK441 PSK RTTY RTTY-FM PACKET PACKET-HF APRS SSTV SSTV-FM RIFP WEFAX NAVTEX ACARS OLIVIA THOR FSQ ATCHAT HELL RFPAINT RADE HFDL VARA-MON`, and `"HD RADIO"` (the one name with a space in it, so it needs the quotes). Default: the mode the last session was left in. |
 | `--antenna <NAME>` | RX antenna port, as the device names it (`LNAH`, `TX/RX`; see `--probe`). Default: the port the last session was left on. |
 | `--tx-antenna <NAME>` | TX antenna port, likewise (`BAND1`, `BAND2`). |
 | `--server` | Run as a server: HTTP web client + WebSocket streaming backend. |

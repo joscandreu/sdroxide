@@ -103,4 +103,12 @@ pub struct StationConfig {
     ///
     /// Appended last, for the usual reason.
     pub amp: crate::AmpConfig,
+    /// The VARA-compatible monitor: where the operator's `xara-monitor` is and
+    /// how to run it — `varamon.json` on the engine's machine.
+    ///
+    /// Station-side because the path names a file on the machine with the
+    /// radio, which is where the program runs; a remote screen only edits it.
+    ///
+    /// Appended last, for the usual reason.
+    pub vara_mon: crate::VaraMonConfig,
 }

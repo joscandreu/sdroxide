@@ -76,6 +76,7 @@ pub mod text;
 mod tone;
 mod tx_voice;
 mod ui;
+mod varamon;
 mod vdl2;
 mod voice;
 mod wavelog;
@@ -303,6 +304,10 @@ pub use tx_voice::{
 pub use ui::{
     AmpDocked, BandplanKind, ChromeStyle, FontSize, LayoutMode, SmeterStyle, Solar3dWindow,
     SpectrumDetail, Speed, UiLanguage, UiSettings, UiTheme,
+};
+pub use varamon::{
+    VARA_MON_LINES_MAX, VARA_MON_STATIONS_MAX, VaraBandwidth, VaraMonConfig, VaraMonKind,
+    VaraMonLine, VaraMonLink, VaraMonState, VaraMonStation, VaraMonStatus,
 };
 pub use vdl2::{
     VDL2_ALL_CHANNELS, VDL2_CHANNEL_LABELS, VDL2_CHANNEL_SPACING_HZ, VDL2_CHANNELS_HZ, VDL2_CSC_HZ,

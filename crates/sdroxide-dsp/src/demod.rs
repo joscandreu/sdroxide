@@ -210,7 +210,8 @@ pub fn make_demod(mode: Mode, channel_rate: f64) -> Option<Box<dyn Demodulator>>
         | Mode::Rade
         | Mode::Fsk441
         // JTTY is narrow 4-GFSK audio on a sideband, like FSK441.
-        | Mode::Jtty => Some(Box::new(SsbDemod::new(channel_rate, lo, hi))),
+        | Mode::Jtty
+        | Mode::VaraMon => Some(Box::new(SsbDemod::new(channel_rate, lo, hi))),
         // VHF packet frequency-modulates the carrier, so like RIFP it wants a
         // discriminator — but a flat one, not the voice NFM path. APRS is the
         // same waveform on a channel of its own and takes the same path.

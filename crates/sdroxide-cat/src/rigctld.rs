@@ -98,6 +98,7 @@ fn mode_name(m: Mode) -> &'static str {
         | Mode::PacketHf
         | Mode::AtChat
         | Mode::Jtty
+        | Mode::VaraMon
         | Mode::Rade => "PKTUSB",
     }
 }

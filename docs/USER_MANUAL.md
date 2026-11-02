@@ -19,7 +19,7 @@ or connects to a remote sdroxide server.
     - [2.20 HD Radio (NRSC-5)](#220-hd-radio-nrsc-5)
     - [2.22 QO-100 beacon plugin](#222-qo-100-beacon-plugin)
     - [2.23 Hardrock amplifier](#223-hardrock-amplifier)
-3. [Digital modes (FT8, FT4, FT2, MSK144, JT65, JT9, FST4, Q65, FSK441, JTTY, PSK31, RTTY, Olivia, THOR, FSQ, Hellschreiber, SSTV, RIFP, weather fax, JS8, RF Paint, WSPR, PI4, packet, APRS, ADS-B, NAVTEX, ACARS, VDL2, AIS, HFDL, AtCHAT NET)](#3-digital-modes)
+3. [Digital modes (FT8, FT4, FT2, MSK144, JT65, JT9, FST4, Q65, FSK441, JTTY, PSK31, RTTY, Olivia, THOR, FSQ, Hellschreiber, SSTV, RIFP, weather fax, JS8, RF Paint, WSPR, PI4, packet, APRS, ADS-B, NAVTEX, ACARS, VDL2, AIS, HFDL, AtCHAT NET, VARA-MON)](#3-digital-modes)
     - [3.17 AtCHAT NET](#317-atchat-net)
     - [3.18 ACARS](#318-acars-airline-datalink-on-airband)
     - [3.19 HFDL](#319-hfdl-aircraft-on-shortwave)
@@ -30,6 +30,7 @@ or connects to a remote sdroxide server.
     - [3.24 Q65](#324-q65)
     - [3.25 FSK441](#325-fsk441)
     - [3.26 JTTY](#326-jtty)
+    - [3.27 VARA-MON](#327-vara-mon-vara-hf-monitor-beta)
 4. [Skimmers (CW, PSK, RTTY)](#4-skimmers)
 5. [ISM band decoder (315 / 345 / 433 / 868 / 915 MHz devices)](#5-ism-band-decoder)
 6. [Settings](#6-settings)
@@ -328,7 +329,7 @@ popup with three rows:
   has a standard calling frequency carry a cyan underline; see
   [§3.1](#31-general-considerations).
 - **MODE:** `LSB USB CW AM SAM NFM WFM DRM HD DIGU DIGL DSB ISB SPEC`.
-- **DIGITAL:** `FT8 FT4 FT2 JS8 WSPR PI4 MSK144 JT65 JT9 FST4 Q65 FSK441 JTTY PSK RTTY RTTY-FM OLIVIA THOR FSQ ATCHAT HELL SSTV SSTV-FM RIFP WEFAX NAVTEX ACARS RFPAINT RADE PACKET PACKET-HF APRS ADS-B VDL2 AIS HFDL` (see
+- **DIGITAL:** `FT8 FT4 FT2 JS8 WSPR PI4 MSK144 JT65 JT9 FST4 Q65 FSK441 JTTY PSK RTTY RTTY-FM OLIVIA THOR FSQ ATCHAT HELL SSTV SSTV-FM RIFP WEFAX NAVTEX ACARS RFPAINT RADE PACKET PACKET-HF APRS ADS-B VDL2 AIS HFDL VARA-MON` (see
   [Digital modes](#3-digital-modes)).
 
 On a desktop or tablet layout the popup carries a **DOCK** chip. It moves the
@@ -6595,6 +6596,84 @@ nothing is sent and the reason is shown under the row.
 
 **Where to find it.** There is no calling frequency and the mode is very new;
 tune where the station you want says it will be.
+
+### 3.27 VARA-MON (VARA HF monitor, beta)
+
+> **Beta.** This mode runs a program sdroxide does not ship, and shows what that
+> program reports. It has been checked end to end on a synthetic VARA HF session
+> (two xara stations linking and exchanging text), **not yet off the air**.
+
+VARA HF is the modem most Winlink gateways and many peer-to-peer stations use on
+shortwave. **VARA-MON** listens to other stations' VARA HF links and shows who is
+connecting to whom, how fast, how well they hear each other, and how much they
+exchange. It never transmits.
+
+**sdroxide does not decode VARA itself.** VARA is a closed program, and this mode
+does not include a decoder for it. Instead it runs **`xara-monitor`**, the
+passive monitor from the independent [xara](https://github.com/x0rro/xara)
+project (MIT licence), which you build or download yourself. sdroxide starts it,
+feeds it the receiver's audio and reads back what it hears. Which version you
+run, and how it was built, is up to you. xara builds on Linux, macOS and FreeBSD;
+it does not build on Windows.
+
+**Setting it up.**
+
+1. Build xara: `cargo install --locked --git https://github.com/x0rro/xara xara`
+   puts `xara` and `xara-monitor` in `~/.cargo/bin`. Its README has the
+   details.
+2. Choose **VARA-MON** in the DIGITAL row (or start with `--mode VARA-MON`).
+3. Under **SETUP**, set **Program** to the full path of `xara-monitor` on the
+   machine the radio is attached to. When you are connected remotely, that is
+   the server, not your own computer.
+4. Pick the **Bandwidth** the channel uses (500, 2300 or 2750 Hz; Winlink
+   gateways are mostly 2300 or 2750), and press **START**.
+
+The header then shows `xara-monitor` and its version. If the program cannot be
+started, or it stops, the header says **stopped** with the reason, usually the
+last thing the program printed. Fix the setting and press **START** again.
+
+**Known calls.** VARA control frames carry a *hash* of the callsign, not the
+callsign. A station is named once a session header names it, or once it matches
+a call you listed under **Known calls**. Until then it shows as `#HASH`. List the
+gateways and stations you expect on the channel; your own callsign is always
+added. **Guess unknown callsigns** lets the monitor work out names it was not
+given. That is the program's default, but it costs CPU. Turn it off on a slow
+machine.
+
+**Tuning.** VARA HF is centred on **1500 Hz** in upper sideband at every
+bandwidth. Put the dial where the gateway list says, the same as Winlink Express
+or Pat would. The passband is set to cover all three bandwidths.
+
+**What you see.**
+
+- The **header**: the monitor's state, an audio meter, links and data
+  transmissions counted, **ON AIR** with both ends of the link in progress, its
+  speed level, the bytes each way and how long it has run.
+- **TRAFFIC**: every record as it arrives, with the UTC time and the SNR.
+  Connect requests are yellow, session headers and link ends green, data
+  transmissions cyan. A transmission is reported a few seconds after it ends,
+  which is how the monitor works.
+- **STATIONS**: every station it could name, most recent first, with when it was
+  last heard, its latest and best SNR, the highest speed level it sent at, who it
+  was last linked with, and how many links it took part in. On a gateway
+  frequency, this list shows which stations reach you and how well.
+
+**Message content is hidden by default.** The log says how much each data
+frame carried, not what it said. **Show message content** puts the bytes under
+each line. Winlink messages are compressed, so most of a message body is not
+readable text anyway; the protocol lines and plain-text chats are.
+
+**SAVE** writes the traffic log as text; **CLEAR RX** empties the panes and
+leaves the monitor running.
+
+**Keeping up.** `xara-monitor` is far more demanding than the modem it monitors.
+If the header shows **blocks dropped**, the machine is not keeping up: audio is
+being thrown away rather than holding up the radio. Close other work, or turn
+off **Guess unknown callsigns**.
+
+**Extra arguments** go to the program as typed, for options this panel does not
+offer (for example `--key-idle 10`). The panel always passes `--stdin 48000
+--json --hf <bandwidth>` and one `--call` for each known call.
 
 ## 4. Skimmers
 
@@ -15088,9 +15167,13 @@ mailbox with attachments in it does not have to cross a phone link on connect.
 
 Two routes now: the CMS over the internet, and **AX.25 packet** on the radio,
 reaching the RMS Packet gateways. Pick one under **Settings → Winlink → How to
-connect**. ARDOP on HF is still to come; VARA deliberately is not, being a
-closed Windows binary whose licence forbids reverse engineering and for which
-no open implementation of the waveform exists.
+connect**. ARDOP on HF is still to come. VARA is not built in: it is a closed
+program, and sdroxide does not include an implementation of it. An independent,
+compatible implementation now exists, the MIT-licensed
+[xara](https://github.com/x0rro/xara) project. For now sdroxide uses it only to
+*listen*: **VARA-MON** runs your own copy of `xara-monitor` to watch VARA HF
+traffic on a channel ([§3.27](#327-vara-mon-vara-hf-monitor-beta)). Forwarding
+mail through VARA is not available yet.
 
 To forward over the air:
 
@@ -15287,7 +15370,7 @@ sends them.
 | `--freq <HZ>` | Center frequency in Hz (default: where the last session was left, or 14,200,000 on a first run). |
 | `--rate <HZ>` | Sample rate in Hz (default: from config). |
 | `--gain <DB>` | Overall RX gain in dB (default: hardware AGC or a moderate value). |
-| `--mode <MODE>` | Initial mode, matched without regard to case: LSB, USB, CW, AM, SAM, NFM, WFM, DRM, HD RADIO, ADS-B, VDL2, AIS, DIGU, DIGL, DSB, ISB, SPEC, FT8, FT4, FT2, JS8, WSPR, PSK, RTTY, RTTY-FM, PACKET, PACKET-HF, APRS, SSTV, SSTV-FM, RIFP, WEFAX, NAVTEX, ACARS, OLIVIA, THOR, FSQ, ATCHAT, HELL, RFPAINT, RADE, HFDL. `HD RADIO` is the one name with a space in it, so it needs quoting on the command line: `--mode "HD RADIO"`. Default: the mode the last session was left in. |
+| `--mode <MODE>` | Initial mode, matched without regard to case: LSB, USB, CW, AM, SAM, NFM, WFM, DRM, HD RADIO, ADS-B, VDL2, AIS, DIGU, DIGL, DSB, ISB, SPEC, FT8, FT4, FT2, JS8, WSPR, PSK, RTTY, RTTY-FM, PACKET, PACKET-HF, APRS, SSTV, SSTV-FM, RIFP, WEFAX, NAVTEX, ACARS, OLIVIA, THOR, FSQ, ATCHAT, HELL, RFPAINT, RADE, HFDL, VARA-MON. `HD RADIO` is the one name with a space in it, so it needs quoting on the command line: `--mode "HD RADIO"`. Default: the mode the last session was left in. |
 | `--antenna <NAME>` | RX antenna port, as the device names it (LNAH, TX/RX — `--probe` lists them). Default: the port the last session was left on, and failing that whatever the driver selects. |
 | `--tx-antenna <NAME>` | TX antenna port, likewise (BAND1, BAND2). |
 | `--server` | Run as a server (web client + WebSocket streaming backend). |
@@ -15416,6 +15499,7 @@ and not the station's.
 | `remote_login.json` | JSON | A sign-in to *somebody else's* server that you asked this client to remember ([§8.3](#83-sign-in-who-may-operate-the-station)). Written only when the **Remember on this device** box is ticked, holds the password in plaintext, and deleted when you untick it or the server refuses it. Belongs to the user interface, like `input.json`; the browser client keeps the same thing in local storage instead. |
 | `satellites.json` | JSON | Satellite additions for the 3D tracker: subscribed element-set listings, element sets pasted in by hand, and frequency entries that override the built-in table. Belongs to the engine, like `net.json`: the listings are fetched and cached where the radio is, so remote and browser clients track the same satellites. |
 | `relay.json` | JSON | The station's external transmit/receive switch ([§6.11](#611-tr-switch-protecting-the-receiver-on-transmit)): which relay board or contact closure, the contact table, the sequencer's lead and hold times, what to do if it stops answering, and the transmit sense input. Belongs to the engine — the relay is bolted to the antenna — so remote and browser clients set up the real one. |
+| `varamon.json` | JSON | VARA-MON's settings ([§3.27](#327-vara-mon-vara-hf-monitor-beta)): the path to your `xara-monitor`, the bandwidth, the known calls, whether to guess unknown ones, whether to show message content, and extra arguments. Belongs to the engine, because the program runs on the machine the radio is attached to, so remote and browser clients edit the server's copy. |
 | `broadcast_stations.json` | JSON | *Your own* broadcast stations and corrections, merged over the downloaded schedule ([§10.6](#106-broadcast-stations-on-longwave-and-shortwave)). Never written by sdroxide, and absent until you create it. |
 | `broadcast/` | CSV | The broadcasting season's schedule as downloaded from eibispace.de, one file per season. Managed by sdroxide: refetched when the season changes, and safe to delete. |
 | `sstv_messages.json` | JSON | The overlay message stored for each of the ten SSTV transmit slots. |
