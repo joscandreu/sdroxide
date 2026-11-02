@@ -1628,7 +1628,12 @@ use sdroxide_types::{
 /// (`Option<VaraMonStatus>`) on its tail, `StationConfig` gains `vara_mon`
 /// (`VaraMonConfig`) on its tail and `Command` gains `SetVaraMonConfig` — all
 /// appended, so a v189 peer reads them out of step.
-pub const PROTO_VERSION: u16 = 190;
+///
+/// v191: Winlink over an external VARA TNC. `WinlinkLane` gains `Vara`
+/// (appended) and `WinlinkConfig` gains `vara` (`VaraTncConfig`) on its tail.
+/// The config rides `StationConfig.net` whole, so a v190 peer reads the extra
+/// bytes out of step.
+pub const PROTO_VERSION: u16 = 191;
 const VERSION_BYTE: u8 = 0x12;
 
 #[derive(Debug, thiserror::Error)]
@@ -2226,6 +2231,23 @@ mod tests {
         assert_eq!(back, c);
         let m = ServerMsg::StationConfig(Box::new(sdroxide_types::StationConfig {
             vara_mon: vm,
+            ..Default::default()
+        }));
+        let back: ServerMsg = decode(&encode(&m).unwrap()).unwrap();
+        assert_eq!(back, m);
+
+        // Winlink's VARA lane, riding the network settings in the bundle.
+        let mut net = sdroxide_types::NetworkConfig::default();
+        net.winlink.lane = sdroxide_types::WinlinkLane::Vara;
+        net.winlink.vara = sdroxide_types::VaraTncConfig {
+            address: "10.0.0.5:8300".into(),
+            gateway: "EA5XYZ-10".into(),
+            bandwidth: None,
+            freq_hz: 14_105_000.0,
+            key_ptt: false,
+        };
+        let m = ServerMsg::StationConfig(Box::new(sdroxide_types::StationConfig {
+            net,
             ..Default::default()
         }));
         let back: ServerMsg = decode(&encode(&m).unwrap()).unwrap();

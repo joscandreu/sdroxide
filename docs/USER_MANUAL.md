@@ -15165,17 +15165,12 @@ mailbox with attachments in it does not have to cross a phone link on connect.
 
 ### Over the air
 
-Two routes now: the CMS over the internet, and **AX.25 packet** on the radio,
-reaching the RMS Packet gateways. Pick one under **Settings → Winlink → How to
-connect**. ARDOP on HF is still to come. VARA is not built in: it is a closed
-program, and sdroxide does not include an implementation of it. An independent,
-compatible implementation now exists, the MIT-licensed
-[xara](https://github.com/x0rro/xara) project. For now sdroxide uses it only to
-*listen*: **VARA-MON** runs your own copy of `xara-monitor` to watch VARA HF
-traffic on a channel ([§3.27](#327-vara-mon-vara-hf-monitor-beta)). Forwarding
-mail through VARA is not available yet.
+Three routes now: the CMS over the internet, **AX.25 packet** on the radio,
+reaching the RMS Packet gateways, and **VARA** through an external TNC, reaching
+the VARA HF and VARA FM gateways (most of today's HF RMS gateways are VARA). Pick
+one under **Settings → Winlink → How to connect**. ARDOP on HF is still to come.
 
-To forward over the air:
+To forward over the air by packet:
 
 1. Put the radio in **PACKET** (VHF/UHF, FM) or **PACKET-HF** (HF, sideband).
 2. Set your **station call** in the packet setup dialog — with an SSID, e.g.
@@ -15193,6 +15188,78 @@ rather than a hard kill: the link is torn down properly and whatever mail
 already arrived is still filed, so aborting a session that was halfway through
 does not lose what it had. A call to a gateway that is not answering takes two
 minutes to give up on its own, and ABORT takes effect in well under a second.
+
+### Over the air by VARA (beta)
+
+> **Beta.** Tested end to end between two xara TNCs over a virtual audio cable
+> — mail both ways, with sdroxide keying from the TNC's PTT — and against a
+> scripted TNC. **Not yet against a real gateway on the air.**
+
+sdroxide does not contain a VARA modem. It talks to one that is already
+running, over the TNC's two TCP ports, exactly as Pat or Winlink Express do: the
+command port (8300 by default) and the data port one above it (8301). That TNC
+can be:
+
+- **xara** — an independent, MIT-licensed VARA-compatible modem for Linux, macOS
+  and FreeBSD ([github.com/x0rro/xara](https://github.com/x0rro/xara)). You
+  build and run it yourself; sdroxide neither ships it nor starts it.
+- **VARA** itself, on a Windows machine, reached over the network.
+
+Which program you use, which version, and how it is built are your decisions.
+sdroxide only speaks the TNC's published host protocol.
+
+**The wiring.** The TNC needs the receiver's audio, and its transmit audio has
+to reach the transmitter. With sdroxide as the radio, that is a virtual audio
+cable each way:
+
+- sdroxide's **audio output** → the TNC's capture device;
+- the TNC's playback device → sdroxide's **microphone input**.
+
+On macOS, BlackHole provides the cables (two of them, such as BlackHole 2ch and
+16ch, one for each direction); on Linux, two PulseAudio/PipeWire null
+sinks; on Windows, VB-Cable or VAC. The radio goes in **DIGU** (or USB; **NFM**
+for VARA FM), so the receiver passes the whole VARA signal and the transmitter
+sends what arrives on the microphone input.
+
+**Keying.** With **Key this radio when the TNC transmits** ticked (the default),
+the TNC's `PTT ON`/`PTT OFF` key and unkey sdroxide's transmitter. The TNC then
+needs no PTT line of its own. For xara, start it with `--radio --ptt vox`, which
+transmits without touching any port and still reports PTT. An over keyed this
+way is the TNC's waveform, so it skips the microphone gain and the TX Audio
+chain (gate, EQ, compressor). Set its level with the TNC's own drive setting
+(`--drive-db` in xara) and sdroxide's **Drive**. sdroxide unkeys on its own if
+a session ends keyed, or if the TNC holds the transmitter for more than 30
+seconds, which no VARA frame does. Untick the box when the TNC keys a different
+radio itself.
+
+A typical xara command line on the same Mac:
+
+```
+xara --call EA5ABC --hf 2300 --audio coreaudio \
+     --capture BlackHole2ch_UID --playback BlackHole16ch_UID \
+     --radio --ptt vox --ptt-lead-ms 50
+```
+
+`--ptt-lead-ms` gives sdroxide's transmitter time to come up before the first
+sample of the frame. An SDR's transmit path has some latency, and a VARA frame
+that starts clipped is one the gateway may not decode. Try 50 ms and raise it if
+the first connect attempts go unanswered.
+
+**In sdroxide**, under **Settings → Winlink**, set the route to **Radio (VARA
+TNC)** and fill in:
+
+- **TNC** — the command port as `host:port` (`127.0.0.1:8300` for a TNC on this
+  machine).
+- **Gateway** — the RMS gateway's callsign, e.g. `EA5XYZ-10`.
+- **Bandwidth** — 500, 2300 or 2750 Hz, as the gateway lists. **TNC's setting**
+  sends no bandwidth command, which is what VARA FM needs.
+- **Frequency** — the gateway's dial. Zero leaves the radio where it is.
+
+Press **APPLY**, then **CONNECT** in the MAIL window. The session transcript
+(**LOG**) shows the TNC's side as well as the B2F exchange: the commands sent,
+`CONNECTED`, speed changes and the hang-up. **ABORT** stops a call in progress
+and hangs up a link gracefully. VARA sends what it still holds before it
+disconnects.
 
 ### Choosing a gateway
 

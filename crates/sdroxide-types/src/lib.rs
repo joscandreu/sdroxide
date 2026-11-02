@@ -326,8 +326,9 @@ pub use wefax::{
     WEFAX_STATIONS, WefaxChartMeta, WefaxIoc, WefaxLpm, WefaxStation, WefaxStatus, shift_fax_rows,
 };
 pub use winlink::{
-    DEFAULT_CMS_ADDRESS, MAIL_PAGE_MAX, MailAttachment, MailDraft, MailEntry, MailFolder,
-    MailListing, MailMessage, WinlinkConfig, WinlinkGateway, WinlinkLane, WinlinkStatus,
+    DEFAULT_CMS_ADDRESS, DEFAULT_VARA_TNC, MAIL_PAGE_MAX, MailAttachment, MailDraft, MailEntry,
+    MailFolder, MailListing, MailMessage, VaraTncConfig, WinlinkConfig, WinlinkGateway,
+    WinlinkLane, WinlinkStatus,
 };
 pub use wsjtx::{CwTextConfig, N1mmConfig, WsjtxConfig};
 pub use wspr::{

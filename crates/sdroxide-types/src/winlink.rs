@@ -165,6 +165,52 @@ pub enum WinlinkLane {
     Telnet,
     /// An RMS gateway over the air, using the radio's current packet mode.
     Packet,
+    /// An RMS gateway over the air through an external VARA-compatible TNC
+    /// (xara, or VARA itself), driven over its TCP command and data ports.
+    /// Appended for the usual reason — postcard numbers variants by position.
+    Vara,
+}
+
+/// The TNC address assumed until the operator says otherwise: the command port
+/// every VARA-compatible TNC listens on by default. The data port is one above.
+pub const DEFAULT_VARA_TNC: &str = "127.0.0.1:8300";
+
+/// The Winlink VARA lane: which TNC to drive, and whom to call through it.
+///
+/// sdroxide does not contain a VARA modem. It talks to one that is already
+/// running — xara (MIT-licensed, Linux/macOS/FreeBSD) or VARA — over the TNC's
+/// command and data ports, exactly as Pat or Winlink Express do. The audio
+/// between the TNC and the radio is the operator's wiring (a virtual cable to
+/// sdroxide's audio, or a sound card on a rig).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VaraTncConfig {
+    /// `host:port` of the TNC's command port. The data port is the next one.
+    pub address: String,
+    /// The RMS gateway (or station) to call, e.g. `EA5XYZ-10`.
+    pub gateway: String,
+    /// The VARA HF bandwidth to ask the TNC for. `None` leaves the TNC as it is
+    /// set up — what VARA FM, which has no bandwidth command, needs.
+    pub bandwidth: Option<crate::VaraBandwidth>,
+    /// Where the gateway listens (the dial). Zero leaves the radio where it is.
+    pub freq_hz: f64,
+    /// Key sdroxide's own transmitter when the TNC says `PTT ON`, and unkey on
+    /// `PTT OFF`. The TNC's transmit audio is then expected on sdroxide's
+    /// microphone input (a virtual cable), and goes out without the voice
+    /// processing a microphone gets. Off when the TNC keys a radio itself.
+    pub key_ptt: bool,
+}
+
+impl Default for VaraTncConfig {
+    fn default() -> Self {
+        VaraTncConfig {
+            address: DEFAULT_VARA_TNC.to_string(),
+            gateway: String::new(),
+            bandwidth: Some(crate::VaraBandwidth::Hz2300),
+            freq_hz: 0.0,
+            key_ptt: true,
+        }
+    }
 }
 
 /// One RMS gateway the operator has written down.
@@ -250,6 +296,9 @@ pub struct WinlinkConfig {
     pub auto_connect: bool,
     /// How often to connect when `auto_connect` is on.
     pub auto_connect_minutes: u32,
+    /// The VARA lane's TNC and gateway. Appended for the usual reason.
+    #[serde(default)]
+    pub vara: VaraTncConfig,
 }
 
 impl Default for WinlinkConfig {
@@ -268,6 +317,7 @@ impl Default for WinlinkConfig {
             gateways: Vec::new(),
             auto_connect: false,
             auto_connect_minutes: 30,
+            vara: VaraTncConfig::default(),
         }
     }
 }
@@ -313,6 +363,17 @@ mod tests {
     fn counts_line_up_with_folders() {
         let status = WinlinkStatus::default();
         assert_eq!(status.counts.len(), MailFolder::ALL.len());
+    }
+
+    #[test]
+    fn a_config_saved_before_the_vara_lane_still_loads() {
+        let cfg: WinlinkConfig =
+            serde_json::from_str(r#"{"callsign":"EA5ABC","lane":"Packet"}"#).unwrap();
+        assert_eq!(cfg.lane, WinlinkLane::Packet);
+        assert_eq!(cfg.vara.address, DEFAULT_VARA_TNC);
+        assert!(cfg.vara.key_ptt);
+        let cfg: WinlinkConfig = serde_json::from_str(r#"{"lane":"Vara"}"#).unwrap();
+        assert_eq!(cfg.lane, WinlinkLane::Vara);
     }
 
     #[test]

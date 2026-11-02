@@ -21,6 +21,7 @@ pub mod message;
 pub mod secure;
 pub mod session;
 pub mod transport;
+pub mod vara;
 
 pub use b2f::{Answer, Proposal, Sid};
 pub use lzhuf::{LzhufError, compress, decompress};
@@ -30,3 +31,4 @@ pub use message::{Attachment, Message, MessageError};
 pub use secure::login_response;
 pub use session::{SessionConfig, SessionError, SessionOutcome};
 pub use transport::{TelnetTransport, Transport, TransportError};
+pub use vara::{VaraDial, VaraTransport};

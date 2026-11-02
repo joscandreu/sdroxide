@@ -21,6 +21,7 @@ use crate::mailbox::{Mailbox, MailboxError};
 use crate::message::{Attachment, Message, format_date, generate_mid};
 use crate::session::{self, SessionConfig, SessionOutcome};
 use crate::transport::{Ax25Transport, TelnetTransport};
+use crate::vara::{VaraDial, VaraTransport};
 
 /// How long to wait on the CMS before giving up.
 const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
@@ -32,6 +33,12 @@ const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
 /// handshake legitimately takes tens of seconds. Giving up at thirty would
 /// abandon sessions that were about to work.
 const RADIO_DIAL_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// How long a VARA TNC may spend calling a gateway. VARA repeats its connect
+/// request for up to a minute or so before giving up and saying
+/// `DISCONNECTED`, which is the answer this normally ends on; the bound is for
+/// a TNC that never says anything.
+const VARA_DIAL_TIMEOUT: Duration = Duration::from_secs(150);
 
 /// Where a forwarding session goes.
 ///
@@ -50,6 +57,12 @@ pub enum WinlinkRoute {
     /// gateway that is off the air. Naming it in the transcript is what makes
     /// the difference visible afterwards.
     Packet { gateway: String, via: Vec<String>, baud: sdroxide_types::PacketBaud },
+    /// An RMS gateway over the air through an external VARA-compatible TNC.
+    ///
+    /// `key_ptt` asks for the TNC's `PTT ON`/`PTT OFF` to be passed to the
+    /// engine (see [`WinlinkManager::take_ptt`]); off, the TNC keys whatever
+    /// radio it is wired to by itself.
+    Vara { address: String, gateway: String, bandwidth_hz: Option<u32>, key_ptt: bool },
 }
 
 /// What a finished session produced.
@@ -105,6 +118,11 @@ pub struct WinlinkManager {
     /// means the radio cannot carry a session right now — which is a refusal
     /// the operator can act on, not a failure to report afterwards.
     packet_port: Option<sdroxide_ax25::PortHandle>,
+    /// `PTT ON`/`PTT OFF` from a VARA TNC, for the engine to act on. Fed by
+    /// the transport's command-port reader directly, not by the worker, so a
+    /// key-up is not held behind a blocked read.
+    ptt_tx: Sender<bool>,
+    ptt_rx: Receiver<bool>,
 }
 
 impl WinlinkManager {
@@ -113,6 +131,7 @@ impl WinlinkManager {
     pub fn new(root: impl Into<PathBuf>, cfg: WinlinkConfig) -> Result<Self, MailboxError> {
         let mailbox = Mailbox::open(root)?;
         let (done_tx, done_rx) = bounded(4);
+        let (ptt_tx, ptt_rx) = crossbeam_channel::unbounded();
         let mut mgr = WinlinkManager {
             mailbox,
             cfg,
@@ -122,6 +141,8 @@ impl WinlinkManager {
             done_rx,
             done_tx,
             packet_port: None,
+            ptt_tx,
+            ptt_rx,
         };
         mgr.refresh_counts();
         Ok(mgr)
@@ -148,6 +169,12 @@ impl WinlinkManager {
     #[must_use]
     pub fn packet_available(&self) -> bool {
         self.packet_port.is_some()
+    }
+
+    /// The transmitter states a VARA TNC has asked for since the last call, in
+    /// order. Empty outside a VARA session that keys sdroxide's transmitter.
+    pub fn take_ptt(&self) -> Vec<bool> {
+        self.ptt_rx.try_iter().collect()
     }
 
     pub fn set_config(&mut self, cfg: WinlinkConfig) {
@@ -207,7 +234,11 @@ impl WinlinkManager {
                     );
                 }
             },
-            WinlinkRoute::Telnet { .. } => None,
+            WinlinkRoute::Telnet { .. } | WinlinkRoute::Vara { .. } => None,
+        };
+        let ptt = match &route {
+            WinlinkRoute::Vara { key_ptt: true, .. } => Some(self.ptt_tx.clone()),
+            _ => None,
         };
 
         let cfg = SessionConfig {
@@ -218,7 +249,9 @@ impl WinlinkManager {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             target_call: match &route {
                 WinlinkRoute::Telnet { .. } => crate::transport::CMS_TARGET_CALL.to_string(),
-                WinlinkRoute::Packet { gateway, .. } => gateway.to_uppercase(),
+                WinlinkRoute::Packet { gateway, .. } | WinlinkRoute::Vara { gateway, .. } => {
+                    gateway.to_uppercase()
+                }
             },
         };
         let busy = Arc::clone(&self.busy);
@@ -232,6 +265,7 @@ impl WinlinkManager {
         self.status.activity = match &route {
             WinlinkRoute::Telnet { address } => format!("connecting to {address}…"),
             WinlinkRoute::Packet { gateway, .. } => format!("calling {gateway}…"),
+            WinlinkRoute::Vara { gateway, .. } => format!("calling {gateway} by VARA…"),
         };
         self.status.last_error = None;
 
@@ -239,7 +273,7 @@ impl WinlinkManager {
             std::thread::Builder::new().name("sdroxide-winlink".into()).spawn(move || {
                 let mut guard = SessionGuard { busy, done_tx, outcome: None };
                 let mut outcome = SessionOutcome::default();
-                let err = run_session(&route, port, &cancel, &cfg, &outbound, &mut outcome);
+                let err = run_session(&route, port, ptt, &cancel, &cfg, &outbound, &mut outcome);
                 guard.outcome = Some((Box::new(outcome), err));
             });
 
@@ -413,6 +447,7 @@ impl WinlinkManager {
 fn run_session(
     route: &WinlinkRoute,
     port: Option<sdroxide_ax25::PortHandle>,
+    ptt: Option<Sender<bool>>,
     cancel: &Arc<AtomicBool>,
     cfg: &SessionConfig,
     outbound: &[Message],
@@ -445,6 +480,30 @@ fn run_session(
             };
             outcome.log.push(format!("< connected to {gateway}"));
             match session::run_into(&mut transport, cfg, outbound, outcome) {
+                Ok(()) => None,
+                Err(e) => Some(e.to_string()),
+            }
+        }
+        WinlinkRoute::Vara { address, gateway, bandwidth_hz, .. } => {
+            let dial = VaraDial {
+                address: address.clone(),
+                mycall: cfg.callsign.clone(),
+                gateway: gateway.clone(),
+                bandwidth_hz: *bandwidth_hz,
+                timeout: VARA_DIAL_TIMEOUT,
+            };
+            outcome.log.push(format!("> calling {gateway} by VARA through the TNC at {address}"));
+            let mut transport = match VaraTransport::connect(&dial, Arc::clone(cancel), ptt) {
+                Ok(t) => t,
+                Err(e) => return Some(e.to_string()),
+            };
+            outcome.log.extend(transport.take_log());
+            let result = session::run_into(&mut transport, cfg, outbound, outcome);
+            // Hung up here rather than on drop, so what the TNC said while
+            // closing the link lands in the transcript too.
+            transport.hang_up();
+            outcome.log.extend(transport.take_log());
+            match result {
                 Ok(()) => None,
                 Err(e) => Some(e.to_string()),
             }

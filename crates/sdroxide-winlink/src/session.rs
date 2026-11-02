@@ -451,7 +451,7 @@ fn send_line<T: Read + Write>(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::message::Attachment;
 
@@ -477,7 +477,7 @@ mod tests {
         }
     }
 
-    fn config() -> SessionConfig {
+    pub(crate) fn config() -> SessionConfig {
         SessionConfig {
             callsign: "OE3JJS".into(),
             password: "TESTPASS".into(),
@@ -488,7 +488,7 @@ mod tests {
         }
     }
 
-    fn inbound_message() -> Message {
+    pub(crate) fn inbound_message() -> Message {
         Message {
             mid: "ABCDEFGHIJKL".into(),
             date: "2026/08/14 09:30".into(),
@@ -511,7 +511,7 @@ mod tests {
     /// version of this script had the CMS proposing immediately, which matched
     /// the implementation's mistake and hid a deadlock that only showed up
     /// against the live server.
-    fn scripted_cms(msgs: &[Message]) -> Vec<u8> {
+    pub(crate) fn scripted_cms(msgs: &[Message]) -> Vec<u8> {
         let mut s = Vec::new();
         s.extend_from_slice(b"[WL2K-5.0-B2FWIHJM$]\r");
         s.extend_from_slice(b";PQ: 23753528\r");

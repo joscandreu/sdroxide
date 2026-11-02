@@ -110,11 +110,12 @@ One binary, three ways to run it:
   built-in spectral NR, three strengths each), squelch, a second sub-receiver,
   RIT/XIT, VFO A/B with split, per-band band stacks, and memory channels.
 - **Winlink radio email** — a built-in client for the amateur store-and-forward
-  email network, speaking B2F/FBB, LZHUF and the secure login natively (no Pat,
-  no external modem). Mailbox with inbox / outbox / sent / archive, compose and
-  reply, attachments, and the session transcript when something goes wrong.
-  Over the internet CMS today; AX.25 packet and ARDOP are the planned radio
-  transports.
+  email network, speaking B2F/FBB, LZHUF and the secure login natively (no Pat).
+  Mailbox with inbox / outbox / sent / archive, compose and reply, attachments,
+  and the session transcript when something goes wrong. Over the internet CMS,
+  AX.25 packet to RMS Packet gateways, and (beta) VARA HF/FM gateways through an
+  external VARA-compatible TNC — your own xara or VARA, driven over its TCP
+  ports, with sdroxide keying from the TNC's PTT. ARDOP is still to come.
 - **Bandplan overlay** — a colour-coded strip along the bottom of the waterfall
   that labels allocations (ham bands, broadcast, CB, AM); it shows coarse bands
   when zoomed out and CW/digital/SSB sub-segments when zoomed into a ham band.

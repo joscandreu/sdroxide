@@ -2736,7 +2736,17 @@ impl SdroxideApp {
                         tr!("settings-radio-packet"),
                     )
                     .on_hover_text(tr!("settings-call-rms-gateway-air-radio"));
+                    ui.selectable_value(
+                        &mut wl.lane,
+                        sdroxide_types::WinlinkLane::Vara,
+                        tr!("settings-winlink-vara"),
+                    )
+                    .on_hover_text(tr!("settings-winlink-vara-hover"));
                 });
+
+                if wl.lane == sdroxide_types::WinlinkLane::Vara {
+                    winlink_vara_settings(ui, &mut wl.vara);
+                }
 
                 if wl.lane == sdroxide_types::WinlinkLane::Packet {
                     ui.add_space(4.0);
@@ -4034,4 +4044,45 @@ mod tests {
         assert!(iface_opts(true).contains(&sdroxide_types::Backend::Soapy));
         assert!(!iface_opts(false).contains(&sdroxide_types::Backend::Soapy));
     }
+}
+
+/// The Winlink VARA lane: the external TNC, the gateway, and how the
+/// transmitter is keyed.
+fn winlink_vara_settings(ui: &mut egui::Ui, v: &mut sdroxide_types::VaraTncConfig) {
+    ui.add_space(4.0);
+    ui.label(RichText::new(tr!("settings-winlink-vara-intro")).weak());
+    net_row(ui, &tr!("settings-winlink-vara-tnc"), &mut v.address, 160.0);
+    ui.label(RichText::new(tr!("settings-winlink-vara-tnc-hint")).weak());
+    // Upper-cased where it is used, as the packet lane's is.
+    net_row(ui, &tr!("settings-gateway"), &mut v.gateway, 140.0);
+    ui.horizontal(|ui| {
+        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-winlink-vara-bandwidth")));
+        for bw in sdroxide_types::VaraBandwidth::ALL {
+            ui.selectable_value(&mut v.bandwidth, Some(bw), format!("{} Hz", bw.hz()));
+        }
+        ui.selectable_value(&mut v.bandwidth, None, tr!("settings-winlink-vara-tnc-setting"))
+            .on_hover_text(tr!("settings-winlink-vara-tnc-setting-hover"));
+    });
+    let mut mhz = v.freq_hz / 1e6;
+    ui.horizontal(|ui| {
+        ui.add_sized([96.0, 22.0], egui::Label::new(tr!("settings-frequency")));
+        if ui
+            .add(
+                egui::DragValue::new(&mut mhz)
+                    .speed(0.001)
+                    .range(0.0..=1300.0)
+                    .max_decimals(4)
+                    .suffix(" MHz"),
+            )
+            .changed()
+        {
+            v.freq_hz = mhz * 1e6;
+        }
+        if v.freq_hz > 0.0 && ui.button(tr!("settings-clear")).clicked() {
+            v.freq_hz = 0.0;
+        }
+    });
+    ui.label(RichText::new(tr!("settings-winlink-vara-dial-hint")).weak());
+    crate::chrome::checkbox(ui, &mut v.key_ptt, tr!("settings-winlink-vara-key-ptt"))
+        .on_hover_text(tr!("settings-winlink-vara-key-ptt-hover"));
 }
