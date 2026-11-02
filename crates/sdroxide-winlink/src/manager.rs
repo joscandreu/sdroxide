@@ -20,8 +20,9 @@ use sdroxide_types::{
 use crate::mailbox::{Mailbox, MailboxError};
 use crate::message::{Attachment, Message, format_date, generate_mid};
 use crate::session::{self, SessionConfig, SessionOutcome};
+use crate::tnc_process::{TncEvent, TncProcess};
 use crate::transport::{Ax25Transport, TelnetTransport};
-use crate::vara::{VaraDial, VaraTransport};
+use crate::vara::{VaraDial, VaraListen, VaraTransport};
 
 /// How long to wait on the CMS before giving up.
 const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
@@ -62,12 +63,50 @@ pub enum WinlinkRoute {
     /// `key_ptt` asks for the TNC's `PTT ON`/`PTT OFF` to be passed to the
     /// engine (see [`WinlinkManager::take_ptt`]); off, the TNC keys whatever
     /// radio it is wired to by itself.
-    Vara { address: String, gateway: String, bandwidth_hz: Option<u32>, key_ptt: bool },
+    ///
+    /// `p2p` calls a peer station rather than a gateway: peer timing, and only
+    /// the mail addressed to it is offered. `busy_wait_s` is how long a busy
+    /// channel may hold the call before it is given up.
+    Vara {
+        address: String,
+        gateway: String,
+        bandwidth_hz: Option<u32>,
+        key_ptt: bool,
+        p2p: bool,
+        busy_wait_s: u32,
+    },
 }
 
-/// What a finished session produced.
+/// What a worker has to report: a finished session, or the listener's news.
 enum Done {
     Session(Box<SessionOutcome>, Option<String>),
+    /// The VARA listener: whether it is on watch, and a line for the status.
+    Listener {
+        listening: bool,
+        activity: Option<String>,
+    },
+}
+
+/// The thread keeping a VARA TNC on watch for peer-to-peer calls.
+struct Listener {
+    /// Set to stop it, or to abort the session it is answering.
+    stop: Arc<AtomicBool>,
+    handle: std::thread::JoinHandle<()>,
+    /// The settings it was started with; a change restarts it.
+    key: (String, String, Option<u32>, bool),
+}
+
+/// Whether a message is for `call` — the peer at the other end of a
+/// peer-to-peer link. SSIDs and a `@winlink.org` suffix are ignored: mail is
+/// addressed to the operator, the SSID only says which of their stations.
+pub fn addressed_to(msg: &Message, call: &str) -> bool {
+    fn base(a: &str) -> String {
+        let a = a.trim().to_ascii_uppercase();
+        let a = a.strip_suffix("@WINLINK.ORG").unwrap_or(&a).to_string();
+        a.split('-').next().unwrap_or("").to_string()
+    }
+    let want = base(call);
+    !want.is_empty() && msg.to.iter().chain(&msg.cc).any(|r| base(r) == want)
 }
 
 /// Releases the busy flag and publishes a result **however** the worker ends —
@@ -123,13 +162,39 @@ pub struct WinlinkManager {
     /// key-up is not held behind a blocked read.
     ptt_tx: Sender<bool>,
     ptt_rx: Receiver<bool>,
+    /// Where the mailbox lives, so the listener can read the outbox when a
+    /// peer calls.
+    root: PathBuf,
+    /// Answering peer-to-peer calls through a VARA TNC, when enabled.
+    listener: Option<Listener>,
+    /// The VARA TNC sdroxide runs itself, when the operator asked for that.
+    tnc: Option<TncProcess>,
+    /// The command line it was started with; a change restarts it.
+    tnc_args: Vec<String>,
+    /// After a failure, when to try again, and how long the next pause is.
+    tnc_retry_at: Option<std::time::Instant>,
+    tnc_backoff: Duration,
+    /// sdroxide's rigctld server, `host:port`, when it is on — for a TNC that
+    /// keys the radio through it.
+    rigctld: Option<String>,
+    /// Which program and audio system the device lists are for, and the
+    /// listing in progress.
+    devices_for: Option<(String, sdroxide_types::TncAudio)>,
+    devices_rx: Option<Receiver<Result<crate::tnc_process::DeviceLists, String>>>,
 }
+
+/// The first pause before restarting a TNC that stopped, and the longest.
+const TNC_BACKOFF_MIN: Duration = Duration::from_secs(5);
+const TNC_BACKOFF_MAX: Duration = Duration::from_secs(60);
+/// A TNC that ran this long before stopping starts the backoff afresh.
+const TNC_STABLE: Duration = Duration::from_secs(60);
 
 impl WinlinkManager {
     /// Open the mailbox under `root` and stand by. Nothing connects until
     /// [`WinlinkManager::connect`] is called.
     pub fn new(root: impl Into<PathBuf>, cfg: WinlinkConfig) -> Result<Self, MailboxError> {
-        let mailbox = Mailbox::open(root)?;
+        let root = root.into();
+        let mailbox = Mailbox::open(&root)?;
         let (done_tx, done_rx) = bounded(4);
         let (ptt_tx, ptt_rx) = crossbeam_channel::unbounded();
         let mut mgr = WinlinkManager {
@@ -143,6 +208,15 @@ impl WinlinkManager {
             packet_port: None,
             ptt_tx,
             ptt_rx,
+            root,
+            listener: None,
+            tnc: None,
+            tnc_args: Vec::new(),
+            tnc_retry_at: None,
+            tnc_backoff: TNC_BACKOFF_MIN,
+            rigctld: None,
+            devices_for: None,
+            devices_rx: None,
         };
         mgr.refresh_counts();
         Ok(mgr)
@@ -178,7 +252,225 @@ impl WinlinkManager {
     }
 
     pub fn set_config(&mut self, cfg: WinlinkConfig) {
+        if cfg.vara.managed != self.cfg.vara.managed {
+            // New settings deserve a prompt try, not the tail of a backoff.
+            self.tnc_retry_at = None;
+            self.tnc_backoff = TNC_BACKOFF_MIN;
+        }
         self.cfg = cfg;
+        self.sync_tnc();
+        self.sync_listener();
+    }
+
+    /// sdroxide's rigctld server address, or `None` while it is off. The
+    /// engine calls this every tick; only a change matters.
+    pub fn set_rigctld(&mut self, addr: Option<String>) {
+        if addr != self.rigctld {
+            self.rigctld = addr;
+            self.sync_tnc();
+        }
+    }
+
+    /// The TNC sdroxide runs is up and keys the radio through rigctld — so a
+    /// data-mode over may be its audio rather than the operator's voice.
+    pub fn tnc_keys_by_rigctld(&self) -> bool {
+        let m = &self.cfg.vara.managed;
+        m.enabled
+            && m.ptt == sdroxide_types::TncPtt::Rigctld
+            && self.status.tnc.state == sdroxide_types::TncState::Running
+    }
+
+    /// The managed TNC is wanted but not ready: why, for a refusal.
+    fn tnc_not_ready(&self) -> Option<String> {
+        if !self.cfg.vara.managed.enabled
+            || self.status.tnc.state == sdroxide_types::TncState::Running
+        {
+            return None;
+        }
+        Some(match self.status.tnc.state {
+            sdroxide_types::TncState::Starting => "the xara TNC is still starting".into(),
+            _ if !self.status.tnc.message.is_empty() => {
+                format!("the xara TNC is not running: {}", self.status.tnc.message)
+            }
+            _ => "the xara TNC is not running".into(),
+        })
+    }
+
+    /// Start, watch, restart or stop the TNC to match the settings.
+    fn sync_tnc(&mut self) {
+        use sdroxide_types::TncState;
+        self.refresh_devices();
+        let m = self.cfg.vara.managed.clone();
+        if !m.enabled {
+            self.tnc = None;
+            self.tnc_args.clear();
+            self.status.tnc.state = TncState::Off;
+            self.status.tnc.message.clear();
+            self.status.tnc.version.clear();
+            return;
+        }
+        let args = match crate::tnc_process::tnc_args(
+            &m,
+            &self.cfg.callsign,
+            &self.cfg.vara.address,
+            self.rigctld.as_deref(),
+        ) {
+            Ok(a) => a,
+            Err(e) => {
+                self.tnc = None;
+                self.tnc_args.clear();
+                self.status.tnc.state = TncState::Failed;
+                self.status.tnc.message = e;
+                return;
+            }
+        };
+        if self.tnc.is_some() && self.tnc_args != args {
+            // Settings changed under it: start again with the new ones.
+            self.tnc = None;
+            self.tnc_retry_at = None;
+        }
+        if let Some(p) = &mut self.tnc {
+            for ev in p.pump() {
+                match ev {
+                    TncEvent::Ready(v) => {
+                        self.status.tnc.state = TncState::Running;
+                        self.status.tnc.version = v;
+                        self.status.tnc.message.clear();
+                    }
+                    TncEvent::Exited(why) => {
+                        tracing::warn!("{why}");
+                        let ran = p.started.elapsed();
+                        self.tnc_backoff = if ran >= TNC_STABLE {
+                            TNC_BACKOFF_MIN
+                        } else {
+                            (self.tnc_backoff * 2).min(TNC_BACKOFF_MAX)
+                        };
+                        self.tnc_retry_at = Some(std::time::Instant::now() + self.tnc_backoff);
+                        self.status.tnc.state = TncState::Failed;
+                        self.status.tnc.message =
+                            format!("{why} — trying again in {} s", self.tnc_backoff.as_secs());
+                    }
+                }
+            }
+            if self.status.tnc.state == TncState::Failed {
+                self.tnc = None;
+            }
+            return;
+        }
+        if self.tnc_retry_at.is_some_and(|t| std::time::Instant::now() < t) {
+            return;
+        }
+        match TncProcess::spawn(&m.exe, &args) {
+            Ok(p) => {
+                tracing::info!("started xara: {} {}", m.exe.trim(), args.join(" "));
+                self.tnc = Some(p);
+                self.tnc_args = args;
+                self.tnc_retry_at = None;
+                self.status.tnc.state = TncState::Starting;
+                self.status.tnc.message.clear();
+            }
+            Err(e) => {
+                self.tnc_retry_at = Some(std::time::Instant::now() + self.tnc_backoff);
+                self.tnc_backoff = (self.tnc_backoff * 2).min(TNC_BACKOFF_MAX);
+                self.status.tnc.state = TncState::Failed;
+                self.status.tnc.message = e;
+            }
+        }
+    }
+
+    /// Ask the TNC program which audio devices it can open, whenever the
+    /// program or the audio system changes, and collect the answer.
+    fn refresh_devices(&mut self) {
+        if let Some(rx) = &self.devices_rx
+            && let Ok(r) = rx.try_recv()
+        {
+            self.devices_rx = None;
+            match r {
+                Ok((cap, play)) => {
+                    self.status.tnc.capture_devices = cap;
+                    self.status.tnc.playback_devices = play;
+                }
+                Err(e) => {
+                    self.status.tnc.capture_devices.clear();
+                    self.status.tnc.playback_devices.clear();
+                    tracing::warn!("listing the TNC's audio devices: {e}");
+                }
+            }
+        }
+        let m = &self.cfg.vara.managed;
+        let want = (!m.exe.trim().is_empty()).then(|| (m.exe.trim().to_string(), m.audio));
+        if want == self.devices_for {
+            return;
+        }
+        self.devices_for = want.clone();
+        self.status.tnc.capture_devices.clear();
+        self.status.tnc.playback_devices.clear();
+        let Some((exe, audio)) = want else { return };
+        let (tx, rx) = bounded(1);
+        self.devices_rx = Some(rx);
+        let _ = std::thread::Builder::new().name("winlink-tnc-devices".into()).spawn(move || {
+            let _ = tx.send(crate::tnc_process::list_devices(&exe, audio));
+        });
+    }
+
+    /// True while a VARA TNC may key the transmitter on our behalf: a session
+    /// is running, or the TNC is on watch and would answer a call.
+    pub fn vara_active(&self) -> bool {
+        self.busy.load(Ordering::SeqCst) || self.listener.is_some()
+    }
+
+    /// Start, restart or stop the peer-to-peer listener to match the settings.
+    ///
+    /// Never while a session of ours is running (the TNC is busy with it), and
+    /// never without a callsign to listen as.
+    fn sync_listener(&mut self) {
+        let v = &self.cfg.vara;
+        let mycall = self.cfg.callsign.trim().to_uppercase();
+        let want = v.listen && !mycall.is_empty();
+        let key =
+            (v.address.trim().to_string(), mycall.clone(), v.bandwidth.map(|b| b.hz()), v.key_ptt);
+        if let Some(l) = &self.listener {
+            // A running listener is kept while the settings stand — including
+            // while it is busy answering a call, which is its own session.
+            let same = l.key == key && !l.handle.is_finished();
+            if want && same {
+                return;
+            }
+            if let Some(l) = self.listener.take() {
+                l.stop.store(true, Ordering::SeqCst);
+            }
+            self.status.listening = false;
+        }
+        // A new one only when the TNC is free — our own call has it otherwise —
+        // and, when sdroxide runs the TNC, once that has said it is up.
+        if !want || self.busy.load(Ordering::SeqCst) || self.tnc_not_ready().is_some() {
+            return;
+        }
+        let stop = Arc::new(AtomicBool::new(false));
+        let how = VaraListen { address: key.0.clone(), mycall, bandwidth_hz: key.2 };
+        let ctx = ListenCtx {
+            how,
+            ptt: key.3.then(|| self.ptt_tx.clone()),
+            stop: Arc::clone(&stop),
+            busy: Arc::clone(&self.busy),
+            done_tx: self.done_tx.clone(),
+            root: self.root.clone(),
+            session: SessionConfig {
+                callsign: self.cfg.callsign.trim().to_uppercase(),
+                password: String::new(),
+                locator: self.cfg.locator.clone(),
+                app_name: self.cfg.app_name.clone(),
+                app_version: env!("CARGO_PKG_VERSION").to_string(),
+                target_call: String::new(),
+            },
+        };
+        match std::thread::Builder::new()
+            .name("sdroxide-winlink-listen".into())
+            .spawn(move || listen_loop(ctx))
+        {
+            Ok(handle) => self.listener = Some(Listener { stop, handle, key }),
+            Err(e) => self.status.last_error = Some(format!("starting the VARA listener: {e}")),
+        }
     }
 
     pub fn config(&self) -> &WinlinkConfig {
@@ -202,6 +494,11 @@ impl WinlinkManager {
         if self.busy.load(Ordering::SeqCst) {
             return Err("a Winlink session is already running".into());
         }
+        if matches!(route, WinlinkRoute::Vara { .. })
+            && let Some(why) = self.tnc_not_ready()
+        {
+            return Err(why);
+        }
         if !self.cfg.is_usable() {
             // Names the APPLY button on purpose: the settings tab keeps edits
             // in a scratch copy until it is pressed, so an account can be typed
@@ -215,10 +512,15 @@ impl WinlinkManager {
         // Take a snapshot of the outbox now. The worker gets owned data and
         // never touches the mailbox, so the engine stays free to serve reads
         // while a session runs.
-        let outbound: Vec<Message> = self
+        let mut outbound: Vec<Message> = self
             .mailbox
             .list(MailFolder::Outbox)
             .map_err(|e| format!("reading the outbox: {e}"))?;
+        // A peer is not a gateway: it can take mail for itself, not forward
+        // the rest to the internet.
+        if let WinlinkRoute::Vara { p2p: true, gateway, .. } = &route {
+            outbound.retain(|m| addressed_to(m, gateway));
+        }
 
         // Fail before spawning anything when the radio cannot carry it. The
         // alternative — a worker that starts and immediately reports failure —
@@ -260,6 +562,14 @@ impl WinlinkManager {
         self.cancel.store(false, Ordering::SeqCst);
         let cancel = Arc::clone(&self.cancel);
 
+        // The TNC is ours for the call: stop listening, and let the worker wait
+        // for the listener to let go of the ports before it dials.
+        let listener = self.listener.take().map(|l| {
+            l.stop.store(true, Ordering::SeqCst);
+            l.handle
+        });
+        self.status.listening = false;
+
         busy.store(true, Ordering::SeqCst);
         self.status.busy = true;
         self.status.activity = match &route {
@@ -272,6 +582,9 @@ impl WinlinkManager {
         let spawned =
             std::thread::Builder::new().name("sdroxide-winlink".into()).spawn(move || {
                 let mut guard = SessionGuard { busy, done_tx, outcome: None };
+                if let Some(h) = listener {
+                    let _ = h.join();
+                }
                 let mut outcome = SessionOutcome::default();
                 let err = run_session(&route, port, ptt, &cancel, &cfg, &outbound, &mut outcome);
                 guard.outcome = Some((Box::new(outcome), err));
@@ -297,6 +610,11 @@ impl WinlinkManager {
             return;
         }
         self.cancel.store(true, Ordering::SeqCst);
+        // An answered peer-to-peer session is the listener's; stopping it
+        // aborts that session, and the listener is restarted afterwards.
+        if let Some(l) = &self.listener {
+            l.stop.store(true, Ordering::SeqCst);
+        }
         self.status.activity = "stopping…".into();
     }
 
@@ -305,8 +623,26 @@ impl WinlinkManager {
     ///
     /// Returns `true` when the status changed and should be republished.
     pub fn poll(&mut self) -> bool {
+        // A listener that has stopped (aborted, or its TNC went away for good)
+        // is restarted here if the settings still want one.
+        let mut changed = self.listener.as_ref().is_some_and(|l| l.handle.is_finished());
+        if changed {
+            self.listener = None;
+            self.status.listening = false;
+        }
+        let tnc_before = self.status.tnc.clone();
+        self.sync_tnc();
+        changed |= self.status.tnc != tnc_before;
+        self.sync_listener();
         let outcome = match self.done_rx.try_recv() {
             Ok(Done::Session(outcome, err)) => (outcome, err),
+            Ok(Done::Listener { listening, activity }) => {
+                self.status.listening = listening && self.listener.is_some();
+                if let Some(a) = activity {
+                    self.status.activity = a;
+                }
+                return true;
+            }
             Err(TryRecvError::Empty) => {
                 // Belt and braces for the bug that started this: a worker that
                 // ends without publishing leaves the window saying "calling …"
@@ -323,9 +659,9 @@ impl WinlinkManager {
                     }
                     return true;
                 }
-                return false;
+                return changed;
             }
-            Err(TryRecvError::Disconnected) => return false,
+            Err(TryRecvError::Disconnected) => return changed,
         };
         let (outcome, err) = outcome;
 
@@ -484,14 +820,22 @@ fn run_session(
                 Err(e) => Some(e.to_string()),
             }
         }
-        WinlinkRoute::Vara { address, gateway, bandwidth_hz, .. } => {
+        WinlinkRoute::Vara { address, gateway, bandwidth_hz, p2p, busy_wait_s, .. } => {
             let dial = VaraDial {
                 address: address.clone(),
                 mycall: cfg.callsign.clone(),
                 gateway: gateway.clone(),
                 bandwidth_hz: *bandwidth_hz,
                 timeout: VARA_DIAL_TIMEOUT,
+                p2p: *p2p,
+                busy_wait: Duration::from_secs(u64::from(*busy_wait_s)),
             };
+            if *p2p {
+                outcome.log.push(format!(
+                    "· peer-to-peer: offering the {} message(s) addressed to {gateway}",
+                    outbound.len()
+                ));
+            }
             outcome.log.push(format!("> calling {gateway} by VARA through the TNC at {address}"));
             let mut transport = match VaraTransport::connect(&dial, Arc::clone(cancel), ptt) {
                 Ok(t) => t,
@@ -509,6 +853,91 @@ fn run_session(
             }
         }
     }
+}
+
+impl Drop for WinlinkManager {
+    /// A listener must not outlive the manager that would file its mail.
+    fn drop(&mut self) {
+        if let Some(l) = self.listener.take() {
+            l.stop.store(true, Ordering::SeqCst);
+        }
+    }
+}
+
+/// What the listener thread needs.
+struct ListenCtx {
+    how: VaraListen,
+    ptt: Option<Sender<bool>>,
+    stop: Arc<AtomicBool>,
+    busy: Arc<AtomicBool>,
+    done_tx: Sender<Done>,
+    root: PathBuf,
+    session: SessionConfig,
+}
+
+/// How long to wait before trying a TNC that refused us again.
+const LISTEN_RETRY: Duration = Duration::from_secs(10);
+
+/// Keep the TNC on watch and answer whoever calls, until told to stop.
+fn listen_loop(ctx: ListenCtx) {
+    let note = |listening: bool, activity: Option<String>| {
+        let _ = ctx.done_tx.send(Done::Listener { listening, activity });
+    };
+    let pause = |d: Duration| {
+        let end = std::time::Instant::now() + d;
+        while std::time::Instant::now() < end && !ctx.stop.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(200));
+        }
+    };
+    while !ctx.stop.load(Ordering::SeqCst) {
+        let mut t = match VaraTransport::listen(&ctx.how, Arc::clone(&ctx.stop), ctx.ptt.clone()) {
+            Ok(t) => t,
+            Err(e) => {
+                note(false, Some(format!("not listening for VARA calls: {e}")));
+                pause(LISTEN_RETRY);
+                continue;
+            }
+        };
+        note(true, Some(String::new()));
+        let caller = match t.wait_call() {
+            Ok(c) => c,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => break,
+            Err(e) => {
+                drop(t);
+                note(false, Some(format!("not listening for VARA calls: {e}")));
+                pause(LISTEN_RETRY);
+                continue;
+            }
+        };
+        // Our own call cannot be running (it stops this thread first), so the
+        // slot is free; take it so a CONNECT pressed now is refused.
+        if ctx.busy.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            continue;
+        }
+        note(true, Some(format!("{caller} called — peer-to-peer session…")));
+        let mut guard = SessionGuard {
+            busy: Arc::clone(&ctx.busy),
+            done_tx: ctx.done_tx.clone(),
+            outcome: None,
+        };
+        let mut outcome = SessionOutcome::default();
+        outcome.log.push(format!("< {caller} called (peer-to-peer, VARA)"));
+        outcome.log.extend(t.take_log());
+        let outbound: Vec<Message> = Mailbox::open(&ctx.root)
+            .and_then(|mb| mb.list(MailFolder::Outbox))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|m| addressed_to(m, &caller))
+            .collect();
+        let cfg = SessionConfig { target_call: caller.clone(), ..ctx.session.clone() };
+        let result = session::run_master_into(&mut t, &cfg, &outbound, &mut outcome);
+        t.hang_up();
+        outcome.log.extend(t.take_log());
+        guard.outcome = Some((Box::new(outcome), result.err().map(|e| e.to_string())));
+        drop(guard);
+        drop(t);
+    }
+    note(false, None);
 }
 
 /// Metadata for a list row.
@@ -568,6 +997,221 @@ mod tests {
 
     fn config() -> WinlinkConfig {
         WinlinkConfig { callsign: "OE3JJS".into(), password: "secret".into(), ..Default::default() }
+    }
+
+    fn mail(from: &str, to: &[&str], mid: &str) -> Message {
+        Message {
+            mid: mid.into(),
+            date: "2026/11/02 12:00".into(),
+            msg_type: "Private".into(),
+            from: from.into(),
+            to: to.iter().map(|s| s.to_string()).collect(),
+            cc: vec![],
+            subject: format!("from {from}"),
+            mbo: from.into(),
+            body: "hello\r\n".into(),
+            attachments: vec![],
+        }
+    }
+
+    /// A stand-in `xara`: a shell script that says what the real one says.
+    #[cfg(unix)]
+    fn fake_xara(dir: &std::path::Path, body: &str) -> String {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::create_dir_all(dir).unwrap();
+        let exe = dir.join("xara");
+        std::fs::write(&exe, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        exe.display().to_string()
+    }
+
+    #[cfg(unix)]
+    fn managed(exe: String) -> WinlinkConfig {
+        let mut cfg = config();
+        cfg.vara.managed = sdroxide_types::ManagedTncConfig {
+            enabled: true,
+            exe,
+            capture: "in".into(),
+            playback: "out".into(),
+            ..Default::default()
+        };
+        cfg
+    }
+
+    #[cfg(unix)]
+    fn poll_until(mgr: &mut WinlinkManager, f: impl Fn(&WinlinkManager) -> bool) -> bool {
+        let end = std::time::Instant::now() + Duration::from_secs(5);
+        while std::time::Instant::now() < end {
+            mgr.poll();
+            if f(mgr) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        false
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_managed_tnc_is_started_seen_ready_and_stopped() {
+        use sdroxide_types::TncState;
+        let tmp = TempDir::new("tnc-ok");
+        let exe = fake_xara(
+            &tmp.0.join("bin"),
+            "if [ \"$1\" = --list-devices ]; then printf 'coreaudio capture:\\n  in  (Cable A)\\ncoreaudio playback:\\n  out  (Cable B)\\n'; exit 0; fi\n\
+             echo \"xara 0.1.3: $2 2300 Hz, cmd 127.0.0.1:8300 data 127.0.0.1:8301, in -> out\" >&2\nexec sleep 30",
+        );
+        let mut mgr = WinlinkManager::new(tmp.0.join("mail"), managed(exe)).unwrap();
+        mgr.set_config(mgr.cfg.clone());
+        assert!(
+            poll_until(&mut mgr, |m| m.status().tnc.state == TncState::Running),
+            "{:?}",
+            mgr.status().tnc
+        );
+        assert_eq!(mgr.status().tnc.version, "0.1.3");
+        assert!(poll_until(&mut mgr, |m| !m.status().tnc.capture_devices.is_empty()));
+        assert_eq!(mgr.status().tnc.capture_devices[0].desc, "Cable A");
+        assert_eq!(mgr.status().tnc.playback_devices[0].id, "out");
+
+        let mut off = mgr.cfg.clone();
+        off.vara.managed.enabled = false;
+        mgr.set_config(off);
+        assert_eq!(mgr.status().tnc.state, TncState::Off);
+        assert!(mgr.tnc.is_none(), "the process was not stopped");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_tnc_that_will_not_run_refuses_calls_and_backs_off() {
+        use sdroxide_types::TncState;
+        let tmp = TempDir::new("tnc-bad");
+        let exe = fake_xara(
+            &tmp.0.join("bin"),
+            "echo 'xara: playback: no such device \"out\"' >&2\nexit 1",
+        );
+        let mut mgr = WinlinkManager::new(tmp.0.join("mail"), managed(exe)).unwrap();
+        mgr.set_config(mgr.cfg.clone());
+        assert!(poll_until(&mut mgr, |m| m.status().tnc.state == TncState::Failed));
+        let why = mgr.status().tnc.message.clone();
+        assert!(why.contains("no such device") && why.contains("trying again"), "{why}");
+        let route = WinlinkRoute::Vara {
+            address: "127.0.0.1:8300".into(),
+            gateway: "EA5XYZ".into(),
+            bandwidth_hz: None,
+            key_ptt: true,
+            p2p: false,
+            busy_wait_s: 0,
+        };
+        let e = mgr.connect(route).unwrap_err();
+        assert!(e.contains("not running"), "{e}");
+        // Backing off: not restarted on every poll.
+        assert!(mgr.tnc.is_none());
+        assert!(mgr.tnc_retry_at.is_some());
+    }
+
+    #[test]
+    fn a_remote_tnc_address_cannot_be_managed() {
+        let mut cfg = config();
+        cfg.vara.address = "10.0.0.5:8300".into();
+        cfg.vara.managed = sdroxide_types::ManagedTncConfig {
+            enabled: true,
+            exe: "/x/xara".into(),
+            capture: "a".into(),
+            playback: "b".into(),
+            ..Default::default()
+        };
+        let tmp = TempDir::new("tnc-remote");
+        let mut mgr = WinlinkManager::new(&tmp.0, cfg).unwrap();
+        mgr.set_config(mgr.cfg.clone());
+        assert_eq!(mgr.status().tnc.state, sdroxide_types::TncState::Failed);
+        assert!(mgr.status().tnc.message.contains("local"), "{}", mgr.status().tnc.message);
+    }
+
+    #[test]
+    fn peer_mail_is_matched_on_the_operator_not_the_station() {
+        let m = mail("EA5ABC", &["ea5qqq-7", "SMTP:x@example.org"], "M1");
+        assert!(addressed_to(&m, "EA5QQQ"));
+        assert!(addressed_to(&m, "EA5QQQ-10"));
+        assert!(!addressed_to(&m, "EA5QQ"));
+        assert!(addressed_to(&mail("A", &["EA5QQQ@winlink.org"], "M2"), "EA5QQQ"));
+        assert!(!addressed_to(&mail("A", &["SMTP:x@example.org"], "M3"), "EA5QQQ"));
+    }
+
+    /// A peer calls in while the manager is listening: its message is filed,
+    /// and the one waiting for it — and only that one — goes out.
+    #[test]
+    fn a_listening_manager_answers_a_peer_and_swaps_mail() {
+        use std::io::Write;
+        let tmp = TempDir::new("listen");
+        let tnc = crate::vara::tests::fake_tnc(crate::vara::tests::gateway_answers);
+        let mut cfg = config();
+        cfg.callsign = "EA5ABC".into();
+        cfg.vara.address = tnc.addr.clone();
+        cfg.vara.listen = true;
+        let mut mgr = WinlinkManager::new(&tmp.0, cfg).unwrap();
+        // Two in the outbox: one for the caller, one for the internet.
+        mgr.mailbox.put(MailFolder::Outbox, &mail("EA5ABC", &["EA5QQQ"], "FORTHEPEER01")).unwrap();
+        mgr.mailbox
+            .put(MailFolder::Outbox, &mail("EA5ABC", &["SMTP:a@b.c"], "FORTHECMS001"))
+            .unwrap();
+        mgr.set_config(mgr.cfg.clone());
+        assert!(mgr.vara_active(), "listening counts as a TNC that may key");
+
+        let wait = |mgr: &mut WinlinkManager, what: &str, f: &dyn Fn(&WinlinkManager) -> bool| {
+            let end = std::time::Instant::now() + Duration::from_secs(10);
+            while std::time::Instant::now() < end {
+                mgr.poll();
+                if f(mgr) {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            panic!("timed out waiting for {what}: {:?}", mgr.status());
+        };
+        wait(&mut mgr, "listening", &|m| m.status().listening);
+        assert!(tnc.got.try_iter().any(|l| l == "LISTEN ON"));
+
+        // The peer's link comes up; it runs a client session over the air.
+        let mut cmd = tnc.cmd_peer.recv_timeout(Duration::from_secs(2)).unwrap();
+        let mut air = tnc.data_peer.recv_timeout(Duration::from_secs(2)).unwrap();
+        cmd.write_all(b"CONNECTED EA5QQQ EA5ABC 2300\r").unwrap();
+        let peer = std::thread::spawn(move || {
+            // Slow on purpose, so the manager is polled while its listener is
+            // mid-session — the engine polls every tick, and an early version
+            // stopped the listener (aborting its own session) on seeing busy.
+            std::thread::sleep(Duration::from_millis(600));
+            let cfg = SessionConfig {
+                callsign: "EA5QQQ".into(),
+                target_call: "EA5ABC".into(),
+                app_name: "peer".into(),
+                app_version: "1".into(),
+                ..Default::default()
+            };
+            crate::session::run(&mut air, &cfg, &[mail("EA5QQQ", &["EA5ABC"], "FROMTHEPEER1")])
+        });
+        while !peer.is_finished() {
+            mgr.poll();
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let got = peer.join().unwrap().expect("the peer's session completes");
+        assert_eq!(
+            got.received.iter().map(|m| m.mid.as_str()).collect::<Vec<_>>(),
+            ["FORTHEPEER01"]
+        );
+        assert_eq!(got.sent, ["FROMTHEPEER1"]);
+
+        wait(&mut mgr, "the answered session to be filed", &|m| m.status().last_received == 1);
+        assert!(mgr.mailbox.contains(MailFolder::Inbox, "FROMTHEPEER1"));
+        assert!(mgr.mailbox.contains(MailFolder::Sent, "FORTHEPEER01"));
+        assert!(
+            mgr.mailbox.contains(MailFolder::Outbox, "FORTHECMS001"),
+            "internet mail went to a peer"
+        );
+        assert!(
+            mgr.status().log.iter().any(|l| l.contains("EA5QQQ called")),
+            "{:?}",
+            mgr.status().log
+        );
     }
 
     fn draft() -> MailDraft {

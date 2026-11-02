@@ -3189,6 +3189,15 @@ struct Engine {
     /// link. `vara_tx_since` is when it keyed, for the watchdog.
     vara_tx: bool,
     vara_tx_since: Option<Instant>,
+    /// The operator has been told once that the TNC's PTT is being ignored
+    /// because of the mode; reset when a key-up is honoured.
+    vara_mode_warned: bool,
+    /// The VARA TNC sdroxide runs is up and keys the radio through the rigctld
+    /// server — for Pat or any other program using it, not only our Winlink.
+    /// A PTT that arrives that way is indistinguishable from the operator's,
+    /// so in a data mode (DIGU/DIGL) the over is taken to be the TNC's and
+    /// skips the voice chain like `vara_tx`; in a voice mode it does not.
+    tnc_rigctld: bool,
     /// Consecutive short TX blocks this over, for the dead-client unkey.
     tci_tx_starved: u32,
     /// How the keying TCI client is being asked for transmit audio — see
@@ -4560,6 +4569,8 @@ fn engine_thread(
         tci_tx: false,
         vara_tx: false,
         vara_tx_since: None,
+        vara_mode_warned: false,
+        tnc_rigctld: false,
         tci_tx_starved: 0,
         tci_pace: TciTxPace::default(),
         tci_tx_drain: false,
@@ -10178,6 +10189,8 @@ impl Engine {
                             gateway: c.vara.gateway.trim().to_uppercase(),
                             bandwidth_hz: c.vara.bandwidth.map(|b| b.hz()),
                             key_ptt: c.vara.key_ptt,
+                            p2p: c.vara.p2p,
+                            busy_wait_s: c.vara.busy_wait_s,
                         }
                     }
                 };
@@ -13435,13 +13448,28 @@ impl Engine {
             }
         }
         let Some(wl) = self.winlink.as_mut() else { return };
+        // The TNC sdroxide runs can key through our rigctld server; it needs
+        // the address, which is this machine's whatever the server binds.
+        wl.set_rigctld(
+            self.rigctld_cfg.enabled.then(|| format!("127.0.0.1:{}", self.rigctld_cfg.port)),
+        );
+        self.tnc_rigctld = wl.tnc_keys_by_rigctld();
         let ptt = wl.take_ptt();
         let changed = wl.poll();
-        let busy = wl.status().busy;
+        // Listening counts: the TNC answers a peer's call by transmitting.
+        let busy = wl.vara_active();
         if changed {
             let _ = self.event_tx.send(RadioEvent::WinlinkStatus(wl.status().clone()));
         }
         self.pump_vara_ptt(&ptt, busy);
+    }
+
+    /// The over on the air is a VARA TNC's waveform arriving on the microphone
+    /// input, not the operator's voice: keyed by the TNC's own `PTT ON`, or by
+    /// the TNC sdroxide runs through rigctld while the radio is in a data mode.
+    fn modem_audio_tx(&self) -> bool {
+        self.vara_tx
+            || (self.tnc_rigctld && matches!(self.state.rx[0].mode, Mode::Digu | Mode::Digl))
     }
 
     /// Key and unkey the transmitter as a Winlink VARA TNC asks.
@@ -13458,6 +13486,27 @@ impl Engine {
             if on == self.vara_tx {
                 continue;
             }
+            // Only a voice-shaped mode transmits what is on the microphone
+            // input. In a digital mode the engine's own modem owns the
+            // transmitter, and keying it for the TNC would put that modem's
+            // over on the air instead — so the TNC's frame goes nowhere, and
+            // the operator is told why.
+            let voice = matches!(
+                self.state.rx[0].mode,
+                Mode::Usb | Mode::Lsb | Mode::Digu | Mode::Digl | Mode::Nfm
+            );
+            if on && !voice {
+                if !self.vara_mode_warned {
+                    self.vara_mode_warned = true;
+                    let _ = self.event_tx.send(RadioEvent::Notice(Some(format!(
+                        "the VARA TNC wants to transmit, but the radio is in {} — switch to DIGU \
+                         (or USB, or NFM for VARA FM)",
+                        self.state.rx[0].mode.label()
+                    ))));
+                }
+                continue;
+            }
+            self.vara_mode_warned = false;
             if on {
                 self.vara_tx = true;
                 self.vara_tx_since = Some(Instant::now());
@@ -18095,7 +18144,7 @@ impl Engine {
             return Ok(());
         }
         // A TNC's audio is a modem's too: no mic gain, no voice chain.
-        let tci_tx = self.tci_tx || self.vara_tx;
+        let tci_tx = self.tci_tx || self.modem_audio_tx();
         // Read before the chain is borrowed: it asks the *source* what ceiling
         // the converter in front of the radio imposes.
         let drive = self.tx_drive();
@@ -18425,7 +18474,7 @@ impl Engine {
             self.voice_blocks += 1;
             // A TCI client sets its own audio level; the mic-gain control is for
             // the operator's microphone and would double-scale it.
-            let gain = if self.tci_tx || self.vara_tx {
+            let gain = if self.tci_tx || self.modem_audio_tx() {
                 1.0
             } else {
                 self.state.tx.mic_gain * 2.0 * self.state.tx.voice.input_gain()
@@ -18439,7 +18488,7 @@ impl Engine {
             // Before the clamp, so a boosted band is held to full scale rather
             // than leaving here above it. Never a TCI client's audio: see
             // `apply_tx_voice`.
-            if !self.tci_tx && !self.vara_tx {
+            if !self.tci_tx && !self.modem_audio_tx() {
                 apply_tx_voice(&mut self.tx_voice, &self.state.tx.voice, &mut audio);
             }
             for a in &mut audio {

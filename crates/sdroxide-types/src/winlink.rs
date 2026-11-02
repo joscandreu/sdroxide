@@ -152,6 +152,10 @@ pub struct WinlinkStatus {
     /// The protocol transcript of the most recent session. Kept because a
     /// forwarding session that fails is unreadable without it.
     pub log: Vec<String>,
+    /// The VARA TNC is listening for peer-to-peer calls right now.
+    pub listening: bool,
+    /// The TNC sdroxide runs itself, when it does.
+    pub tnc: ManagedTncStatus,
 }
 
 /// The gateway the CMS telnet transport dials by default.
@@ -199,6 +203,226 @@ pub struct VaraTncConfig {
     /// microphone input (a virtual cable), and goes out without the voice
     /// processing a microphone gets. Off when the TNC keys a radio itself.
     pub key_ptt: bool,
+    /// The station called is a peer — another operator's Winlink client — not
+    /// an RMS gateway. The TNC is put in its peer-to-peer timing, and only
+    /// mail addressed to that station is offered: a peer cannot forward to the
+    /// internet the way a gateway does.
+    pub p2p: bool,
+    /// Answer peer-to-peer calls. While on, sdroxide keeps the TNC listening
+    /// (`LISTEN ON`) whenever no session is running, takes a caller's mail and
+    /// hands over whatever is waiting for that station.
+    pub listen: bool,
+    /// Before calling, wait up to this long for the channel to go quiet (the
+    /// TNC's `BUSY OFF`), then give up rather than transmit over another link.
+    /// Zero calls straight away.
+    pub busy_wait_s: u32,
+    /// The operator's own list of VARA gateways and peer stations.
+    pub gateways: Vec<VaraGateway>,
+    /// Have sdroxide run the TNC (xara) itself rather than expect one running.
+    pub managed: ManagedTncConfig,
+}
+
+/// Which audio system the managed TNC opens its devices through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum TncAudio {
+    /// The TNC's own default for the platform (CoreAudio on macOS, PulseAudio
+    /// elsewhere, for xara).
+    #[default]
+    Default,
+    Pulse,
+    Alsa,
+    CoreAudio,
+}
+
+impl TncAudio {
+    pub const ALL: [TncAudio; 4] =
+        [TncAudio::Default, TncAudio::Pulse, TncAudio::Alsa, TncAudio::CoreAudio];
+
+    /// The `--audio` value, or `None` for the TNC's default.
+    pub fn arg(self) -> Option<&'static str> {
+        match self {
+            TncAudio::Default => None,
+            TncAudio::Pulse => Some("pulse"),
+            TncAudio::Alsa => Some("alsa"),
+            TncAudio::CoreAudio => Some("coreaudio"),
+        }
+    }
+}
+
+/// What the managed TNC runs: VARA HF at a bandwidth, or VARA FM.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum TncMode {
+    Hf500,
+    #[default]
+    Hf2300,
+    Hf2750,
+    FmNarrow,
+    FmWide,
+}
+
+impl TncMode {
+    pub const ALL: [TncMode; 5] =
+        [TncMode::Hf500, TncMode::Hf2300, TncMode::Hf2750, TncMode::FmNarrow, TncMode::FmWide];
+
+    /// The command-line pair that selects it: `--hf 2300`, `--fm narrow`.
+    pub fn args(self) -> [&'static str; 2] {
+        match self {
+            TncMode::Hf500 => ["--hf", "500"],
+            TncMode::Hf2300 => ["--hf", "2300"],
+            TncMode::Hf2750 => ["--hf", "2750"],
+            TncMode::FmNarrow => ["--fm", "narrow"],
+            TncMode::FmWide => ["--fm", "wide"],
+        }
+    }
+
+    pub fn is_fm(self) -> bool {
+        matches!(self, TncMode::FmNarrow | TncMode::FmWide)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TncMode::Hf500 => "HF 500",
+            TncMode::Hf2300 => "HF 2300",
+            TncMode::Hf2750 => "HF 2750",
+            TncMode::FmNarrow => "FM narrow",
+            TncMode::FmWide => "FM wide",
+        }
+    }
+}
+
+/// How the managed TNC keys the transmitter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum TncPtt {
+    /// The TNC says `PTT ON`/`PTT OFF` and sdroxide's Winlink session or
+    /// listener keys the radio (`--ptt vox` on the TNC). Only while sdroxide
+    /// itself is the TNC's host.
+    #[default]
+    Notices,
+    /// The TNC keys sdroxide through its built-in rigctld server, so any
+    /// program using the TNC — Pat, LinBPQ, VarAC — transmits too.
+    Rigctld,
+}
+
+/// sdroxide running the VARA TNC (xara) as a child process.
+///
+/// The program is the operator's own build: sdroxide only starts it with the
+/// command line these settings describe, watches it, and restarts it if it
+/// stops. It listens on the VARA route's address (which must be this machine).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ManagedTncConfig {
+    pub enabled: bool,
+    /// Full path to `xara` on the machine with the radio.
+    pub exe: String,
+    pub audio: TncAudio,
+    /// What the TNC hears: the virtual cable sdroxide's audio output feeds.
+    pub capture: String,
+    /// What the TNC sends: the virtual cable sdroxide's microphone input reads.
+    pub playback: String,
+    pub mode: TncMode,
+    pub ptt: TncPtt,
+    /// PTT lead: how long the transmitter has to come up before the frame.
+    pub ptt_lead_ms: u32,
+    /// The TNC's transmit drive, dB (≤ 0).
+    pub drive_db: f32,
+    /// Also serve KISS on this port; 0 leaves it off.
+    pub kiss_port: u16,
+    /// Further arguments, appended as they are.
+    pub extra_args: String,
+}
+
+impl Default for ManagedTncConfig {
+    fn default() -> Self {
+        ManagedTncConfig {
+            enabled: false,
+            exe: String::new(),
+            audio: TncAudio::Default,
+            capture: String::new(),
+            playback: String::new(),
+            mode: TncMode::Hf2300,
+            ptt: TncPtt::Notices,
+            ptt_lead_ms: 50,
+            drive_db: -5.0,
+            kiss_port: 0,
+            extra_args: String::new(),
+        }
+    }
+}
+
+/// Where the managed TNC is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum TncState {
+    /// Not enabled.
+    #[default]
+    Off,
+    /// Started; waiting for it to say its ports are open.
+    Starting,
+    Running,
+    /// Could not start, or stopped; `message` says why. Retried after a pause
+    /// unless the settings are what is wrong.
+    Failed,
+}
+
+/// One audio device the TNC can open, as it lists them.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct TncDevice {
+    /// What goes on the command line.
+    pub id: String,
+    /// What it is called, when that differs from the id.
+    pub desc: String,
+}
+
+/// The managed TNC's state, for the settings and the MAIL window.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ManagedTncStatus {
+    pub state: TncState,
+    /// From its start-up line, e.g. `0.1.3`.
+    pub version: String,
+    /// Why it is not running, or the last thing it said.
+    pub message: String,
+    /// The devices it can open, from `--list-devices`, for the pickers.
+    pub capture_devices: Vec<TncDevice>,
+    pub playback_devices: Vec<TncDevice>,
+}
+
+/// A VARA gateway or peer station the operator has written down.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VaraGateway {
+    /// Callsign with SSID, e.g. `EA5XYZ-10`.
+    pub callsign: String,
+    /// The bandwidth it runs; `None` leaves the TNC's own (VARA FM).
+    pub bandwidth: Option<crate::VaraBandwidth>,
+    /// Where it listens. Zero leaves the dial alone.
+    pub freq_hz: f64,
+    /// A peer station rather than an RMS gateway.
+    pub p2p: bool,
+    /// Free text — "Valencia, 24/7".
+    pub label: String,
+}
+
+impl VaraTncConfig {
+    /// Make the `i`th saved entry the one the next connect calls — every field
+    /// it knows about itself, not just the name. Out of range does nothing.
+    pub fn select_gateway(&mut self, i: usize) {
+        let Some(g) = self.gateways.get(i).cloned() else { return };
+        self.gateway = g.callsign;
+        self.bandwidth = g.bandwidth;
+        self.freq_hz = g.freq_hz;
+        self.p2p = g.p2p;
+    }
+
+    /// The entry the fields above describe, for saving to the list.
+    pub fn current_entry(&self) -> VaraGateway {
+        VaraGateway {
+            callsign: self.gateway.trim().to_uppercase(),
+            bandwidth: self.bandwidth,
+            freq_hz: self.freq_hz,
+            p2p: self.p2p,
+            label: String::new(),
+        }
+    }
 }
 
 impl Default for VaraTncConfig {
@@ -209,6 +433,11 @@ impl Default for VaraTncConfig {
             bandwidth: Some(crate::VaraBandwidth::Hz2300),
             freq_hz: 0.0,
             key_ptt: true,
+            p2p: false,
+            listen: false,
+            busy_wait_s: 30,
+            gateways: Vec::new(),
+            managed: ManagedTncConfig::default(),
         }
     }
 }
@@ -374,6 +603,33 @@ mod tests {
         assert!(cfg.vara.key_ptt);
         let cfg: WinlinkConfig = serde_json::from_str(r#"{"lane":"Vara"}"#).unwrap();
         assert_eq!(cfg.lane, WinlinkLane::Vara);
+    }
+
+    #[test]
+    fn selecting_a_vara_entry_takes_all_it_knows() {
+        let mut v = VaraTncConfig {
+            gateways: vec![
+                VaraGateway {
+                    callsign: "EA5XYZ-10".into(),
+                    bandwidth: Some(crate::VaraBandwidth::Hz2750),
+                    freq_hz: 14_105_000.0,
+                    p2p: false,
+                    label: "RMS".into(),
+                },
+                VaraGateway { callsign: "EA5QQQ".into(), p2p: true, ..Default::default() },
+            ],
+            ..Default::default()
+        };
+        v.select_gateway(0);
+        assert_eq!(v.gateway, "EA5XYZ-10");
+        assert_eq!(v.bandwidth, Some(crate::VaraBandwidth::Hz2750));
+        assert!(!v.p2p);
+        v.select_gateway(1);
+        assert_eq!(v.gateway, "EA5QQQ");
+        assert_eq!((v.bandwidth, v.freq_hz, v.p2p), (None, 0.0, true));
+        let before = v.clone();
+        v.select_gateway(9);
+        assert_eq!(v, before);
     }
 
     #[test]

@@ -115,7 +115,9 @@ One binary, three ways to run it:
   and the session transcript when something goes wrong. Over the internet CMS,
   AX.25 packet to RMS Packet gateways, and (beta) VARA HF/FM gateways through an
   external VARA-compatible TNC — your own xara or VARA, driven over its TCP
-  ports, with sdroxide keying from the TNC's PTT. ARDOP is still to come.
+  ports, with sdroxide keying from the TNC's PTT — including peer-to-peer
+  sessions, both calling and answering — and sdroxide can start and watch
+  xara for you. ARDOP is still to come.
 - **Bandplan overlay** — a colour-coded strip along the bottom of the waterfall
   that labels allocations (ham bands, broadcast, CB, AM); it shows coarse bands
   when zoomed out and CW/digital/SSB sub-segments when zoomed into a ham band.

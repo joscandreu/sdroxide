@@ -15202,7 +15202,8 @@ can be:
 
 - **xara** — an independent, MIT-licensed VARA-compatible modem for Linux, macOS
   and FreeBSD ([github.com/x0rro/xara](https://github.com/x0rro/xara)). You
-  build and run it yourself; sdroxide neither ships it nor starts it.
+  build it yourself. sdroxide does not ship it, but it can run it for you (see
+  *Letting sdroxide run xara* below).
 - **VARA** itself, on a Windows machine, reached over the network.
 
 Which program you use, which version, and how it is built are your decisions.
@@ -15232,7 +15233,7 @@ a session ends keyed, or if the TNC holds the transmitter for more than 30
 seconds, which no VARA frame does. Untick the box when the TNC keys a different
 radio itself.
 
-A typical xara command line on the same Mac:
+A typical xara command line on the same Mac, if you run it yourself:
 
 ```
 xara --call EA5ABC --hf 2300 --audio coreaudio \
@@ -15260,6 +15261,93 @@ Press **APPLY**, then **CONNECT** in the MAIL window. The session transcript
 `CONNECTED`, speed changes and the hang-up. **ABORT** stops a call in progress
 and hangs up a link gracefully. VARA sends what it still holds before it
 disconnects.
+
+**Letting sdroxide run xara.** Rather than start xara in a terminal and keep it
+running, tick **sdroxide starts and watches the xara TNC** under the VARA route.
+sdroxide then starts your copy of xara with the settings in that section, on
+the **TNC** address above (it has to be this machine, `127.0.0.1:8300`), with the
+Winlink callsign. It restarts xara when you change a setting and press
+**APPLY**, and stops it when you untick the box or quit. If xara stops on its
+own, sdroxide shows its last words and tries again after 5 seconds, then 10,
+20, up to a minute between tries. CONNECT and the peer-to-peer listener wait
+until xara reports that its ports are open.
+
+- **Program** — the full path to `xara` (from `cargo install`, usually
+  `~/.cargo/bin/xara`).
+- **Audio system** — xara's default (CoreAudio on macOS, PulseAudio on Linux and
+  FreeBSD), or PulseAudio, ALSA or CoreAudio by name.
+- **Capture** and **Playback** — once the program is set, sdroxide asks xara which
+  devices it can open, and offers them in the pickers. The text field takes any
+  name it did not list. Capture is the cable sdroxide's audio output plays into;
+  playback is the cable sdroxide's microphone input listens to. They must be two
+  different cables, or xara hears itself.
+- **Modem** — HF 500, 2300 or 2750 Hz, or FM narrow or wide.
+- **Keying** — *Through sdroxide's Winlink* runs xara with `--ptt vox`, and
+  sdroxide keys on xara's `PTT ON`/`PTT OFF` while its own Winlink session or
+  listener is connected. This is the simplest choice, but nothing else can
+  transmit through xara. *rigctld (any program)* runs xara with
+  `--ptt rigctld:127.0.0.1:<port>`, so xara keys sdroxide through its built-in
+  rigctld server (turn that on in **Settings**). Pat, LinBPQ or VarAC connected
+  to xara's ports then transmit too. Those overs, in DIGU, skip the TX Audio
+  chain as the Winlink ones do.
+- **PTT lead**, **Drive**, **KISS port** (0 leaves it off) and **Extra
+  arguments** are passed to xara as given. sdroxide never adds `--registered`.
+
+The audio cables are yours to create. sdroxide does not change your system's
+audio setup.
+
+- **macOS:** install BlackHole 2ch and BlackHole 16ch. Set sdroxide's audio
+  output to BlackHole 2ch and its microphone to BlackHole 16ch. xara's capture
+  is `BlackHole2ch_UID` and its playback `BlackHole16ch_UID`.
+- **Linux (PulseAudio or PipeWire):** create two null sinks, for example in a
+  start-up script:
+
+  ```
+  pactl load-module module-null-sink sink_name=vara_rx sink_properties=device.description=VARA-RX
+  pactl load-module module-null-sink sink_name=vara_tx sink_properties=device.description=VARA-TX
+  ```
+
+  Then set sdroxide's output to **VARA-RX** and its microphone to **Monitor of
+  VARA-TX**. Set the audio system to *pulse*, xara's capture to `vara_rx.monitor`
+  and its playback to `vara_tx`.
+- **Windows:** xara does not run on Windows. Use VARA, or xara on another
+  machine, and leave this off.
+
+The MAIL window says when xara is starting or has stopped, and why.
+
+**A busy channel.** VARA's busy detector says when it hears another signal in
+the passband. Before calling, sdroxide waits up to **Busy wait** seconds (30 by
+default) for the channel to clear. If it does not clear, sdroxide gives up with
+"the channel stayed busy" rather than transmitting over someone else's link. The
+wait shows in the transcript. Set it to zero to call straight away.
+
+**My VARA gateways and stations.** As for packet, you keep your own list. Type a
+callsign, choose its bandwidth, frequency and whether it is a peer, and press
+**+ ADD GATEWAY**. **USE** loads everything an entry knows. Saving a callsign
+that is already listed updates that entry rather than adding it twice.
+
+**Peer-to-peer.** Winlink also works station to station, with no gateway and
+no internet. This is how Winlink Express "Vara P2P" sessions work, and it is
+useful in emergency communications.
+
+- **To call a station**, tick **Peer-to-peer: the station called is not a
+  gateway** (or USE a saved entry marked *(peer)*) and CONNECT. The TNC switches
+  to VARA's peer-to-peer timing. Only the messages **addressed to that station**
+  are offered; the rest of the outbox waits for a gateway, which can forward to
+  the internet where a peer cannot. The match is on the callsign without SSID,
+  so mail to `EA5XYZ` goes to `EA5XYZ-7` too.
+- **To be called**, tick **Answer peer-to-peer calls**. Whenever no session is
+  running, sdroxide keeps the TNC listening, and the MAIL window says *Listening
+  for VARA peer-to-peer calls*. When a station calls, sdroxide answers. It
+  takes the caller's messages into the inbox and hands over the ones addressed to
+  that caller, again only those. The session shows in **LOG** like any other,
+  starting with who called. Afterwards it goes back to listening. CONNECT still
+  works while listening: the listener steps aside for your call and returns
+  after it. ABORT during an answered session ends it, and listening resumes.
+
+Answering means transmitting, so it only reaches the air while the radio is in
+DIGU (or USB, or NFM for VARA FM). In any other mode the TNC's request to
+transmit is ignored, and sdroxide says so once.
 
 ### Choosing a gateway
 

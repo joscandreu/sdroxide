@@ -327,7 +327,8 @@ pub use wefax::{
 };
 pub use winlink::{
     DEFAULT_CMS_ADDRESS, DEFAULT_VARA_TNC, MAIL_PAGE_MAX, MailAttachment, MailDraft, MailEntry,
-    MailFolder, MailListing, MailMessage, VaraTncConfig, WinlinkConfig, WinlinkGateway,
+    MailFolder, MailListing, MailMessage, ManagedTncConfig, ManagedTncStatus, TncAudio, TncDevice,
+    TncMode, TncPtt, TncState, VaraGateway, VaraTncConfig, WinlinkConfig, WinlinkGateway,
     WinlinkLane, WinlinkStatus,
 };
 pub use wsjtx::{CwTextConfig, N1mmConfig, WsjtxConfig};

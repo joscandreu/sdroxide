@@ -11,6 +11,9 @@
 //! turn order inverts and **we** propose first. Getting that second half
 //! backwards deadlocks against the real server while every self-consistent
 //! test fixture still passes — see [`run_into`].
+//!
+//! [`run_master_into`] is the other side, for a peer-to-peer call we answer:
+//! we open the handshake and the caller proposes first.
 
 use std::io::{Read, Write};
 
@@ -19,6 +22,9 @@ use crate::message::Message;
 use crate::secure;
 
 /// Who we are and how to authenticate.
+///
+/// `Clone` but not `Debug`: it holds the account password.
+#[derive(Clone)]
 pub struct SessionConfig {
     pub callsign: String,
     /// The Winlink *account* password, for the `;PQ:` challenge. Not the
@@ -99,11 +105,18 @@ pub enum SessionError {
 struct Wire<'a, T: Read + Write> {
     io: &'a mut T,
     buf: Vec<u8>,
+    /// A line read ahead and given back, for the next [`Wire::read_line`].
+    unread: Option<String>,
 }
 
 impl<'a, T: Read + Write> Wire<'a, T> {
     fn new(io: &'a mut T) -> Self {
-        Wire { io, buf: Vec::with_capacity(4096) }
+        Wire { io, buf: Vec::with_capacity(4096), unread: None }
+    }
+
+    /// Give a line back: the next `read_line` returns it again.
+    fn unread_line(&mut self, line: String) {
+        self.unread = Some(line);
     }
 
     /// Pull more bytes in. `false` at clean end of stream.
@@ -120,6 +133,9 @@ impl<'a, T: Read + Write> Wire<'a, T> {
     /// Read one line, without its terminator. Blank lines are skipped: the CMS
     /// pads with them and they carry no meaning.
     fn read_line(&mut self) -> Result<String, SessionError> {
+        if let Some(line) = self.unread.take() {
+            return Ok(line);
+        }
         loop {
             if let Some(pos) = self.buf.iter().position(|&b| b == b'\r' || b == b'\n') {
                 let line: Vec<u8> = self.buf.drain(..=pos).collect();
@@ -235,6 +251,90 @@ pub fn run_into<T: Read + Write>(
     }
 
     Ok(())
+}
+
+/// Answer a peer-to-peer call: the same exchange as [`run_into`] from the
+/// other chair.
+///
+/// The station that answers is the B2F *master*. It opens: our forwarding
+/// line, our SID and a comment line ending in the `>` prompt — no secure
+/// challenge, which belongs to the CMS. The caller answers with its own
+/// handshake and then **it** proposes first, so our first turn is inbound.
+/// `cfg.target_call` is the caller; `cfg.password` is not used.
+pub fn run_master_into<T: Read + Write>(
+    io: &mut T,
+    cfg: &SessionConfig,
+    outbound: &[Message],
+    out: &mut SessionOutcome,
+) -> Result<(), SessionError> {
+    let mut wire = Wire::new(io);
+
+    send_line(&mut wire, &format!(";FW: {}", cfg.callsign), out)?;
+    send_line(&mut wire, &Sid::local(&cfg.app_name, &cfg.app_version), out)?;
+    send_line(
+        &mut wire,
+        &format!("; {} DE {} ({})>", cfg.target_call, cfg.callsign, cfg.locator),
+        out,
+    )?;
+    read_caller_handshake(&mut wire, out)?;
+
+    let mut pending: Vec<(Message, Vec<u8>)> =
+        outbound.iter().map(|m| (m.clone(), crate::compress(&m.encode()))).collect();
+
+    // The caller's move first: the mirror of `run_into`'s `my_turn = true`.
+    let mut my_turn = false;
+    let mut quit_sent = false;
+    let mut quit_received = false;
+    let mut remote_no_msgs = false;
+    while !quit_sent && !quit_received {
+        if my_turn {
+            quit_sent = handle_outbound(&mut wire, &mut pending, remote_no_msgs, out)?;
+        } else {
+            match handle_inbound(&mut wire, out) {
+                Ok(Inbound::NoMore) => remote_no_msgs = true,
+                Ok(Inbound::Received) => remote_no_msgs = false,
+                Ok(Inbound::Quit) => quit_received = true,
+                Err(SessionError::Disconnected) => break,
+                Err(e) => return Err(e),
+            }
+        }
+        my_turn = !my_turn;
+    }
+    Ok(())
+}
+
+/// The caller's opening: `;FW`, its SID, perhaps `;PR`, and a comment line.
+///
+/// It has no prompt to end on — the caller goes straight on to its first
+/// proposal or `FF` — so the handshake is over at the first line after the
+/// SID that is not a `;` line, and that line is handed back for the turn.
+fn read_caller_handshake<T: Read + Write>(
+    wire: &mut Wire<'_, T>,
+    out: &mut SessionOutcome,
+) -> Result<(), SessionError> {
+    let mut sid: Option<Sid> = None;
+    loop {
+        let line = wire.read_line()?;
+        if Sid::is_sid(&line) {
+            out.log.push(format!("< {line}"));
+            let parsed = Sid::parse(&line).ok_or(SessionError::NoSid)?;
+            if !parsed.has("B2") {
+                return Err(SessionError::NoB2(parsed.codes));
+            }
+            sid = Some(parsed);
+        } else if line.starts_with(';') {
+            out.log.push(format!("< {line}"));
+        } else if sid.is_some() {
+            wire.unread_line(line);
+            return Ok(());
+        } else {
+            // Text before a SID: a greeting, or not B2F at all.
+            out.log.push(format!("< {line}"));
+            if line.starts_with("FC") || line.starts_with("FF") || line.starts_with("FQ") {
+                return Err(SessionError::NoSid);
+            }
+        }
+    }
 }
 
 /// Our turn: offer what we have, or declare that we have nothing.
@@ -545,6 +645,85 @@ pub(crate) mod tests {
             s.extend_from_slice(b"FF\r");
         }
         s
+    }
+
+    fn outbound_message(from: &str, to: &str, mid: &str) -> Message {
+        Message {
+            mid: mid.into(),
+            date: "2026/11/02 12:00".into(),
+            msg_type: "Private".into(),
+            from: from.into(),
+            to: vec![to.into()],
+            cc: vec![],
+            subject: format!("{from} to {to}"),
+            mbo: from.into(),
+            body: format!("Peer to peer, {from} to {to}.\r\n"),
+            attachments: vec![],
+        }
+    }
+
+    /// Our client calling our own answering side, over a real socket, with
+    /// mail in both outboxes: each must end up holding the other's.
+    #[test]
+    fn a_peer_to_peer_session_moves_mail_both_ways() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = l.local_addr().unwrap();
+        let answering = std::thread::spawn(move || {
+            let (mut s, _) = l.accept().unwrap();
+            let cfg = SessionConfig {
+                callsign: "EA5XYZ".into(),
+                target_call: "EA5ABC".into(),
+                app_name: "sdroxide".into(),
+                app_version: "1".into(),
+                ..Default::default()
+            };
+            let mut out = SessionOutcome::default();
+            let mine = [outbound_message("EA5XYZ", "EA5ABC", "XYZXYZXYZXYZ")];
+            run_master_into(&mut s, &cfg, &mine, &mut out).map(|()| out)
+        });
+        let mut s = std::net::TcpStream::connect(addr).unwrap();
+        let cfg = SessionConfig {
+            callsign: "EA5ABC".into(),
+            target_call: "EA5XYZ".into(),
+            app_name: "sdroxide".into(),
+            app_version: "1".into(),
+            ..Default::default()
+        };
+        let mine = [
+            outbound_message("EA5ABC", "EA5XYZ", "ABCABCABCAB1"),
+            outbound_message("EA5ABC", "EA5XYZ", "ABCABCABCAB2"),
+        ];
+        let caller = run(&mut s, &cfg, &mine).expect("the caller's session completes");
+        drop(s);
+        let answered = answering.join().unwrap().expect("the answering session completes");
+
+        assert_eq!(caller.sent, ["ABCABCABCAB1", "ABCABCABCAB2"]);
+        assert_eq!(caller.received.len(), 1);
+        assert_eq!(caller.received[0].mid, "XYZXYZXYZXYZ");
+        assert_eq!(answered.sent, ["XYZXYZXYZXYZ"]);
+        let got: Vec<&str> = answered.received.iter().map(|m| m.mid.as_str()).collect();
+        assert_eq!(got, ["ABCABCABCAB1", "ABCABCABCAB2"]);
+        // No secure login between peers: nothing to answer, nothing sent.
+        assert!(!caller.log.iter().any(|l| l.contains(";PR")), "{:?}", caller.log);
+    }
+
+    #[test]
+    fn an_answering_session_with_nothing_either_way_ends_cleanly() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = l.local_addr().unwrap();
+        let answering = std::thread::spawn(move || {
+            let (mut s, _) = l.accept().unwrap();
+            let cfg = SessionConfig { callsign: "EA5XYZ".into(), ..Default::default() };
+            run_master_into(&mut s, &cfg, &[], &mut SessionOutcome::default())
+        });
+        let mut s = std::net::TcpStream::connect(addr).unwrap();
+        let cfg = SessionConfig { callsign: "EA5ABC".into(), ..Default::default() };
+        let out = run(&mut s, &cfg, &[]).expect("completes");
+        // The caller has nothing (FF); the answering side, with nothing either,
+        // closes the session (FQ).
+        assert_eq!(out.log.last().map(String::as_str), Some("< FQ"), "{:?}", out.log);
+        drop(s);
+        answering.join().unwrap().expect("the answering side completes");
     }
 
     #[test]

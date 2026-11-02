@@ -102,6 +102,19 @@ pub struct VaraDial {
     pub bandwidth_hz: Option<u32>,
     /// How long to wait for the gateway to answer.
     pub timeout: Duration,
+    /// Calling a peer station rather than a gateway: `P2P SESSION` timing.
+    pub p2p: bool,
+    /// How long to wait for a busy channel to clear before giving up. Zero
+    /// calls regardless.
+    pub busy_wait: Duration,
+}
+
+/// How to put a TNC on watch for peer-to-peer calls.
+#[derive(Debug, Clone)]
+pub struct VaraListen {
+    pub address: String,
+    pub mycall: String,
+    pub bandwidth_hz: Option<u32>,
 }
 
 /// The data port is the command port plus one, by the protocol's convention.
@@ -163,6 +176,12 @@ pub struct VaraTransport {
     closed: bool,
     /// The TNC itself went away.
     gone: bool,
+    /// A link is up (between `CONNECTED` and `DISCONNECTED`).
+    linked: bool,
+    /// The TNC was put in `LISTEN ON` by us.
+    listening: bool,
+    /// The channel is busy, from the TNC's last `BUSY` notice.
+    busy: bool,
     /// What the TNC said along the way, for the session transcript.
     log: Vec<String>,
     /// Bytes the TNC still holds to send, from its last `BUFFER` notice.
@@ -185,14 +204,14 @@ impl VaraTransport {
     ///
     /// `ptt` receives `true`/`false` as the TNC keys and unkeys, from the
     /// moment the ports are open — the call itself transmits.
-    pub fn connect(
-        dial: &VaraDial,
+    /// Open both ports and start reading the command port. Nothing is sent.
+    fn open(
+        address: &str,
         cancel: Arc<AtomicBool>,
         ptt: Option<Sender<bool>>,
     ) -> Result<Self, TransportError> {
-        let fail = |e: std::io::Error| TransportError::Connect(dial.address.clone(), e);
-        let cmd_addr = dial
-            .address
+        let fail = |e: std::io::Error| TransportError::Connect(address.to_string(), e);
+        let cmd_addr = address
             .to_socket_addrs()
             .map_err(fail)?
             .next()
@@ -218,19 +237,35 @@ impl VaraTransport {
             .spawn(move || read_commands(reader, ev_tx, ptt))
             .map_err(fail)?;
 
-        let mut t = VaraTransport {
+        Ok(VaraTransport {
             cmd,
             data,
             events: ev_rx,
-            gateway: dial.gateway.clone(),
+            gateway: String::new(),
             cancel,
             closed: false,
             gone: false,
+            linked: false,
+            listening: false,
+            busy: false,
             log: Vec::new(),
             buffered: 0,
             hung_up: false,
             last_bitrate: String::new(),
-        };
+        })
+    }
+
+    /// Open both ports, set the TNC up, call the gateway and wait for the link.
+    ///
+    /// `ptt` receives `true`/`false` as the TNC keys and unkeys, from the
+    /// moment the ports are open — the call itself transmits.
+    pub fn connect(
+        dial: &VaraDial,
+        cancel: Arc<AtomicBool>,
+        ptt: Option<Sender<bool>>,
+    ) -> Result<Self, TransportError> {
+        let mut t = Self::open(&dial.address, cancel, ptt)?;
+        t.gateway = dial.gateway.trim().to_uppercase();
         match t.call(dial) {
             Ok(()) => Ok(t),
             Err(e) => {
@@ -242,9 +277,65 @@ impl VaraTransport {
         }
     }
 
+    /// Open both ports and put the TNC on watch for peer-to-peer calls. Wait
+    /// for one with [`VaraTransport::wait_call`].
+    pub fn listen(
+        how: &VaraListen,
+        cancel: Arc<AtomicBool>,
+        ptt: Option<Sender<bool>>,
+    ) -> Result<Self, TransportError> {
+        let mut t = Self::open(&how.address, cancel, ptt)?;
+        let setup = (|| -> std::io::Result<()> {
+            t.command(&format!("MYCALL {}", how.mycall.trim().to_uppercase()))?;
+            if let Some(bw) = how.bandwidth_hz {
+                t.command(&format!("BW{bw}"))?;
+            }
+            t.optional("P2P SESSION")?;
+            t.command("LISTEN ON")?;
+            Ok(())
+        })();
+        match setup {
+            Ok(()) => {
+                t.listening = true;
+                Ok(t)
+            }
+            Err(e) => {
+                t.closed = true;
+                Err(TransportError::Connect(how.address.clone(), e))
+            }
+        }
+    }
+
+    /// Wait for a station to call us; returns its callsign once linked.
+    ///
+    /// Blocks until a call arrives, the operator stops listening (the cancel
+    /// flag), or the TNC goes away.
+    pub fn wait_call(&mut self) -> std::io::Result<String> {
+        loop {
+            if self.cancelled() {
+                return Err(io_err(ErrorKind::Interrupted, "stopped listening"));
+            }
+            match self.next_event(POLL) {
+                Some(TncEvent::Connected { caller, .. }) => {
+                    self.gateway = caller.clone();
+                    return Ok(caller);
+                }
+                Some(TncEvent::Closed) => {
+                    return Err(io_err(ErrorKind::BrokenPipe, "the TNC closed its command port"));
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// The TNC's side of the conversation so far, for the transcript.
     pub fn take_log(&mut self) -> Vec<String> {
         std::mem::take(&mut self.log)
+    }
+
+    #[cfg(test)]
+    fn take_log_ref(&self) -> &[String] {
+        &self.log
     }
 
     fn send_line(&mut self, line: &str) -> std::io::Result<()> {
@@ -261,7 +352,12 @@ impl VaraTransport {
     fn note(&mut self, ev: &TncEvent) {
         match ev {
             TncEvent::Buffer(n) => self.buffered = *n,
-            TncEvent::Disconnected => self.closed = true,
+            TncEvent::Disconnected => {
+                self.closed = true;
+                self.linked = false;
+            }
+            TncEvent::Connected { .. } => self.linked = true,
+            TncEvent::Busy(on) => self.busy = *on,
             TncEvent::Closed => self.gone = true,
             _ => {}
         }
@@ -316,6 +412,48 @@ impl VaraTransport {
         Err(io_err(ErrorKind::TimedOut, format!("the TNC did not answer {line}")))
     }
 
+    /// A command an older TNC may not know: `WRONG` is noted and passed over.
+    fn optional(&mut self, line: &str) -> std::io::Result<()> {
+        match self.command(line) {
+            Err(e) if e.kind() == ErrorKind::InvalidInput => Ok(()),
+            other => other,
+        }
+    }
+
+    /// Hold the call while the channel is busy, for up to `wait`.
+    ///
+    /// VARA's busy detector says `BUSY ON` while it hears another signal in
+    /// the passband. Calling over it spoils both links, and most likely our
+    /// own call too, so wait for `BUSY OFF` and give up if it never comes.
+    fn wait_until_clear(&mut self, wait: Duration) -> std::io::Result<()> {
+        // Notices the TNC sent while it was being set up arrive first.
+        self.next_event(POLL);
+        self.drain_events();
+        if !self.busy || wait.is_zero() {
+            return Ok(());
+        }
+        self.log.push(format!("· the channel is busy; waiting up to {} s", wait.as_secs()));
+        let deadline = Instant::now() + wait;
+        while self.busy {
+            if self.cancelled() {
+                return Err(io_err(ErrorKind::Interrupted, "stopped"));
+            }
+            if Instant::now() >= deadline {
+                return Err(io_err(
+                    ErrorKind::WouldBlock,
+                    format!(
+                        "the channel stayed busy for {} s — another station is using it; not calling",
+                        wait.as_secs()
+                    ),
+                ));
+            }
+            if let Some(TncEvent::Closed) = self.next_event(POLL) {
+                return Err(io_err(ErrorKind::BrokenPipe, "the TNC closed its command port"));
+            }
+        }
+        Ok(())
+    }
+
     fn call(&mut self, dial: &VaraDial) -> std::io::Result<()> {
         let mycall = dial.mycall.trim().to_uppercase();
         let gateway = dial.gateway.trim().to_uppercase();
@@ -333,6 +471,9 @@ impl VaraTransport {
                 )
             })?;
         }
+        // Peer stations get VARA's longer peer-to-peer turnaround.
+        self.optional(if dial.p2p { "P2P SESSION" } else { "WINLINK SESSION" })?;
+        self.wait_until_clear(dial.busy_wait)?;
         self.command(&format!("CONNECT {mycall} {gateway}"))?;
 
         let deadline = Instant::now() + dial.timeout;
@@ -433,7 +574,7 @@ impl VaraTransport {
             return;
         }
         self.drain_events();
-        if !self.closed && !self.gone {
+        if self.linked && !self.closed && !self.gone {
             let _ = self.send_line("DISCONNECT");
             let deadline = Instant::now() + DISCONNECT_TIMEOUT;
             let mut aborted = false;
@@ -447,6 +588,11 @@ impl VaraTransport {
             if !self.closed && !self.gone {
                 let _ = self.send_line("ABORT");
             }
+        }
+        // A TNC we put on watch must not go on answering calls with nobody
+        // behind it to take the mail.
+        if self.listening && !self.gone {
+            let _ = self.command("LISTEN OFF");
         }
         let _ = self.data.shutdown(Shutdown::Both);
         let _ = self.cmd.shutdown(Shutdown::Both);
@@ -562,10 +708,12 @@ pub(crate) mod tests {
             gateway: "ea5xyz-10".into(),
             bandwidth_hz: Some(2300),
             timeout: Duration::from_secs(5),
+            p2p: false,
+            busy_wait: Duration::from_secs(1),
         }
     }
 
-    fn gateway_answers(cmd: &str) -> Vec<&'static str> {
+    pub(crate) fn gateway_answers(cmd: &str) -> Vec<&'static str> {
         match cmd {
             c if c.starts_with("CONNECT ") => {
                 vec!["OK", "PTT ON", "PTT OFF", "CONNECTED EA5ABC EA5XYZ-10 2300"]
@@ -602,7 +750,14 @@ pub(crate) mod tests {
         drop(t);
         assert_eq!(
             commands(&tnc),
-            ["MYCALL EA5ABC", "LISTEN OFF", "BW2300", "CONNECT EA5ABC EA5XYZ-10", "DISCONNECT"]
+            [
+                "MYCALL EA5ABC",
+                "LISTEN OFF",
+                "BW2300",
+                "WINLINK SESSION",
+                "CONNECT EA5ABC EA5XYZ-10",
+                "DISCONNECT"
+            ]
         );
     }
 
@@ -714,6 +869,93 @@ pub(crate) mod tests {
         let log = t.take_log();
         assert!(log.iter().any(|l| l == "> DISCONNECT"), "{log:?}");
         assert!(log.iter().any(|l| l == "< DISCONNECTED"), "{log:?}");
+    }
+
+    #[test]
+    fn a_busy_channel_holds_the_call_and_gives_up_if_it_stays_busy() {
+        fn busy(cmd: &str) -> Vec<&'static str> {
+            match cmd {
+                "LISTEN OFF" => vec!["OK", "BUSY ON"],
+                c if c.starts_with("CONNECT ") => vec!["OK", "CONNECTED EA5ABC EA5XYZ-10 2300"],
+                _ => vec!["OK"],
+            }
+        }
+        let tnc = fake_tnc(busy);
+        let e = VaraTransport::connect(&dial(&tnc.addr), Arc::new(AtomicBool::new(false)), None)
+            .unwrap_err();
+        assert!(e.to_string().contains("busy"), "{e}");
+        assert!(
+            !commands(&tnc).iter().any(|c| c.starts_with("CONNECT ")),
+            "called over a busy channel"
+        );
+    }
+
+    #[test]
+    fn a_channel_that_clears_lets_the_call_go_ahead() {
+        fn busy(cmd: &str) -> Vec<&'static str> {
+            match cmd {
+                "LISTEN OFF" => vec!["OK", "BUSY ON"],
+                c if c.starts_with("CONNECT ") => vec!["OK", "CONNECTED EA5ABC EA5XYZ-10 2300"],
+                "DISCONNECT" => vec!["OK", "DISCONNECTED"],
+                _ => vec!["OK"],
+            }
+        }
+        let tnc = fake_tnc(busy);
+        let cmd = tnc.cmd_peer.clone();
+        std::thread::spawn(move || {
+            let mut c = cmd.recv_timeout(Duration::from_secs(2)).unwrap();
+            std::thread::sleep(Duration::from_millis(500));
+            c.write_all(b"BUSY OFF\r").unwrap();
+        });
+        let d = VaraDial { busy_wait: Duration::from_secs(5), ..dial(&tnc.addr) };
+        let t = VaraTransport::connect(&d, Arc::new(AtomicBool::new(false)), None).unwrap();
+        assert!(t.take_log_ref().iter().any(|l| l.contains("busy")));
+    }
+
+    #[test]
+    fn a_peer_call_uses_peer_to_peer_timing() {
+        let tnc = fake_tnc(gateway_answers);
+        let d = VaraDial { p2p: true, ..dial(&tnc.addr) };
+        let t = VaraTransport::connect(&d, Arc::new(AtomicBool::new(false)), None).unwrap();
+        drop(t);
+        let got = commands(&tnc);
+        assert!(got.contains(&"P2P SESSION".to_string()), "{got:?}");
+        assert!(!got.contains(&"WINLINK SESSION".to_string()), "{got:?}");
+    }
+
+    #[test]
+    fn listening_answers_a_caller_and_stops_listening_on_the_way_out() {
+        let tnc = fake_tnc(gateway_answers);
+        let how = VaraListen {
+            address: tnc.addr.clone(),
+            mycall: "ea5abc".into(),
+            bandwidth_hz: Some(2300),
+        };
+        let mut t = VaraTransport::listen(&how, Arc::new(AtomicBool::new(false)), None).unwrap();
+        let mut cmd = tnc.cmd_peer.recv_timeout(Duration::from_secs(2)).unwrap();
+        cmd.write_all(b"CONNECTED EA5QQQ EA5ABC 2300\r").unwrap();
+        assert_eq!(t.wait_call().unwrap(), "EA5QQQ");
+        assert_eq!(t.target_call(), "EA5QQQ");
+        t.hang_up();
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(
+            commands(&tnc),
+            ["MYCALL EA5ABC", "BW2300", "P2P SESSION", "LISTEN ON", "DISCONNECT", "LISTEN OFF"]
+        );
+    }
+
+    #[test]
+    fn stopping_an_idle_listener_sends_no_disconnect() {
+        let tnc = fake_tnc(gateway_answers);
+        let how =
+            VaraListen { address: tnc.addr.clone(), mycall: "EA5ABC".into(), bandwidth_hz: None };
+        let stop = Arc::new(AtomicBool::new(false));
+        let mut t = VaraTransport::listen(&how, Arc::clone(&stop), None).unwrap();
+        stop.store(true, Ordering::SeqCst);
+        assert_eq!(t.wait_call().unwrap_err().kind(), ErrorKind::Interrupted);
+        drop(t);
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(commands(&tnc), ["MYCALL EA5ABC", "P2P SESSION", "LISTEN ON", "LISTEN OFF"]);
     }
 
     #[test]

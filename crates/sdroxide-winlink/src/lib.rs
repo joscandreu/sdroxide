@@ -20,6 +20,7 @@ pub mod manager;
 pub mod message;
 pub mod secure;
 pub mod session;
+pub mod tnc_process;
 pub mod transport;
 pub mod vara;
 
@@ -31,4 +32,4 @@ pub use message::{Attachment, Message, MessageError};
 pub use secure::login_response;
 pub use session::{SessionConfig, SessionError, SessionOutcome};
 pub use transport::{TelnetTransport, Transport, TransportError};
-pub use vara::{VaraDial, VaraTransport};
+pub use vara::{VaraDial, VaraListen, VaraTransport};

@@ -1633,7 +1633,17 @@ use sdroxide_types::{
 /// (appended) and `WinlinkConfig` gains `vara` (`VaraTncConfig`) on its tail.
 /// The config rides `StationConfig.net` whole, so a v190 peer reads the extra
 /// bytes out of step.
-pub const PROTO_VERSION: u16 = 191;
+///
+/// v192: peer-to-peer Winlink over VARA. `VaraTncConfig` gains `p2p`, `listen`,
+/// `busy_wait_s` and `gateways` (`Vec<VaraGateway>`), and `WinlinkStatus` gains
+/// `listening`, each on its tail; both ride whole (the station bundle and the
+/// Winlink status), so a v191 peer reads them out of step.
+///
+/// v193: sdroxide running the VARA TNC (xara) itself. `VaraTncConfig` gains
+/// `managed` (`ManagedTncConfig`) and `WinlinkStatus` gains `tnc`
+/// (`ManagedTncStatus`, with the devices the TNC can open), each on its tail,
+/// so a v192 peer reads both out of step.
+pub const PROTO_VERSION: u16 = 193;
 const VERSION_BYTE: u8 = 0x12;
 
 #[derive(Debug, thiserror::Error)]
@@ -2245,6 +2255,28 @@ mod tests {
             bandwidth: None,
             freq_hz: 14_105_000.0,
             key_ptt: false,
+            p2p: true,
+            listen: true,
+            busy_wait_s: 45,
+            gateways: vec![sdroxide_types::VaraGateway {
+                callsign: "EA5QQQ".into(),
+                p2p: true,
+                label: "club".into(),
+                ..Default::default()
+            }],
+            managed: sdroxide_types::ManagedTncConfig {
+                enabled: true,
+                exe: "/opt/xara/bin/xara".into(),
+                audio: sdroxide_types::TncAudio::Pulse,
+                capture: "vara_rx.monitor".into(),
+                playback: "vara_tx".into(),
+                mode: sdroxide_types::TncMode::FmNarrow,
+                ptt: sdroxide_types::TncPtt::Rigctld,
+                ptt_lead_ms: 80,
+                drive_db: -7.5,
+                kiss_port: 8100,
+                extra_args: "--tx-buffer-ms 60".into(),
+            },
         };
         let m = ServerMsg::StationConfig(Box::new(sdroxide_types::StationConfig {
             net,
@@ -2492,6 +2524,17 @@ mod tests {
                 last_sent: 1,
                 counts: [3, 0, 1, 0],
                 log: vec!["> FF".into(), "< FQ".into()],
+                listening: true,
+                tnc: sdroxide_types::ManagedTncStatus {
+                    state: sdroxide_types::TncState::Failed,
+                    version: "0.1.3".into(),
+                    message: "xara stopped".into(),
+                    capture_devices: vec![sdroxide_types::TncDevice {
+                        id: "BlackHole2ch_UID".into(),
+                        desc: "BlackHole 2ch".into(),
+                    }],
+                    playback_devices: vec![],
+                },
             }),
             ServerMsg::MailListing(sdroxide_types::MailListing {
                 folder: sdroxide_types::MailFolder::Inbox,

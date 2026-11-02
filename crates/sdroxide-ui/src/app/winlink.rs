@@ -59,6 +59,11 @@ impl MailUi {
     const SPLIT_MIN: f32 = 0.12;
     const SPLIT_MAX: f32 = 0.85;
 
+    /// The managed TNC's state and device lists, for the settings dialog.
+    pub(in crate::app) fn tnc_status(&self) -> sdroxide_types::ManagedTncStatus {
+        self.status.tnc.clone()
+    }
+
     pub fn on_status(&mut self, status: WinlinkStatus) {
         // A session that has just finished may have filed new mail, so the
         // open folder is stale.
@@ -296,6 +301,28 @@ impl crate::app::SdroxideApp {
             ));
         } else {
             ui.label(tr!("winlink-not-connected-yet"));
+        }
+        // The TNC sdroxide runs, when it is not up: the reason matters more
+        // than anything else on this line.
+        if matches!(
+            self.mail.status.tnc.state,
+            sdroxide_types::TncState::Failed | sdroxide_types::TncState::Starting
+        ) {
+            let t = &self.mail.status.tnc;
+            let text = if t.state == sdroxide_types::TncState::Starting {
+                tr!("winlink-tnc-starting")
+            } else {
+                tr!("winlink-tnc-failed", why = t.message.clone())
+            };
+            ui.colored_label(crate::theme::YELLOW(), text);
+        }
+        // Answering peer-to-peer calls through the VARA TNC — or why not.
+        if !self.mail.status.busy {
+            if self.mail.status.listening {
+                ui.colored_label(crate::theme::GREEN(), tr!("winlink-vara-listening"));
+            } else if !self.mail.status.activity.is_empty() {
+                ui.colored_label(crate::theme::YELLOW(), self.mail.status.activity.clone());
+            }
         }
     }
 
