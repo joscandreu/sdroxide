@@ -137,8 +137,11 @@ impl SstvController {
             tx_even: false,
             transmitting: self.keyed,
             tx_watchdog: false,
+            tx_refused: None,
             transcript: Vec::<TranscriptLine>::new(),
             config: self.cfg.clone(),
+            jtty: None,
+            vara: None,
             text_rx: String::new(),
             tx_sent: 0,
             fsq_heard: Vec::new(),
@@ -206,6 +209,7 @@ impl DigiEngine for SstvController {
                     // picture behind it: a receiver tuned in halfway through a
                     // transmission gets no VIS and no whole frame, and the
                     // callsign at the end is then the only thing that arrives.
+                    self.queued.push(DigiAction::SstvId(id.clone()));
                     self.rx_id = Some(id);
                     self.rx_id_seq = self.rx_id_seq.wrapping_add(1);
                     self.status_dirty = true;

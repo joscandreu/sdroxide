@@ -18,6 +18,7 @@
 //! wheel and pinch zoom about the pointer, and a double-click hands the view
 //! back to the auto-fit.
 
+use crate::i18n::tr;
 use eframe::egui::{
     Align2, Color32, CursorIcon, FontId, PointerButton, Pos2, Response, Sense, Ui, Vec2, pos2, vec2,
 };
@@ -64,6 +65,16 @@ impl Default for MapView {
 }
 
 impl MapView {
+    /// Start over from the auto-fit if the view has gone non-finite. NaN
+    /// survives every clamp and ease, so one bad input event — the kind a
+    /// resume from sleep can deliver — left the map dead for good, double-click
+    /// included (#656).
+    pub(crate) fn sanitize(&mut self) {
+        if !(self.clat.is_finite() && self.clon.is_finite() && self.lon_span.is_finite()) {
+            *self = MapView::default();
+        }
+    }
+
     /// The latitude window this zoom covers on a map of the given aspect
     /// (height/width) — the projection is linear in both axes.
     pub(crate) fn lat_span(&self, aspect: f64) -> f64 {
@@ -173,13 +184,13 @@ pub(crate) fn interact(ui: &Ui, view: &mut MapView, resp: &Response, aspect: f64
             touched = true;
         }
         let t = mt.translation_delta;
-        if t != Vec2::ZERO {
+        if t != Vec2::ZERO && t.is_finite() {
             view.pan((t.x / rect.width()) as f64, (t.y / rect.height()) as f64, aspect);
             touched = true;
         }
     } else if resp.dragged_by(PointerButton::Primary) {
         let d = resp.drag_delta();
-        if d != Vec2::ZERO {
+        if d != Vec2::ZERO && d.is_finite() {
             view.pan((d.x / rect.width()) as f64, (d.y / rect.height()) as f64, aspect);
             touched = true;
         }
@@ -194,7 +205,7 @@ pub(crate) fn interact(ui: &Ui, view: &mut MapView, resp: &Response, aspect: f64
         // Multiplicative, so a wheel click covers the same visual fraction at
         // any zoom — the same rate the panadapter uses.
         let factor = 0.998f64.powf(scroll as f64 * 2.0) / (zoom.max(0.01) as f64);
-        if (factor - 1.0).abs() > 1e-4 {
+        if factor.is_finite() && (factor - 1.0).abs() > 1e-4 {
             let (fx, fy) = frac(pos);
             view.zoom_about(factor, fx, fy, aspect);
             touched = true;
@@ -363,6 +374,25 @@ pub(crate) fn draw_base(
     lat_span: f64,
     map: &theme::MapPalette,
 ) -> f32 {
+    let dot_r = draw_ground(p, rect, clat, clon, lon_span, lat_span, map);
+    if theme::map_cities() {
+        draw_cities(p, rect, clat, clon, lon_span, lat_span, dot_r, map);
+    }
+    dot_r
+}
+
+/// [`draw_base`] without the cities: land, rivers and borders. Apart for the
+/// map that shades the night side, where the ground goes under the grey line
+/// and the cities — marks and names to be read — go over it.
+fn draw_ground(
+    p: &eframe::egui::Painter,
+    rect: eframe::egui::Rect,
+    clat: f64,
+    clon: f64,
+    lon_span: f64,
+    lat_span: f64,
+    map: &theme::MapPalette,
+) -> f32 {
     let cols = ((rect.width() / DOT_PITCH) as usize).max(24);
     let rows = ((rect.height() / DOT_PITCH) as usize).max(12);
     let cell_w = rect.width() / cols as f32;
@@ -416,9 +446,6 @@ pub(crate) fn draw_base(
             let a = base + spread * (f32::from(rank - 1) / 12.0).min(1.0);
             p.circle_filled(at(i % cols, i / cols), dot_r, alpha(ink, weight * a));
         }
-    }
-    if theme::map_cities() {
-        draw_cities(p, rect, clat, clon, lon_span, lat_span, dot_r, map);
     }
     dot_r
 }
@@ -506,7 +533,9 @@ fn draw_cities(
 ///
 /// The projection is linear in latitude and longitude, so the whole world is an
 /// axis-aligned rectangle here and the texture's own bilinear filtering is what
-/// turns its cells into soft shapes with no visible edges.
+/// turns its cells into soft shapes with no visible edges. `tint` multiplies
+/// the texture — [`Color32::WHITE`] paints it as it is.
+#[allow(clippy::too_many_arguments)]
 fn paint_world_texture(
     p: &eframe::egui::Painter,
     rect: eframe::egui::Rect,
@@ -515,6 +544,7 @@ fn paint_world_texture(
     lon_span: f64,
     lat_span: f64,
     tex: eframe::egui::TextureId,
+    tint: Color32,
 ) {
     let lon_to_x = |lon: f64| rect.left() + (0.5 + ((lon - clon) / lon_span) as f32) * rect.width();
     let lat_to_y = |lat: f64| rect.top() + (0.5 - ((lat - clat) / lat_span) as f32) * rect.height();
@@ -533,7 +563,7 @@ fn paint_world_texture(
     for k in first..=last {
         let r = world.translate(vec2(k as f32 * world_w, 0.0));
         if r.intersects(rect) {
-            p.image(tex, r, uv, Color32::WHITE);
+            p.image(tex, r, uv, tint);
         }
     }
 }
@@ -569,8 +599,10 @@ pub fn show(
     heat: Option<eframe::egui::TextureId>,
     // The grey line — night and twilight — as an equirectangular RGBA image of
     // the whole world (see `crate::prop_map::NightShade`). Painted over the
-    // heat, so a band that is dead because the Sun is down reads that way, but
-    // under the continents, so the geography stays legible.
+    // heat and the continents, so a band that is dead because the Sun is down
+    // reads that way and the terminator reads across land as well as sea; the
+    // cities and every station mark go over it. How dark it gets is the map
+    // palette's `night_max`.
     night: Option<eframe::egui::TextureId>,
     tx_active: bool,
     max_h: f32,
@@ -603,6 +635,7 @@ pub fn show(
         contacts.push(c);
     }
     let (t_clat, t_clon, t_span) = target_view(home, &contacts, aspect);
+    view.sanitize();
     if !view.initialized {
         view.clat = t_clat;
         view.clon = t_clon;
@@ -640,15 +673,26 @@ pub fn show(
     // sideways to cover a view that straddles the antimeridian; the painter's
     // clip rectangle trims what falls outside.
     if let Some(tex) = heat {
-        paint_world_texture(&p, rect, clat, clon, lon_span, lat_span, tex);
-    }
-    // The grey line, over the heat and under the continents: on the night side
-    // the map is visibly darker, so the terminator reads even under the heat.
-    if let Some(tex) = night {
-        paint_world_texture(&p, rect, clat, clon, lon_span, lat_span, tex);
+        paint_world_texture(&p, rect, clat, clon, lon_span, lat_span, tex, Color32::WHITE);
     }
 
-    let dot_r = draw_base(&p, rect, clat, clon, lon_span, lat_span, map);
+    let dot_r = draw_ground(&p, rect, clat, clon, lon_span, lat_span, map);
+
+    // The grey line, over the heat and the continents: both darken on the night
+    // side, so the terminator reads across land as well as sea. The cities and
+    // the station and spot marks are drawn after it and keep their light.
+    //
+    // At the palette's strength rather than the texture's: a light map's marks
+    // are dark ink, and a full-strength night would put them ink on ink. A
+    // premultiplied tint scales colour and alpha together, which is opacity.
+    if let Some(tex) = night {
+        let strength = (map.night_max / sdroxide_solar::NIGHT_MAX_ALPHA).clamp(0.0, 1.0);
+        let tint = Color32::WHITE.gamma_multiply(strength);
+        paint_world_texture(&p, rect, clat, clon, lon_span, lat_span, tex, tint);
+    }
+    if theme::map_cities() {
+        draw_cities(&p, rect, clat, clon, lon_span, lat_span, dot_r, map);
+    }
 
     // Project (lat, lon) to screen using the current view; longitude wraps.
     let project = |lat: f64, lon: f64| -> Pos2 {
@@ -764,7 +808,7 @@ pub fn show(
         p.text(
             pos2(rect.right() - 5.0, rect.bottom() - 4.0),
             Align2::RIGHT_BOTTOM,
-            "DOUBLE-CLICK TO REFRAME",
+            tr!("worldmap-double-click-reframe"),
             FontId::proportional(9.0),
             map.hint,
         );
@@ -777,6 +821,17 @@ pub fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue #656: a non-finite pan must not leave the map dead.
+    #[test]
+    fn a_non_finite_view_starts_over_from_the_auto_fit() {
+        let mut v = MapView { initialized: true, manual: true, ..MapView::default() };
+        v.pan(f64::NAN, 0.0, 0.5);
+        assert!(!v.clon.is_finite(), "NaN went in and should have stuck");
+        v.sanitize();
+        assert!(v.clat.is_finite() && v.clon.is_finite() && v.lon_span.is_finite());
+        assert!(!v.manual && !v.initialized, "the auto-fit should take the view back");
+    }
 
     /// Issue #312: the cities can be turned off, and turning them off takes the
     /// *names* with them — those are what get written across the dot somebody

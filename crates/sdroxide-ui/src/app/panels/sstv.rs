@@ -1,6 +1,6 @@
 //! The SSTV and RIFP image panel.
 //!
-//! [`SstvUi`] draws two things the engine owns and one it does not. The five
+//! [`SstvUi`] draws two things the engine owns and one it does not. The ten
 //! transmit presets and the gallery of received pictures live on the machine
 //! the radio is plugged into — the panel holds metadata, thumbnails and
 //! whatever pixels it has been handed, and asks for the rest. The picture
@@ -12,6 +12,7 @@
 //! keystroke without a round trip, and only the finished picture goes back to
 //! the engine as an ordinary `SstvTx` / `RifpTx`.
 
+use crate::i18n::{Tr, tr};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -131,9 +132,13 @@ pub(in crate::app) struct SstvUi {
     pub(in crate::app) slot_thumbs: Vec<Option<egui::TextureHandle>>,
     /// The layers being edited and which slot they belong to. Only that one
     /// slot is client-owned, so an echo of our own write — or an edit made on
-    /// another screen — can update the other four without fighting the
+    /// another screen — can update the other nine without fighting the
     /// keyboard or the pointer. See [`crate::sstv::tick`].
     pub(in crate::app) edit: Option<crate::sstv::LayerEdit>,
+    /// Layers handed back to the engine and not yet echoed, by slot. Shown,
+    /// previewed and transmitted in place of the stale presets meanwhile
+    /// (issue #752). See [`crate::sstv::commit`].
+    pub(in crate::app) sent: crate::sstv::InFlight,
     /// Which of the slot's layers the editor controls act on.
     pub(in crate::app) sel_layer: usize,
     /// The layer being dragged on the preview, if one is.
@@ -243,6 +248,7 @@ impl Default for SstvUi {
             presets: ImagePresets::default(),
             slot_thumbs: (0..IMAGE_SLOTS).map(|_| None).collect(),
             edit: None,
+            sent: crate::sstv::InFlight::new(),
             sel_layer: 0,
             drag: None,
             text_focus: false,
@@ -380,13 +386,14 @@ impl SstvUi {
             }
         }
         // The editor takes the engine's layers for every slot except the one in
-        // hand, so an edit made elsewhere shows up.
-        if self.presets.slot(self.selected_slot).layers != presets.slot(self.selected_slot).layers
-            && !matches!(&self.edit, Some(e) if e.slot == self.selected_slot)
-        {
+        // hand, so an edit made elsewhere shows up — once our own writes have
+        // come back, so an echo still on its way is not mistaken for one.
+        let shown = self.current_layers().to_vec();
+        self.presets = presets;
+        crate::sstv::settle_layers(&mut self.sent, &self.presets, self.now);
+        if self.current_layers() != shown.as_slice() {
             self.preview_dirty = true;
         }
-        self.presets = presets;
     }
 
     /// A fetched source picture for a slot.
@@ -579,7 +586,7 @@ impl SstvUi {
 
     /// The text layers of the slot currently being edited.
     pub(in crate::app) fn current_layers(&self) -> &[TextLayer] {
-        crate::sstv::layers_shown(&self.edit, &self.presets, self.selected_slot)
+        crate::sstv::layers_shown(&self.edit, &self.sent, &self.presets, self.selected_slot)
     }
 
     /// Change the selected slot's layers: takes the slot in hand, committing
@@ -590,7 +597,14 @@ impl SstvUi {
         cmds: &mut Vec<Command>,
     ) -> &mut Vec<TextLayer> {
         self.preview_dirty = true;
-        crate::sstv::edit_layers(&mut self.edit, &self.presets, self.selected_slot, now, cmds)
+        crate::sstv::edit_layers(
+            &mut self.edit,
+            &mut self.sent,
+            &self.presets,
+            self.selected_slot,
+            now,
+            cmds,
+        )
     }
 
     /// The per-frame half of editing: send a layer edit the operator has
@@ -603,7 +617,15 @@ impl SstvUi {
         }
         let busy = self.drag.is_some() || self.text_focus;
         let held = self.edit.is_some();
-        cmds.extend(crate::sstv::tick(&mut self.edit, &self.presets, now, busy));
+        cmds.extend(crate::sstv::tick(&mut self.edit, &mut self.sent, &self.presets, now, busy));
+        // Writes the engine never echoed give way to its word in the end.
+        if !self.sent.is_empty() {
+            let before = self.sent.len();
+            crate::sstv::settle_layers(&mut self.sent, &self.presets, now);
+            if self.sent.len() != before {
+                self.preview_dirty = true;
+            }
+        }
         if held && self.edit.is_none() {
             // Handed back: what shows is the engine's now, which may differ.
             self.preview_dirty = true;
@@ -613,7 +635,7 @@ impl SstvUi {
     /// Move to another slot, handing the one being left back to the engine
     /// first so an edit is never lost to a click.
     pub(in crate::app) fn select_slot(&mut self, slot: usize, cmds: &mut Vec<Command>) {
-        cmds.extend(crate::sstv::commit(&mut self.edit, &self.presets));
+        cmds.extend(crate::sstv::commit(&mut self.edit, &mut self.sent, &self.presets, self.now));
         self.selected_slot = slot;
         self.sel_layer = 0;
         self.drag = None;
@@ -697,9 +719,9 @@ impl SstvUi {
             let waiting = self.presets.slot(self.selected_slot).has_picture();
             ui.label(
                 RichText::new(if waiting {
-                    "Fetching this slot's picture…"
+                    tr!("sstv-fetching-slot-s-picture")
                 } else {
-                    "Load an image into this slot →"
+                    tr!("sstv-load-image-into-slot")
                 })
                 .size(11.0)
                 .weak(),
@@ -968,13 +990,11 @@ impl SstvUi {
 
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
-            ui.label(RichText::new("Text").size(10.0).weak()).on_hover_text(
-                "Each piece of text is its own layer, drawn in this order — the last on \
-                 top. Drag one on the picture to move it; double-click the picture to add \
-                 one there.",
-            );
+            ui.label(RichText::new(tr!("sstv-layer-text")).size(10.0).weak())
+                .on_hover_text(tr!("sstv-layer-text-explain"));
+            let empty = tr!("sstv-layer-empty");
             for (i, l) in layers.iter().enumerate() {
-                let first = l.text.lines().find(|t| !t.trim().is_empty()).unwrap_or("(empty)");
+                let first = l.text.lines().find(|t| !t.trim().is_empty()).unwrap_or(&empty);
                 let mut label = RichText::new(shorten(first.trim(), 14)).size(10.5);
                 if !l.visible {
                     label = label.weak().italics();
@@ -984,8 +1004,8 @@ impl SstvUi {
                 }
             }
             if n < IMAGE_LAYERS_MAX
-                && crate::chrome::chip(ui, false, "+ Add")
-                    .on_hover_text("Add a text layer in the middle of the picture")
+                && crate::chrome::chip(ui, false, tr!("sstv-layer-add"))
+                    .on_hover_text(tr!("sstv-layer-add-hint"))
                     .clicked()
             {
                 let l = self.new_centre_layer(dims);
@@ -1004,8 +1024,8 @@ impl SstvUi {
             ui.add_space(3.0);
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
-                ui.label(RichText::new("Size").size(10.0).weak())
-                    .on_hover_text("Type size, as a share of the picture's height");
+                ui.label(RichText::new(tr!("sstv-size")).size(10.0).weak())
+                    .on_hover_text(tr!("sstv-layer-size-hint"));
                 ui.spacing_mut().slider_width = 90.0;
                 crate::chrome::slider(
                     ui,
@@ -1014,52 +1034,50 @@ impl SstvUi {
                         .show_value(false),
                 );
                 ui.add_enabled_ui(!cur.rainbow, |ui| {
-                    ui.color_edit_button_srgb(&mut cur.ink).on_hover_text("Text colour");
+                    ui.color_edit_button_srgb(&mut cur.ink)
+                        .on_hover_text(tr!("sstv-layer-text-colour"));
                 });
-                crate::chrome::checkbox(ui, &mut cur.outline, "Outline").on_hover_text(
-                    "An edge around the letters, so they read over any part of the picture",
-                );
+                crate::chrome::checkbox(ui, &mut cur.outline, tr!("sstv-layer-outline"))
+                    .on_hover_text(tr!("sstv-layer-outline-hint"));
                 ui.add_enabled_ui(cur.outline, |ui| {
-                    ui.color_edit_button_srgb(&mut cur.outline_ink).on_hover_text("Outline colour");
+                    ui.color_edit_button_srgb(&mut cur.outline_ink)
+                        .on_hover_text(tr!("sstv-layer-outline-colour"));
                 });
-                crate::chrome::checkbox(ui, &mut cur.shadow, "Shadow");
-                crate::chrome::checkbox(ui, &mut cur.rainbow, "Rainbow");
+                crate::chrome::checkbox(ui, &mut cur.shadow, tr!("sstv-layer-shadow"));
+                crate::chrome::checkbox(ui, &mut cur.rainbow, tr!("sstv-layer-rainbow"));
             });
             ui.add_space(3.0);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 5.0;
-                ui.label(RichText::new("Pin").size(10.0).weak()).on_hover_text(
-                    "Which part of the picture the text keeps to. It stays there in every \
-                     mode, whatever size the picture is sent at. Dragging picks the \
-                     nearest one by itself.",
-                );
+                ui.label(RichText::new(tr!("sstv-layer-pin")).size(10.0).weak())
+                    .on_hover_text(tr!("sstv-layer-pin-hint"));
                 anchor_picker(ui, &mut cur);
                 ui.add_space(6.0);
                 let (vis, vis_hint) = if cur.visible {
-                    ("Hide", "Keep this text in the slot but leave it off the picture")
+                    (tr!("sstv-layer-hide"), tr!("sstv-layer-hide-hint"))
                 } else {
-                    ("Show", "Put this text back on the picture")
+                    (tr!("sstv-layer-show"), tr!("sstv-layer-show-hint"))
                 };
                 if crate::chrome::chip(ui, false, vis).on_hover_text(vis_hint).clicked() {
                     cur.visible = !cur.visible;
                 }
                 if n > 1 {
                     if crate::chrome::chip(ui, false, "▲")
-                        .on_hover_text("Draw this text above the next one")
+                        .on_hover_text(tr!("sstv-layer-raise-hint"))
                         .clicked()
                         && sel + 1 < n
                     {
                         shift = 1;
                     }
                     if crate::chrome::chip(ui, false, "▼")
-                        .on_hover_text("Draw this text below the previous one")
+                        .on_hover_text(tr!("sstv-layer-lower-hint"))
                         .clicked()
                         && sel > 0
                     {
                         shift = -1;
                     }
                 }
-                if crate::chrome::chip(ui, false, "Delete").clicked() {
+                if crate::chrome::chip(ui, false, tr!("sstv-layer-delete")).clicked() {
                     delete = true;
                 }
             });
@@ -1082,7 +1100,7 @@ impl SstvUi {
         // the first — the slot message this editor grew out of.
         let sel = self.sel_layer;
         let mut buf = self.current_layers().get(sel).map(|l| l.text.clone()).unwrap_or_default();
-        let hint: String = std::iter::once("Substituted when the picture is composed:".to_string())
+        let hint: String = std::iter::once(tr!("sstv-substituted-when-picture-composed"))
             .chain(crate::sstv::PLACEHOLDERS.iter().map(|(k, what)| format!("  {k} — {what}")))
             .collect::<Vec<_>>()
             .join("\n");
@@ -1093,9 +1111,9 @@ impl SstvUi {
                     ui,
                     egui::vec2(inner_w, text_h),
                     egui::TextEdit::multiline(&mut buf).hint_text(if n == 0 {
-                        "Type to put text on this slot's picture"
+                        tr!("sstv-layer-first-hint")
                     } else {
-                        "This layer's text"
+                        tr!("sstv-layer-text-hint")
                     }),
                 )
             })
@@ -1149,7 +1167,7 @@ impl SstvUi {
     /// Nothing is kept here: the engine scales the picture, stores it and
     /// announces the presets, and the slot fills in when that comes back. That
     /// round trip is the point — it is what makes the browser tab and the
-    /// console show the same five pictures.
+    /// console show the same ten pictures.
     pub(in crate::app) fn set_slot(
         &mut self,
         slot: usize,
@@ -1161,10 +1179,10 @@ impl SstvUi {
         // socket only to have it refused at the far end is a poor experience,
         // and it keeps a huge upload clear of the WebSocket's frame limit.
         if bytes.len() > IMAGE_UPLOAD_MAX {
-            self.pick_error = Some(format!(
-                "That picture is {} MB — the limit is {} MB.",
-                bytes.len() / 1_048_576,
-                IMAGE_UPLOAD_MAX / 1_048_576,
+            self.pick_error = Some(tr!(
+                "sstv-picture-too-big",
+                size = bytes.len() / 1_048_576,
+                limit = IMAGE_UPLOAD_MAX / 1_048_576
             ));
             return;
         }
@@ -1257,7 +1275,7 @@ fn rifp_chunk_map(ui: &mut egui::Ui, session: &sdroxide_types::RifpSession) {
         egui::Stroke::new(1.0, crate::theme::gray(60)),
         egui::StrokeKind::Inside,
     );
-    resp.on_hover_text("Chunks received (lit) and still missing (dark)");
+    resp.on_hover_text(tr!("sstv-chunks-received-lit-still-missing"));
 }
 
 fn sstv_level_bar(ui: &mut egui::Ui, level: f32) {
@@ -1409,395 +1427,422 @@ impl SdroxideApp {
 
             // ── LEFT: boxed controls, then LIVE + RECEIVED ──
             if pane.is_none_or(|p| p == 0) {
-            ui.allocate_ui_with_layout(
-                egui::vec2(left_w, full_h),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    egui::Frame::new()
-                        .fill(crate::theme::ROW_BG())
-                        .stroke(egui::Stroke::new(1.0, crate::theme::LINE_LIT()))
-                        .inner_margin(egui::Margin { left: 8, right: 8, top: 6, bottom: 7 })
-                        .show(ui, |ui| {
-                            ui.set_min_width(left_w - 16.0);
-                            ui.set_max_width(left_w - 16.0);
-                            if rifp {
-                                self.rifp_controls(ui, cmds);
-                                return;
-                            }
-
-                            // Mode selection: Auto + the per-mode chips.
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label(
-                                    RichText::new("SSTV")
-                                        .size(12.0)
-                                        .strong()
-                                        .color(crate::theme::CYAN()),
-                                );
-                                self.digi_freq_chip(ui, cmds);
-                                let auto_label = if self.sstv.auto {
-                                    format!("Auto ({})", self.sstv.tx_mode.label())
-                                } else {
-                                    "Auto".to_string()
-                                };
-                                if crate::chrome::chip(ui, self.sstv.auto, &auto_label).clicked() {
-                                    self.sstv.auto = true;
-                                    self.sstv.tx_mode = SstvMode::Martin1;
-                                    self.sstv.preview_dirty = true;
-                                    cmds.push(Command::SstvSetMode(None));
+                ui.allocate_ui_with_layout(
+                    egui::vec2(left_w, full_h),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        egui::Frame::new()
+                            .fill(crate::theme::ROW_BG())
+                            .stroke(egui::Stroke::new(1.0, crate::theme::LINE_LIT()))
+                            .inner_margin(egui::Margin { left: 8, right: 8, top: 6, bottom: 7 })
+                            .show(ui, |ui| {
+                                ui.set_min_width(left_w - 16.0);
+                                ui.set_max_width(left_w - 16.0);
+                                if rifp {
+                                    self.rifp_controls(ui, cmds);
+                                    return;
                                 }
-                                for m in SstvMode::ALL {
-                                    let active = !self.sstv.auto && self.sstv.tx_mode == m;
-                                    if crate::chrome::chip(ui, active, m.label()).clicked() {
-                                        self.sstv.auto = false;
-                                        self.sstv.tx_mode = m;
-                                        self.sstv.preview_dirty = true;
-                                        cmds.push(Command::SstvSetMode(Some(m)));
-                                    }
-                                }
-                            });
-                            ui.add_space(5.0);
 
-                            // Signal meter + activity, and the TX-slant trim.
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label(RichText::new("Signal").size(10.0).weak());
-                                sstv_level_bar(ui, signal);
-                                if tx_active {
+                                // Mode selection: Auto + the per-mode chips.
+                                ui.horizontal_wrapped(|ui| {
                                     ui.label(
-                                        RichText::new(format!("● TX {:.0}%", progress * 100.0))
-                                            .size(11.0)
+                                        RichText::new(tr!("sstv-sstv"))
+                                            .size(12.0)
                                             .strong()
-                                            .color(crate::theme::ALERT()),
+                                            .color(crate::theme::CYAN()),
                                     );
-                                } else if st.rx_active {
-                                    ui.label(
-                                        RichText::new(format!("● RX {:.0}%", st.progress * 100.0))
+                                    self.digi_freq_chip(ui, cmds);
+                                    let auto_label = if self.sstv.auto {
+                                        tr!("sstv-auto-mode", mode = self.sstv.tx_mode.label())
+                                    } else {
+                                        tr!("sstv-auto").to_string()
+                                    };
+                                    if crate::chrome::chip(ui, self.sstv.auto, &auto_label)
+                                        .clicked()
+                                    {
+                                        self.sstv.auto = true;
+                                        self.sstv.tx_mode = SstvMode::Martin1;
+                                        self.sstv.preview_dirty = true;
+                                        cmds.push(Command::SstvSetMode(None));
+                                    }
+                                    for m in SstvMode::ALL {
+                                        let active = !self.sstv.auto && self.sstv.tx_mode == m;
+                                        if crate::chrome::chip(ui, active, m.label()).clicked() {
+                                            self.sstv.auto = false;
+                                            self.sstv.tx_mode = m;
+                                            self.sstv.preview_dirty = true;
+                                            cmds.push(Command::SstvSetMode(Some(m)));
+                                        }
+                                    }
+                                });
+                                ui.add_space(5.0);
+
+                                // Signal meter + activity, and the TX-slant trim.
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(RichText::new(tr!("sstv-signal")).size(10.0).weak());
+                                    sstv_level_bar(ui, signal);
+                                    if tx_active {
+                                        ui.label(
+                                            RichText::new(format!("● TX {:.0}%", progress * 100.0))
+                                                .size(11.0)
+                                                .strong()
+                                                .color(crate::theme::ALERT()),
+                                        );
+                                    } else if st.rx_active {
+                                        ui.label(
+                                            RichText::new(format!(
+                                                "● RX {:.0}%",
+                                                st.progress * 100.0
+                                            ))
                                             .size(11.0)
                                             .strong()
                                             .color(crate::theme::GREEN()),
-                                    );
-                                } else if let Some(bad) = st.unsupported.as_deref() {
-                                    // A header came through cleanly for a mode
-                                    // this build cannot draw. Without this the
-                                    // panel says "listening…" beside a textbook
-                                    // signal and the receiver looks broken
-                                    // (issue #421).
-                                    ui.label(
-                                        RichText::new(format!("{bad} — not decoded"))
+                                        );
+                                    } else if let Some(bad) = st.unsupported.as_deref() {
+                                        // A header came through cleanly for a mode
+                                        // this build cannot draw. Without this the
+                                        // panel says "listening…" beside a textbook
+                                        // signal and the receiver looks broken
+                                        // (issue #421).
+                                        ui.label(
+                                            RichText::new(tr!(
+                                                "sstv-not-decoded",
+                                                what = bad.to_string()
+                                            ))
                                             .size(10.5)
                                             .strong()
                                             .color(crate::theme::ALERT()),
-                                    )
-                                    .on_hover_text(
-                                        "A station is sending in a mode sdroxide does not have. \
-                                         The signal and the tuning are fine — there is simply no \
-                                         decoder for this one. Nothing to fix at your end.",
-                                    );
-                                } else if let Some(m) = st.detected {
-                                    ui.label(
-                                        RichText::new(format!("last: {}", m.label()))
-                                            .size(10.0)
-                                            .weak(),
-                                    );
-                                } else {
-                                    ui.label(RichText::new("listening…").size(10.0).weak());
-                                }
-
-                                // Issue #397. A receiver that has locked on is
-                                // committed for the whole length of the mode it
-                                // locked on to, and Scottie DX is four and a
-                                // half minutes — so a VIS misread as a slow
-                                // mode costs every picture sent while it runs
-                                // out. On QO-100, where one station follows
-                                // another over the same transponder, that is
-                                // the next few overs.
-                                //
-                                // Offered whether or not a picture is under
-                                // way: re-arming an idle hunt costs nothing,
-                                // and a chip that appears only once the mistake
-                                // has been made is one the operator has to find
-                                // in a hurry. The half-picture goes with it,
-                                // here as well as in the decoder — leaving the
-                                // abandoned frame on screen would say the
-                                // button had not worked.
-                                if crate::chrome::chip(ui, false, "Restart RX")
-                                    .on_hover_text(
-                                        "Abandon the picture being received and listen for the                                          next header. For a transmission that started decoding                                          in the wrong mode — the receiver is otherwise committed                                          until that mode runs out.",
-                                    )
-                                    .clicked()
-                                {
-                                    cmds.push(Command::SstvRestartRx);
-                                    self.sstv.rx_color = None;
-                                    self.sstv.rx_tex = None;
-                                }
-
-                                // Who sent it. The FSK ID arrives in tones a
-                                // fraction of a second after the picture, which
-                                // is exactly when the operator is looking at the
-                                // frame and wondering whose it is — and unlike a
-                                // banner drawn into the image, this is the
-                                // station's own machine-readable identification.
-                                if let Some(id) = st.rx_id.as_deref() {
-                                    ui.add_space(8.0);
-                                    ui.label(
-                                        RichText::new(format!("ID {id}"))
-                                            .size(11.0)
-                                            .strong()
-                                            .color(crate::theme::CYAN_DIM()),
-                                    )
-                                    .on_hover_text(
-                                        "The callsign the last station sent as an FSK ID after \
-                                         its picture.",
-                                    );
-                                }
-
-                                ui.add_space(12.0);
-                                ui.separator();
-                                ui.label(RichText::new("TX slant").size(10.0).weak()).on_hover_text(
-                                    "Transmit clock trim (ppm) to remove slant on the far-end decoder",
-                                );
-                                ui.add_enabled_ui(self.digi_cfg_seeded, |ui| {
-                                    ui.spacing_mut().slider_width = 130.0;
-                                    let resp = crate::chrome::slider(ui, egui::Slider::new(
-                                            &mut self.digi_cfg_edit.sstv_tx_ppm,
-                                            -5000.0..=5000.0,
-                                        )
-                                        .suffix(" ppm")
-                                        .fixed_decimals(0),
-                                    );
-                                    if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
-                                        cmds.push(Command::SetDigiConfig(self.digi_cfg_edit.clone()));
-                                    }
-                                    if ui
-                                        .small_button("0")
-                                        .on_hover_text("Reset to 0 ppm")
-                                        .clicked()
-                                    {
-                                        self.digi_cfg_edit.sstv_tx_ppm = 0.0;
-                                        cmds.push(Command::SetDigiConfig(self.digi_cfg_edit.clone()));
-                                    }
-                                    ui.separator();
-                                    // The callsign in tones after the picture.
-                                    // Beside the slant trim rather than in the
-                                    // banner window: the banner identifies the
-                                    // station to a person looking at the
-                                    // picture, this identifies it to the
-                                    // repeater decoding it, and the two are set
-                                    // for different reasons.
-                                    if crate::chrome::checkbox(
-                                        ui,
-                                        &mut self.digi_cfg_edit.sstv_fsk_id,
-                                        "FSK ID",
-                                    )
-                                    .on_hover_text(
-                                        "Send your callsign in tones after each picture — the \
-                                         identification SSTV repeaters and other programs read. \
-                                         Adds about 2.5 seconds, and sends nothing at all until \
-                                         you have set a callsign.",
-                                    )
-                                    .changed()
-                                    {
-                                        cmds.push(Command::SetDigiConfig(self.digi_cfg_edit.clone()));
-                                    }
-                                    ui.separator();
-                                    // Dead air before the calibration header, so
-                                    // the rig is really on the air by the time
-                                    // the VIS code goes out. Here rather than in
-                                    // the setup window because it is the same
-                                    // kind of per-station trim as the slant
-                                    // beside it, and the operator who needs it
-                                    // finds out by transmitting.
-                                    ui.label(RichText::new("TX lead").size(10.0).weak());
-                                    if ui
-                                        .add(
-                                            egui::DragValue::new(
-                                                &mut self.digi_cfg_edit.sstv_txdelay_ms,
-                                            )
-                                            .range(0..=3000)
-                                            .speed(10.0)
-                                            .suffix(" ms"),
                                         )
                                         .on_hover_text(
-                                            "Silence sent after keying and before the picture's \
-                                             leader and VIS code. A decoder that misses any of \
-                                             that header shows no picture at all, so this covers \
-                                             the gap between asking a rig for PTT and it really \
-                                             being on the air. 0 for an SDR that keys instantly.",
-                                        )
-                                        .changed()
-                                    {
-                                        cmds.push(Command::SetDigiConfig(self.digi_cfg_edit.clone()));
-                                    }
-                                });
-                            });
-                        });
-                    ui.add_space(6.0);
-
-                    // LIVE + RECEIVED fill the remaining height of the left column.
-                    //
-                    // Stacked on a phone rather than side by side: halving 377
-                    // points leaves two columns too narrow to show a picture in,
-                    // and a received picture is the whole point of the mode.
-                    let stack = pane.is_some();
-                    let row_h = ui.available_height().max(160.0);
-                    let (row_h, live_w, gallery_w) = if stack {
-                        let w = ui.available_width();
-                        ((row_h / 2.0).max(120.0), w, w)
-                    } else {
-                        (row_h, live_w, gallery_w)
-                    };
-                    let lay = if stack {
-                        egui::Layout::top_down(egui::Align::Min)
-                    } else {
-                        egui::Layout::left_to_right(egui::Align::Min)
-                    };
-                    ui.with_layout(lay, |ui| {
-                        // LIVE: the picture currently decoding, shown large.
-                        sstv_section(ui, "LIVE", egui::vec2(live_w, row_h), |ui| {
-                            ui.centered_and_justified(|ui| {
-                                if let Some(tex) = &self.sstv.rx_tex {
-                                    ui.add(
-                                        egui::Image::new(tex)
-                                            .max_height(row_h - 34.0)
-                                            .max_width(live_w - 16.0),
-                                    );
-                                } else {
-                                    let msg = if rifp {
-                                        // RIFP only paints live from the raw
-                                        // raster; anything else appears whole.
-                                        "waiting for a picture…"
-                                    } else if signal > 0.0008 {
-                                        "waiting for a signal…"
-                                    } else {
-                                        "no / low audio"
-                                    };
-                                    ui.label(RichText::new(msg).size(11.0).weak());
-                                }
-                            });
-                        });
-                        // Draggable vertical divider between LIVE and RECEIVED.
-                        if !stack {
-                            let hresp =
-                                crate::chrome::split_handle(ui, egui::vec2(handle_w, row_h), None);
-                            if hresp.dragged() {
-                                // Dragging right shrinks the gallery (grows LIVE).
-                                let d = hresp.drag_delta().x / left_w.max(1.0);
-                                self.view.sstv_gallery_fraction =
-                                    (self.view.sstv_gallery_fraction - d).clamp(0.2, 0.6);
-                            }
-                        }
-
-                        // RECEIVED: narrow multi-column gallery of decoded
-                        // pictures, thumbnailed by the engine out of its own
-                        // store — so it is the same gallery here, on a browser
-                        // tab, and on a client dialled in from anywhere else.
-                        sstv_section(ui, "RECEIVED", egui::vec2(gallery_w, row_h), |ui| {
-                            if self.sstv.received.is_empty() {
-                                let msg = if self.sstv.page_pending {
-                                    "Reading the radio's pictures…".to_string()
-                                } else if self.sstv.dir.is_empty() {
-                                    "Decoded pictures collect here.".to_string()
-                                } else {
-                                    format!(
-                                        "Decoded pictures are saved {} and collect here.",
-                                        self.store_where(&self.sstv.dir),
-                                    )
-                                };
-                                ui.label(RichText::new(msg).size(11.0).weak());
-                                return;
-                            }
-                            let thumb = egui::vec2(112.0, 90.0);
-                            let shown = self.sstv.received.len() as u32;
-                            let older = self.sstv.total.saturating_sub(shown);
-                            egui::ScrollArea::vertical()
-                                .id_salt("sstv-gallery")
-                                .max_height(row_h - 24.0)
-                                .auto_shrink([false, false])
-                                .show_themed(ui, |ui| {
-                                    ui.horizontal_wrapped(|ui| {
-                                        ui.spacing_mut().item_spacing = egui::vec2(5.0, 5.0);
-                                        for (i, r) in self.sstv.received.iter().enumerate() {
-                                            let resp = ui
-                                                .add(
-                                                    egui::Image::new(&r.thumb)
-                                                        .fit_to_exact_size(thumb)
-                                                        .corner_radius(2.0)
-                                                        .sense(egui::Sense::click()),
-                                                )
-                                                .on_hover_text(match &r.entry.sender {
-                                                    Some(c) => format!(
-                                                        "From {c} · click to enlarge · \
-                                                         right-click to reply or delete"
-                                                    ),
-                                                    None => "Click to enlarge · right-click to \
-                                                             delete"
-                                                        .to_string(),
-                                                });
-                                            if resp.clicked() {
-                                                enlarge = Some(i);
-                                            }
-                                            // A menu rather than an ✕ on the
-                                            // thumbnail: a picture is 112 points
-                                            // across in a wrapped grid, and a
-                                            // delete target that close to the
-                                            // one for opening it would be pressed
-                                            // by accident.
-                                            resp.context_menu(|ui| {
-                                                ui.label(
-                                                    RichText::new(shorten(&r.entry.name, 32))
-                                                        .size(10.0)
-                                                        .weak(),
-                                                );
-                                                if let Some(c) = &r.entry.sender {
-                                                    if ui
-                                                        .button(format!("Reply to {c}"))
-                                                        .on_hover_text(
-                                                            "Start a contact with this station: \
-                                                             its call goes in the QSO box, and \
-                                                             the rest of the box is emptied",
-                                                        )
-                                                        .clicked()
-                                                    {
-                                                        reply = Some(c.clone());
-                                                        ui.close();
-                                                    }
-                                                }
-                                                if ui.button("Delete this picture").clicked() {
-                                                    delete = Some(r.entry.name.clone());
-                                                    ui.close();
-                                                }
-                                            });
-                                        }
-                                    });
-                                    // The rest of the store is a request away.
-                                    // Explicit rather than automatic on scroll:
-                                    // a page is a few hundred kilobytes and the
-                                    // operator may be on a phone link.
-                                    if older > 0 && self.sstv.received.len() >= GALLERY_MAX {
-                                        ui.add_space(4.0);
+                                            tr!("sstv-station-sending-mode-sdroxide-does"),
+                                        );
+                                    } else if let Some(m) = st.detected {
                                         ui.label(
-                                            RichText::new(format!("{older} older in the store"))
-                                                .size(9.5)
+                                            RichText::new(tr!("sstv-last", mode = m.label()))
+                                                .size(10.0)
                                                 .weak(),
                                         );
-                                    } else if older > 0 {
-                                        ui.add_space(4.0);
-                                        let label = if self.sstv.page_pending {
-                                            "loading…".to_string()
-                                        } else {
-                                            format!("{older} older — load more")
-                                        };
-                                        if crate::chrome::chip(ui, false, label).clicked()
-                                            && !self.sstv.page_pending
+                                    } else {
+                                        ui.label(
+                                            RichText::new(tr!("sstv-listening")).size(10.0).weak(),
+                                        );
+                                    }
+
+                                    // Issue #397. A receiver that has locked on is
+                                    // committed for the whole length of the mode it
+                                    // locked on to, and Scottie DX is four and a
+                                    // half minutes — so a VIS misread as a slow
+                                    // mode costs every picture sent while it runs
+                                    // out. On QO-100, where one station follows
+                                    // another over the same transponder, that is
+                                    // the next few overs.
+                                    //
+                                    // Offered whether or not a picture is under
+                                    // way: re-arming an idle hunt costs nothing,
+                                    // and a chip that appears only once the mistake
+                                    // has been made is one the operator has to find
+                                    // in a hurry. The half-picture goes with it,
+                                    // here as well as in the decoder — leaving the
+                                    // abandoned frame on screen would say the
+                                    // button had not worked.
+                                    if crate::chrome::chip(ui, false, tr!("sstv-restart-rx"))
+                                        .on_hover_text(tr!(
+                                            "sstv-abandon-picture-being-received-listen"
+                                        ))
+                                        .clicked()
+                                    {
+                                        cmds.push(Command::SstvRestartRx);
+                                        self.sstv.rx_color = None;
+                                        self.sstv.rx_tex = None;
+                                    }
+
+                                    // Who sent it. The FSK ID arrives in tones a
+                                    // fraction of a second after the picture, which
+                                    // is exactly when the operator is looking at the
+                                    // frame and wondering whose it is — and unlike a
+                                    // banner drawn into the image, this is the
+                                    // station's own machine-readable identification.
+                                    if let Some(id) = st.rx_id.as_deref() {
+                                        ui.add_space(8.0);
+                                        ui.label(
+                                            RichText::new(format!("ID {id}"))
+                                                .size(11.0)
+                                                .strong()
+                                                .color(crate::theme::CYAN_DIM()),
+                                        )
+                                        .on_hover_text(tr!("sstv-callsign-last-station-sent-fsk"));
+                                    }
+
+                                    ui.add_space(12.0);
+                                    ui.separator();
+                                    ui.label(RichText::new(tr!("sstv-tx-slant")).size(10.0).weak())
+                                        .on_hover_text(tr!("sstv-transmit-clock-trim-ppm-remove"));
+                                    ui.add_enabled_ui(self.digi_cfg_seeded, |ui| {
+                                        ui.spacing_mut().slider_width = 130.0;
+                                        let resp = crate::chrome::slider(
+                                            ui,
+                                            egui::Slider::new(
+                                                &mut self.digi_cfg_edit.sstv_tx_ppm,
+                                                -5000.0..=5000.0,
+                                            )
+                                            .suffix(" ppm")
+                                            .fixed_decimals(0),
+                                        );
+                                        if resp.drag_stopped()
+                                            || (resp.changed() && !resp.dragged())
                                         {
-                                            more = true;
+                                            cmds.push(Command::SetDigiConfig(
+                                                self.digi_cfg_edit.clone(),
+                                            ));
                                         }
+                                        if ui
+                                            .small_button("0")
+                                            .on_hover_text(tr!("sstv-reset-0-ppm"))
+                                            .clicked()
+                                        {
+                                            self.digi_cfg_edit.sstv_tx_ppm = 0.0;
+                                            cmds.push(Command::SetDigiConfig(
+                                                self.digi_cfg_edit.clone(),
+                                            ));
+                                        }
+                                        ui.separator();
+                                        // The callsign in tones after the picture.
+                                        // Beside the slant trim rather than in the
+                                        // banner window: the banner identifies the
+                                        // station to a person looking at the
+                                        // picture, this identifies it to the
+                                        // repeater decoding it, and the two are set
+                                        // for different reasons.
+                                        if crate::chrome::checkbox(
+                                            ui,
+                                            &mut self.digi_cfg_edit.sstv_fsk_id,
+                                            tr!("sstv-fsk-id"),
+                                        )
+                                        .on_hover_text(tr!("sstv-send-your-callsign-tones-after"))
+                                        .changed()
+                                        {
+                                            cmds.push(Command::SetDigiConfig(
+                                                self.digi_cfg_edit.clone(),
+                                            ));
+                                        }
+                                        ui.separator();
+                                        // Dead air before the calibration header, so
+                                        // the rig is really on the air by the time
+                                        // the VIS code goes out. Here rather than in
+                                        // the setup window because it is the same
+                                        // kind of per-station trim as the slant
+                                        // beside it, and the operator who needs it
+                                        // finds out by transmitting.
+                                        ui.label(
+                                            RichText::new(tr!("sstv-tx-lead")).size(10.0).weak(),
+                                        );
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(
+                                                    &mut self.digi_cfg_edit.sstv_txdelay_ms,
+                                                )
+                                                .range(0..=3000)
+                                                .speed(10.0)
+                                                .suffix(" ms"),
+                                            )
+                                            .on_hover_text(tr!(
+                                                "sstv-silence-sent-after-keying-before"
+                                            ))
+                                            .changed()
+                                        {
+                                            cmds.push(Command::SetDigiConfig(
+                                                self.digi_cfg_edit.clone(),
+                                            ));
+                                        }
+                                    });
+                                });
+                            });
+                        ui.add_space(6.0);
+
+                        // LIVE + RECEIVED fill the remaining height of the left column.
+                        //
+                        // Stacked on a phone rather than side by side: halving 377
+                        // points leaves two columns too narrow to show a picture in,
+                        // and a received picture is the whole point of the mode.
+                        let stack = pane.is_some();
+                        let row_h = ui.available_height().max(160.0);
+                        let (row_h, live_w, gallery_w) = if stack {
+                            let w = ui.available_width();
+                            ((row_h / 2.0).max(120.0), w, w)
+                        } else {
+                            (row_h, live_w, gallery_w)
+                        };
+                        let lay = if stack {
+                            egui::Layout::top_down(egui::Align::Min)
+                        } else {
+                            egui::Layout::left_to_right(egui::Align::Min)
+                        };
+                        ui.with_layout(lay, |ui| {
+                            // LIVE: the picture currently decoding, shown large.
+                            sstv_section(ui, &tr!("sstv-live"), egui::vec2(live_w, row_h), |ui| {
+                                ui.centered_and_justified(|ui| {
+                                    if let Some(tex) = &self.sstv.rx_tex {
+                                        ui.add(
+                                            egui::Image::new(tex)
+                                                .max_height(row_h - 34.0)
+                                                .max_width(live_w - 16.0),
+                                        );
+                                    } else {
+                                        let msg = if rifp {
+                                            // RIFP only paints live from the raw
+                                            // raster; anything else appears whole.
+                                            tr!("sstv-waiting-picture")
+                                        } else if signal > 0.0008 {
+                                            tr!("sstv-waiting-signal")
+                                        } else {
+                                            tr!("sstv-no-low-audio")
+                                        };
+                                        ui.label(RichText::new(msg).size(11.0).weak());
                                     }
                                 });
-                        });
-                    });
-                },
-            );
+                            });
+                            // Draggable vertical divider between LIVE and RECEIVED.
+                            if !stack {
+                                let hresp = crate::chrome::split_handle(
+                                    ui,
+                                    egui::vec2(handle_w, row_h),
+                                    None,
+                                );
+                                if hresp.dragged() {
+                                    // Dragging right shrinks the gallery (grows LIVE).
+                                    let d = hresp.drag_delta().x / left_w.max(1.0);
+                                    self.view.sstv_gallery_fraction =
+                                        (self.view.sstv_gallery_fraction - d).clamp(0.2, 0.6);
+                                }
+                            }
 
+                            // RECEIVED: narrow multi-column gallery of decoded
+                            // pictures, thumbnailed by the engine out of its own
+                            // store — so it is the same gallery here, on a browser
+                            // tab, and on a client dialled in from anywhere else.
+                            sstv_section(
+                                ui,
+                                &tr!("sstv-received"),
+                                egui::vec2(gallery_w, row_h),
+                                |ui| {
+                                    if self.sstv.received.is_empty() {
+                                        let msg = if self.sstv.page_pending {
+                                            tr!("sstv-reading-radio-s-pictures").to_string()
+                                        } else if self.sstv.dir.is_empty() {
+                                            tr!("sstv-decoded-pictures-collect-here").to_string()
+                                        } else {
+                                            tr!(
+                                                "sstv-saved-where",
+                                                place = self.store_where(&self.sstv.dir)
+                                            )
+                                        };
+                                        ui.label(RichText::new(msg).size(11.0).weak());
+                                        return;
+                                    }
+                                    let thumb = egui::vec2(112.0, 90.0);
+                                    let shown = self.sstv.received.len() as u32;
+                                    let older = self.sstv.total.saturating_sub(shown);
+                                    egui::ScrollArea::vertical()
+                                        .id_salt("sstv-gallery")
+                                        .max_height(row_h - 24.0)
+                                        .auto_shrink([false, false])
+                                        .show_themed(ui, |ui| {
+                                            ui.horizontal_wrapped(|ui| {
+                                                ui.spacing_mut().item_spacing =
+                                                    egui::vec2(5.0, 5.0);
+                                                for (i, r) in self.sstv.received.iter().enumerate()
+                                                {
+                                                    let resp = ui
+                                                        .add(
+                                                            egui::Image::new(&r.thumb)
+                                                                .fit_to_exact_size(thumb)
+                                                                .corner_radius(2.0)
+                                                                .sense(egui::Sense::click()),
+                                                        )
+                                                        .on_hover_text(match &r.entry.sender {
+                                                            Some(c) => tr!(
+                                                                "sstv-from-click-enlarge-reply-delete",
+                                                                call = c
+                                                            ),
+                                                            None => tr!(
+                                                                "sstv-click-enlarge-right-click-delete"
+                                                            )
+                                                            .to_string(),
+                                                        });
+                                                    if resp.clicked() {
+                                                        enlarge = Some(i);
+                                                    }
+                                                    // A menu rather than an ✕ on the
+                                                    // thumbnail: a picture is 112 points
+                                                    // across in a wrapped grid, and a
+                                                    // delete target that close to the
+                                                    // one for opening it would be pressed
+                                                    // by accident.
+                                                    resp.context_menu(|ui| {
+                                                        ui.label(
+                                                            RichText::new(shorten(
+                                                                &r.entry.name,
+                                                                32,
+                                                            ))
+                                                            .size(10.0)
+                                                            .weak(),
+                                                        );
+                                                        if let Some(c) = &r.entry.sender {
+                                                            if ui
+                                                                .button(tr!("sstv-reply-to", call = c))
+                                                                .on_hover_text(tr!(
+                                                                    "sstv-start-contact-station-call-qso"
+                                                                ))
+                                                                .clicked()
+                                                            {
+                                                                reply = Some(c.clone());
+                                                                ui.close();
+                                                            }
+                                                        }
+                                                        if ui
+                                                            .button(tr!("sstv-delete-picture"))
+                                                            .clicked()
+                                                        {
+                                                            delete = Some(r.entry.name.clone());
+                                                            ui.close();
+                                                        }
+                                                    });
+                                                }
+                                            });
+                                            // The rest of the store is a request away.
+                                            // Explicit rather than automatic on scroll:
+                                            // a page is a few hundred kilobytes and the
+                                            // operator may be on a phone link.
+                                            if older > 0 && self.sstv.received.len() >= GALLERY_MAX
+                                            {
+                                                ui.add_space(4.0);
+                                                ui.label(
+                                                    RichText::new(tr!(
+                                                        "sstv-older-in-store",
+                                                        n = older
+                                                    ))
+                                                    .size(9.5)
+                                                    .weak(),
+                                                );
+                                            } else if older > 0 {
+                                                ui.add_space(4.0);
+                                                let label = if self.sstv.page_pending {
+                                                    tr!("sstv-loading").to_string()
+                                                } else {
+                                                    tr!("sstv-older-load-more", n = older)
+                                                };
+                                                if crate::chrome::chip(ui, false, label).clicked()
+                                                    && !self.sstv.page_pending
+                                                {
+                                                    more = true;
+                                                }
+                                            }
+                                        });
+                                },
+                            );
+                        });
+                    },
+                );
             }
 
             // Draggable vertical divider between the receive side and the
@@ -1813,275 +1858,325 @@ impl SdroxideApp {
 
             // ── RIGHT: transmit compositor, full height ──
             if pane.is_none_or(|p| p != 0) {
-            ui.allocate_ui(egui::vec2(tx_w, full_h), |ui| {
-                sstv_section(ui, "TRANSMIT", egui::vec2(tx_w, full_h), |ui| {
-                    // The compositor is a fixed stack — the five slots, the
-                    // load buttons, the preview, the message box and the
-                    // transmit controls — and none of it can be dropped
-                    // without dropping a control. On a screen with less height
-                    // than the stack needs it used to run off the bottom edge
-                    // and simply not be there (issue #231). Scrolled, the whole
-                    // stack stays reachable, and where there is room the bar
-                    // never appears.
-                    egui::ScrollArea::vertical()
-                        .id_salt("sstv-transmit")
-                        .auto_shrink([false, false])
-                        .show_themed(ui, |ui| {
-                        let inner_w = tx_w - 16.0;
+                ui.allocate_ui(egui::vec2(tx_w, full_h), |ui| {
+                    sstv_section(ui, &tr!("sstv-transmit"), egui::vec2(tx_w, full_h), |ui| {
+                        // The compositor is a fixed stack — the ten slots, the
+                        // load buttons, the QSO box, the preview, the text layers and the
+                        // transmit controls — and none of it can be dropped
+                        // without dropping a control. On a screen with less height
+                        // than the stack needs it used to run off the bottom edge
+                        // and simply not be there (issue #231). Scrolled, the whole
+                        // stack stays reachable, and where there is room the bar
+                        // never appears.
+                        egui::ScrollArea::vertical()
+                            .id_salt("sstv-transmit")
+                            .auto_shrink([false, false])
+                            .show_themed(ui, |ui| {
+                                let inner_w = tx_w - 16.0;
 
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 5.0;
-                            for i in 0..IMAGE_SLOTS {
-                                let sel = self.sstv.selected_slot == i;
-                                let size = egui::vec2(70.0, 54.0);
-                                let resp = if let Some(tex) =
-                                    self.sstv.slot_thumbs.get(i).and_then(|t| t.as_ref())
-                                {
-                                    ui.add(
-                                        egui::Image::new(tex)
-                                            .fit_to_exact_size(size)
-                                            .corner_radius(2.0)
-                                            .sense(egui::Sense::click()),
-                                    )
-                                } else {
-                                    let (rect, resp) =
-                                        ui.allocate_exact_size(size, egui::Sense::click());
-                                    ui.painter().rect_stroke(
-                                        rect,
-                                        2.0,
-                                        egui::Stroke::new(1.0, crate::theme::gray(70)),
-                                        egui::StrokeKind::Inside,
-                                    );
-                                    ui.painter().text(
-                                        rect.center(),
-                                        egui::Align2::CENTER_CENTER,
-                                        "+",
-                                        egui::FontId::proportional(22.0),
-                                        crate::theme::gray(110),
-                                    );
-                                    resp
-                                };
-                                // Active-tab highlight: a cyan wash + heavier border so
-                                // it is obvious which slot the text editor targets.
-                                if sel {
-                                    ui.painter().rect_filled(
-                                        resp.rect,
-                                        2.0,
-                                        Color32::from_rgba_unmultiplied(0x00, 0xd0, 0xf4, 34),
-                                    );
-                                    ui.painter().rect_stroke(
-                                        resp.rect,
-                                        2.0,
-                                        egui::Stroke::new(2.5, crate::theme::CYAN()),
-                                        egui::StrokeKind::Outside,
-                                    );
-                                }
-                                // Slot number badge (1..5), like a tab label.
-                                let badge = egui::Rect::from_min_size(
-                                    resp.rect.left_top() + egui::vec2(2.0, 2.0),
-                                    egui::vec2(15.0, 13.0),
-                                );
-                                ui.painter().rect_filled(badge, 2.0, Color32::from_black_alpha(150));
-                                ui.painter().text(
-                                    badge.center(),
-                                    egui::Align2::CENTER_CENTER,
-                                    format!("{}", i + 1),
-                                    egui::FontId::proportional(10.0),
-                                    if sel { crate::theme::CYAN() } else { crate::theme::gray(170) },
-                                );
-                                let resp = resp.on_hover_text(
-                                    "Click to edit this slot's text · double-click to load an image",
-                                );
-                                if resp.double_clicked() {
-                                    self.sstv.pick_target = Some(i);
-                                    pick_image(self.sstv.inbox.clone());
-                                } else if resp.clicked() && !sel {
-                                    self.sstv.select_slot(i, cmds);
-                                }
-                            }
-                        });
-                        ui.add_space(5.0);
-
-                        // Load/replace/clear the active slot's picture.
-                        ui.horizontal(|ui| {
-                            let sel = self.sstv.selected_slot;
-                            let has_img = self.sstv.presets.slot(sel).has_picture();
-                            let label = if has_img { "Change image…" } else { "Load image…" };
-                            if crate::chrome::chip(ui, false, label).clicked() {
-                                self.sstv.pick_target = Some(sel);
-                                pick_image(self.sstv.inbox.clone());
-                            }
-                            // Two presses, like deleting from the gallery: the
-                            // stored picture goes for good, and a lone "Clear"
-                            // here read as clearing whatever was nearest — the
-                            // QSO box below, say. Armed per slot and only for a
-                            // few seconds, so it cannot go off long after.
-                            if has_img {
-                                let armed = self
-                                    .sstv
-                                    .confirm_remove
-                                    .is_some_and(|(s, t)| s == sel && now - t < 4.0);
-                                let (text, hint) = if armed {
-                                    ("Really remove?", "Click again to delete this slot's picture")
-                                } else {
-                                    (
-                                        "Remove image",
-                                        "Delete this slot's picture. Its text layers stay, and \
-                                         come back over the next picture you load.",
-                                    )
-                                };
-                                if crate::chrome::chip(ui, armed, text).on_hover_text(hint).clicked()
-                                {
-                                    if armed {
-                                        self.sstv.confirm_remove = None;
-                                        cmds.push(Command::ImageClearSlot(sel as u8));
-                                    } else {
-                                        self.sstv.confirm_remove = Some((sel, now));
-                                    }
-                                }
-                            }
-                            // The banner belongs to the station, not to the slot:
-                            // one editor, reached from whichever slot is in front.
-                            if crate::chrome::chip(ui, self.sstv.banner_open, "Banner…")
-                                .on_hover_text(
-                                    "What is printed across the top of every picture this station \
-                                     sends",
-                                )
-                                .clicked()
-                            {
-                                self.sstv.banner_open = !self.sstv.banner_open;
-                            }
-                        });
-                        if let Some(err) = &self.sstv.pick_error {
-                            ui.label(RichText::new(err).size(10.0).color(crate::theme::YELLOW()));
-                        }
-                        ui.add_space(4.0);
-
-                        // Who the contact is with: what `{tocall}` and friends
-                        // print, and what a log entry is filled from.
-                        self.sstv_qso_strip(ui, now, cmds);
-                        ui.add_space(6.0);
-
-                        // Preview gets a capped share of the height; the text box
-                        // grows to fill whatever's left above the buttons.
-                        let btn_h = 42.0;
-                        let gap = 6.0;
-                        let preview_h = (ui.available_height() * 0.45).clamp(80.0, 260.0);
-                        egui::Frame::new()
-                            .fill(crate::theme::gray(6))
-                            .stroke(egui::Stroke::new(1.0, crate::theme::LINE_LIT()))
-                            .inner_margin(2.0)
-                            .show(ui, |ui| {
-                                ui.set_min_size(egui::vec2(inner_w, preview_h));
-                                ui.set_max_size(egui::vec2(inner_w, preview_h));
-                                ui.centered_and_justified(|ui| {
-                                    self.sstv.preview_ui(
-                                        ui,
-                                        egui::vec2(inner_w - 4.0, preview_h - 4.0),
-                                        dims,
-                                        now,
-                                        cmds,
-                                    );
-                                });
-                            });
-                        ui.add_space(gap);
-
-                        // The slot's text layers: which one, how it looks, and
-                        // what it says — the text box filling the height above
-                        // the buttons.
-                        // A picture about to go out with a hole in it: a
-                        // `{tocall}` with no call in the QSO box.
-                        let empty = self.sstv.empty_placeholders();
-                        let warn_h = if empty.is_empty() { 0.0 } else { 18.0 };
-                        self.sstv.layer_editor(ui, inner_w, btn_h + gap + warn_h, dims, now, cmds);
-                        ui.add_space(gap);
-                        if !empty.is_empty() {
-                            ui.label(
-                                RichText::new(format!(
-                                    "⚠ {} empty — fill it in the QSO box",
-                                    empty.join(", ")
-                                ))
-                                .size(10.5)
-                                .color(crate::theme::YELLOW()),
-                            )
-                            .on_hover_text(
-                                "The picture's text uses a placeholder with nothing to print. It \
-                                 will be sent with a gap where it goes.",
-                            );
-                        }
-
-                        // Large cut-corner TX / ABORT buttons.
-                        ui.horizontal(|ui| {
-                            // The source has to have arrived as well as be stored:
-                            // pressing TX while it is still on its way would compose
-                            // nothing and look like the button was broken. The radio
-                            // has to have a transmitter too — composing a picture is
-                            // worth doing on a receiver, sending it is not.
-                            let tx_ok = self.tx_capable();
-                            let can_tx = tx_ok
-                                && self
-                                    .sstv
-                                    .slots
-                                    .get(self.sstv.selected_slot)
-                                    .is_some_and(|s| s.is_some())
-                                && !tx_active;
-                            let tx = ui
-                                .add_enabled_ui(can_tx, |ui| {
-                                    rx_only_hint(
-                                        crate::chrome::chip_accent(
-                                            ui,
-                                            can_tx,
-                                            RichText::new("   TX   ").size(16.0).strong(),
-                                            crate::theme::ALERT(),
-                                            Color32::WHITE,
-                                        ),
-                                        tx_ok,
-                                    )
-                                })
-                                .inner;
-                            if tx.clicked() {
-                                // Compose from what is on screen, including an edit
-                                // not yet sent, and send that edit now so the
-                                // engine stores what went on the air.
-                                let png = self.sstv.compose_png(dims);
-                                cmds.extend(crate::sstv::send_now(
-                                    &mut self.sstv.edit,
-                                    &self.sstv.presets,
-                                    now,
-                                ));
-                                cmds.extend(
-                                    crate::sstv::held_send_now(
-                                        &mut self.sstv.qso_edit,
-                                        &self.sstv.presets.qso,
-                                        now,
-                                    )
-                                    .map(Command::ImageSetQso),
-                                );
-                                if let Some(png) = png {
-                                    cmds.push(if rifp {
-                                        Command::RifpTx { png }
-                                    } else {
-                                        Command::SstvTx { mode: self.sstv.tx_mode, png }
+                                // Five to a row, shrunk to fit a narrow column
+                                // rather than run off its edge (issue #753). The
+                                // clip rect too: on a small window the column
+                                // itself is wider than what is on screen.
+                                const PER_ROW: usize = 5;
+                                let row_w = ui
+                                    .available_width()
+                                    .min(ui.clip_rect().right() - ui.cursor().left());
+                                let thumb_w =
+                                    ((row_w - 4.0 * 5.0 - 1.0) / PER_ROW as f32).clamp(30.0, 70.0);
+                                for row in 0..IMAGE_SLOTS.div_ceil(PER_ROW) {
+                                    ui.horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing.x = 5.0;
+                                        for i in
+                                            row * PER_ROW..((row + 1) * PER_ROW).min(IMAGE_SLOTS)
+                                        {
+                                            let sel = self.sstv.selected_slot == i;
+                                            let size = egui::vec2(thumb_w, thumb_w * 54.0 / 70.0);
+                                            let resp = if let Some(tex) = self
+                                                .sstv
+                                                .slot_thumbs
+                                                .get(i)
+                                                .and_then(|t| t.as_ref())
+                                            {
+                                                ui.add(
+                                                    egui::Image::new(tex)
+                                                        .fit_to_exact_size(size)
+                                                        .corner_radius(2.0)
+                                                        .sense(egui::Sense::click()),
+                                                )
+                                            } else {
+                                                let (rect, resp) = ui.allocate_exact_size(
+                                                    size,
+                                                    egui::Sense::click(),
+                                                );
+                                                ui.painter().rect_stroke(
+                                                    rect,
+                                                    2.0,
+                                                    egui::Stroke::new(1.0, crate::theme::gray(70)),
+                                                    egui::StrokeKind::Inside,
+                                                );
+                                                ui.painter().text(
+                                                    rect.center(),
+                                                    egui::Align2::CENTER_CENTER,
+                                                    "+",
+                                                    egui::FontId::proportional(22.0),
+                                                    crate::theme::gray(110),
+                                                );
+                                                resp
+                                            };
+                                            // Active-tab highlight: a cyan wash + heavier border so
+                                            // it is obvious which slot the text editor targets.
+                                            if sel {
+                                                ui.painter().rect_filled(
+                                                    resp.rect,
+                                                    2.0,
+                                                    Color32::from_rgba_unmultiplied(
+                                                        0x00, 0xd0, 0xf4, 34,
+                                                    ),
+                                                );
+                                                ui.painter().rect_stroke(
+                                                    resp.rect,
+                                                    2.0,
+                                                    egui::Stroke::new(2.5, crate::theme::CYAN()),
+                                                    egui::StrokeKind::Outside,
+                                                );
+                                            }
+                                            // Slot number badge (1..10), like a tab label.
+                                            let badge = egui::Rect::from_min_size(
+                                                resp.rect.left_top() + egui::vec2(2.0, 2.0),
+                                                egui::vec2(15.0, 13.0),
+                                            );
+                                            ui.painter().rect_filled(
+                                                badge,
+                                                2.0,
+                                                Color32::from_black_alpha(150),
+                                            );
+                                            ui.painter().text(
+                                                badge.center(),
+                                                egui::Align2::CENTER_CENTER,
+                                                format!("{}", i + 1),
+                                                egui::FontId::proportional(10.0),
+                                                if sel {
+                                                    crate::theme::CYAN()
+                                                } else {
+                                                    crate::theme::gray(170)
+                                                },
+                                            );
+                                            let resp = resp
+                                                .on_hover_text(tr!("sstv-click-edit-slot-s-text"));
+                                            if resp.double_clicked() {
+                                                self.sstv.pick_target = Some(i);
+                                                pick_image(self.sstv.inbox.clone());
+                                            } else if resp.clicked() && !sel {
+                                                self.sstv.select_slot(i, cmds);
+                                            }
+                                        }
                                     });
                                 }
-                            }
-                            ui.add_space(8.0);
-                            let abort = ui
-                                .add_enabled_ui(tx_active, |ui| {
-                                    crate::chrome::chip(
+                                ui.add_space(5.0);
+
+                                // Load/replace/clear the active slot's picture.
+                                ui.horizontal(|ui| {
+                                    let sel = self.sstv.selected_slot;
+                                    let has_img = self.sstv.presets.slot(sel).has_picture();
+                                    let label = if has_img {
+                                        tr!("sstv-change-image")
+                                    } else {
+                                        tr!("sstv-load-image")
+                                    };
+                                    if crate::chrome::chip(ui, false, label).clicked() {
+                                        self.sstv.pick_target = Some(sel);
+                                        pick_image(self.sstv.inbox.clone());
+                                    }
+                                    // Two presses, like deleting from the gallery: the
+                                    // stored picture goes for good, and a lone "Clear"
+                                    // here read as clearing whatever was nearest — the
+                                    // QSO box below, say. Armed per slot and only for a
+                                    // few seconds, so it cannot go off long after.
+                                    if has_img {
+                                        let armed = self
+                                            .sstv
+                                            .confirm_remove
+                                            .is_some_and(|(s, t)| s == sel && now - t < 4.0);
+                                        let (text, hint) = if armed {
+                                            (
+                                                tr!("sstv-really-remove"),
+                                                tr!("sstv-click-again-delete-slot-picture"),
+                                            )
+                                        } else {
+                                            (
+                                                tr!("sstv-remove-image"),
+                                                tr!("sstv-delete-slot-picture-layers-stay"),
+                                            )
+                                        };
+                                        if crate::chrome::chip(ui, armed, text)
+                                            .on_hover_text(hint)
+                                            .clicked()
+                                        {
+                                            if armed {
+                                                self.sstv.confirm_remove = None;
+                                                cmds.push(Command::ImageClearSlot(sel as u8));
+                                            } else {
+                                                self.sstv.confirm_remove = Some((sel, now));
+                                            }
+                                        }
+                                    }
+                                    // The banner belongs to the station, not to the slot:
+                                    // one editor, reached from whichever slot is in front.
+                                    if crate::chrome::chip(
                                         ui,
-                                        false,
-                                        RichText::new(" ABORT TX ").size(15.0).strong(),
+                                        self.sstv.banner_open,
+                                        tr!("sstv-banner"),
                                     )
-                                })
-                                .inner;
-                            if abort.clicked() {
-                                cmds.push(Command::DigiAbortTx);
-                            }
-                        });
-                        });
+                                    .on_hover_text(tr!("sstv-what-printed-across-top-every"))
+                                    .clicked()
+                                    {
+                                        self.sstv.banner_open = !self.sstv.banner_open;
+                                    }
+                                });
+                                if let Some(err) = &self.sstv.pick_error {
+                                    ui.label(
+                                        RichText::new(err).size(10.0).color(crate::theme::YELLOW()),
+                                    );
+                                }
+                                ui.add_space(4.0);
+
+                                // Who the contact is with: what `{tocall}` and friends
+                                // print, and what a log entry is filled from.
+                                self.sstv_qso_strip(ui, now, cmds);
+                                ui.add_space(6.0);
+
+                                // Preview gets a capped share of the height; the text box
+                                // grows to fill whatever's left above the buttons.
+                                let btn_h = 42.0;
+                                let gap = 6.0;
+                                let preview_h = (ui.available_height() * 0.45).clamp(80.0, 260.0);
+                                egui::Frame::new()
+                                    .fill(crate::theme::gray(6))
+                                    .stroke(egui::Stroke::new(1.0, crate::theme::LINE_LIT()))
+                                    .inner_margin(2.0)
+                                    .show(ui, |ui| {
+                                        ui.set_min_size(egui::vec2(inner_w, preview_h));
+                                        ui.set_max_size(egui::vec2(inner_w, preview_h));
+                                        ui.centered_and_justified(|ui| {
+                                            self.sstv.preview_ui(
+                                                ui,
+                                                egui::vec2(inner_w - 4.0, preview_h - 4.0),
+                                                dims,
+                                                now,
+                                                cmds,
+                                            );
+                                        });
+                                    });
+                                ui.add_space(gap);
+
+                                // The slot's text layers: which one, how it looks, and
+                                // what it says — the text box filling the height above
+                                // the buttons.
+                                // A picture about to go out with a hole in it: a
+                                // `{tocall}` with no call in the QSO box.
+                                let empty = self.sstv.empty_placeholders();
+                                let warn_h = if empty.is_empty() { 0.0 } else { 18.0 };
+                                self.sstv.layer_editor(
+                                    ui,
+                                    inner_w,
+                                    btn_h + gap + warn_h,
+                                    dims,
+                                    now,
+                                    cmds,
+                                );
+                                ui.add_space(gap);
+                                if !empty.is_empty() {
+                                    ui.label(
+                                        RichText::new(tr!(
+                                            "sstv-placeholders-empty",
+                                            names = empty.join(", ")
+                                        ))
+                                        .size(10.5)
+                                        .color(crate::theme::YELLOW()),
+                                    )
+                                    .on_hover_text(tr!("sstv-placeholder-nothing-to-print"));
+                                }
+
+                                // Large cut-corner TX / ABORT buttons.
+                                ui.horizontal(|ui| {
+                                    // The source has to have arrived as well as be stored:
+                                    // pressing TX while it is still on its way would compose
+                                    // nothing and look like the button was broken. The radio
+                                    // has to have a transmitter too — composing a picture is
+                                    // worth doing on a receiver, sending it is not.
+                                    let tx_ok = self.tx_capable();
+                                    let can_tx = tx_ok
+                                        && self
+                                            .sstv
+                                            .slots
+                                            .get(self.sstv.selected_slot)
+                                            .is_some_and(|s| s.is_some())
+                                        && !tx_active;
+                                    let tx = ui
+                                        .add_enabled_ui(can_tx, |ui| {
+                                            rx_only_hint(
+                                                crate::chrome::chip_accent(
+                                                    ui,
+                                                    can_tx,
+                                                    RichText::new(tr!("sstv-tx"))
+                                                        .size(16.0)
+                                                        .strong(),
+                                                    crate::theme::ALERT(),
+                                                    Color32::WHITE,
+                                                ),
+                                                tx_ok,
+                                            )
+                                        })
+                                        .inner;
+                                    if tx.clicked() {
+                                        // What goes on the air is what is on screen: an
+                                        // edit not yet sent, or one sent and not yet
+                                        // echoed, rather than the presets it has not
+                                        // reached (#752). The edit in hand is sent now
+                                        // so the engine stores what went on the air.
+                                        let png = self.sstv.compose_png(dims);
+                                        cmds.extend(crate::sstv::send_now(
+                                            &mut self.sstv.edit,
+                                            &mut self.sstv.sent,
+                                            &self.sstv.presets,
+                                            now,
+                                        ));
+                                        cmds.extend(
+                                            crate::sstv::held_send_now(
+                                                &mut self.sstv.qso_edit,
+                                                &self.sstv.presets.qso,
+                                                now,
+                                            )
+                                            .map(Command::ImageSetQso),
+                                        );
+                                        if let Some(png) = png {
+                                            cmds.push(if rifp {
+                                                Command::RifpTx { png }
+                                            } else {
+                                                Command::SstvTx { mode: self.sstv.tx_mode, png }
+                                            });
+                                        }
+                                    }
+                                    ui.add_space(8.0);
+                                    let abort = ui
+                                        .add_enabled_ui(tx_active, |ui| {
+                                            crate::chrome::chip(
+                                                ui,
+                                                false,
+                                                RichText::new(tr!("sstv-abort-tx"))
+                                                    .size(15.0)
+                                                    .strong(),
+                                            )
+                                        })
+                                        .inner;
+                                    if abort.clicked() {
+                                        cmds.push(Command::DigiAbortTx);
+                                    }
+                                });
+                            });
+                    });
                 });
-            });
             }
 
             if let Some(i) = enlarge {
@@ -2139,14 +2234,14 @@ impl SdroxideApp {
                 // A picture can be stored before the first listing has come
                 // back, so the directory is not always known to name.
                 let del_hint = if self.sstv.dir.is_empty() {
-                    "Delete this picture from the store".to_string()
+                    tr!("sstv-delete-picture-store").to_string()
                 } else {
-                    format!("Delete this picture {}", self.store_where(&self.sstv.dir))
+                    tr!("sstv-delete-picture-from", place = self.store_where(&self.sstv.dir))
                 };
                 let r = &self.sstv.received[idx];
                 let savable = self.sstv.full_png.as_ref().is_some_and(|(n, _)| *n == r.entry.name);
                 let armed = self.sstv.confirm_delete.as_deref() == Some(&r.entry.name);
-                egui::Window::new("Received image")
+                egui::Window::new(tr!("sstv-received-image"))
                     .id(crate::layout::salted_id(&ctx, "Received image"))
                     .open(&mut open)
                     .collapsible(false)
@@ -2171,15 +2266,17 @@ impl SdroxideApp {
                         ui.horizontal(|ui| {
                             if self.sstv.full_gone {
                                 ui.label(
-                                    RichText::new("no longer in the store")
+                                    RichText::new(tr!("sstv-no-longer-store"))
                                         .size(10.0)
                                         .color(crate::theme::YELLOW()),
                                 );
                             } else if r.full.is_none() {
-                                ui.label(RichText::new("loading full size…").size(10.0).weak());
+                                ui.label(
+                                    RichText::new(tr!("sstv-loading-full-size")).size(10.0).weak(),
+                                );
                             } else if savable
-                                && crate::chrome::chip(ui, false, "Save picture…")
-                                    .on_hover_text("Save a copy on this computer")
+                                && crate::chrome::chip(ui, false, tr!("sstv-save-picture"))
+                                    .on_hover_text(tr!("sstv-save-copy-computer"))
                                     .clicked()
                             {
                                 save = true;
@@ -2191,13 +2288,14 @@ impl SdroxideApp {
                                 crate::chrome::chip_accent(
                                     ui,
                                     true,
-                                    "Delete — sure?",
+                                    tr!("sstv-delete-sure"),
                                     crate::theme::PINK(),
                                     crate::theme::INK_ON_CYAN(),
                                 )
-                                .on_hover_text("Click again to delete it for good")
+                                .on_hover_text(tr!("sstv-click-again-delete-good"))
                             } else {
-                                crate::chrome::chip(ui, false, "Delete…").on_hover_text(&del_hint)
+                                crate::chrome::chip(ui, false, tr!("sstv-delete"))
+                                    .on_hover_text(&del_hint)
                             };
                             if del.clicked() {
                                 pressed_delete = true;
@@ -2217,19 +2315,19 @@ impl SdroxideApp {
                             ui.add_space(4.0);
                             let from = m.sender.as_deref().unwrap_or("unidentified");
                             ui.label(
-                                RichText::new(format!(
-                                    "{from} · {} · {}×{} {}-bit · {} / {} · {} octets in {} chunks \
-                                     ({} first pass) · session {}",
-                                    m.filename,
-                                    m.width,
-                                    m.height,
-                                    m.bits_per_pixel,
-                                    m.media_type,
-                                    m.content_encoding,
-                                    m.encoded_size,
-                                    m.chunk_count,
-                                    m.chunks_first_pass,
-                                    m.session,
+                                RichText::new(tr!(
+                                    "sstv-bit-octets-chunks-first-pass",
+                                    from = from,
+                                    filename = m.filename,
+                                    width = m.width,
+                                    height = m.height,
+                                    bits_per_pixel = m.bits_per_pixel,
+                                    media_type = m.media_type,
+                                    content_encoding = m.content_encoding,
+                                    encoded_size = m.encoded_size,
+                                    chunk_count = m.chunk_count,
+                                    chunks_first_pass = m.chunks_first_pass,
+                                    session = m.session
                                 ))
                                 .size(10.5)
                                 .weak(),
@@ -2326,11 +2424,9 @@ impl SdroxideApp {
             .show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = egui::vec2(5.0, 4.0);
-                    let title = RichText::new("QSO").size(10.0).strong();
-                    ui.label(title.color(crate::theme::CYAN_DIM())).on_hover_text(
-                        "The contact in progress. The pictures' text can print it, and Log… \
-                         fills a log entry from it.",
-                    );
+                    let title = RichText::new(tr!("sstv-qso")).size(10.0).strong();
+                    ui.label(title.color(crate::theme::CYAN_DIM()))
+                        .on_hover_text(tr!("sstv-qso-explain"));
                     let field = |ui: &mut egui::Ui, text: &mut String, w: f32, hint: &str| {
                         crate::chrome::field(
                             ui,
@@ -2340,8 +2436,9 @@ impl SdroxideApp {
                     let label =
                         |ui: &mut egui::Ui, t: &str| ui.label(RichText::new(t).size(10.0).weak());
 
-                    label(ui, "To").on_hover_text("The station this contact is with — {tocall}");
-                    let r = field(ui, &mut cur.call, 78.0, "call");
+                    label(ui, &tr!("sstv-qso-to"))
+                        .on_hover_text(tr!("sstv-qso-to-hint", placeholder = "{tocall}"));
+                    let r = field(ui, &mut cur.call, 78.0, &tr!("sstv-qso-call-hint"));
                     focus |= r.has_focus();
                     if r.changed() {
                         cur.call_from = CallSource::Typed;
@@ -2349,19 +2446,14 @@ impl SdroxideApp {
                     if cur.call_from != CallSource::Typed {
                         let what = if cur.call_from == CallSource::FskId { "FSK" } else { "CW" };
                         ui.label(RichText::new(what).size(9.5).color(crate::theme::CYAN_DIM()))
-                            .on_hover_text(
-                                "Filled in from the ID this station sent after its picture",
-                            );
+                            .on_hover_text(tr!("sstv-qso-from-id-hint"));
                     }
                     // Another station identified while this contact was the
                     // operator's: theirs to take, not the program's to swap in.
                     if let Some(o) = cur.offered.clone() {
-                        let offer = RichText::new(format!("← ID {o}")).size(10.5);
+                        let offer = RichText::new(tr!("sstv-qso-offer", call = o)).size(10.5);
                         if crate::chrome::chip(ui, false, offer)
-                            .on_hover_text(format!(
-                                "{o} sent an FSK ID. The contact is yours (you typed in it), so \
-                                 it was left alone — click to make {o} the call"
-                            ))
+                            .on_hover_text(tr!("sstv-qso-offer-hint", call = o))
                             .clicked()
                         {
                             cur.call = o;
@@ -2369,17 +2461,15 @@ impl SdroxideApp {
                             cur.offered = None;
                         }
                         if crate::chrome::chip(ui, false, RichText::new("×").size(10.5))
-                            .on_hover_text("Ignore this ID")
+                            .on_hover_text(tr!("sstv-qso-ignore-id"))
                             .clicked()
                         {
                             cur.offered = None;
                         }
                     }
 
-                    label(ui, "RSV").on_hover_text(
-                        "The report you send them — {rsv}. Readability 1–5, strength 1–9, \
-                         video 1–5.",
-                    );
+                    label(ui, &tr!("sstv-qso-rsv"))
+                        .on_hover_text(tr!("sstv-qso-rsv-hint", placeholder = "{rsv}"));
                     focus |= field(ui, &mut cur.rsv_sent, 30.0, "595").has_focus();
                     ui.menu_button(RichText::new("▾").size(10.0), |ui| {
                         for v in sdroxide_types::SstvQso::RSV_PRESETS {
@@ -2389,36 +2479,36 @@ impl SdroxideApp {
                             }
                         }
                     });
-                    label(ui, "rcvd").on_hover_text("The report they sent you — {rsvr}");
+                    label(ui, &tr!("sstv-qso-rcvd"))
+                        .on_hover_text(tr!("sstv-qso-rcvd-hint", placeholder = "{rsvr}"));
                     focus |= field(ui, &mut cur.rsv_rcvd, 30.0, "").has_focus();
 
-                    label(ui, "Name").on_hover_text("Their name — {name}");
+                    label(ui, &tr!("sstv-qso-name"))
+                        .on_hover_text(tr!("sstv-qso-name-hint", placeholder = "{name}"));
                     focus |= field(ui, &mut cur.name, 70.0, "").has_focus();
-                    label(ui, "QTH").on_hover_text("Where they are — {qth}");
+                    label(ui, &tr!("sstv-qso-qth"))
+                        .on_hover_text(tr!("sstv-qso-qth-hint", placeholder = "{qth}"));
                     focus |= field(ui, &mut cur.qth, 80.0, "").has_focus();
-                    label(ui, "Note").on_hover_text("Anything else to print or log — {note}");
+                    label(ui, &tr!("sstv-qso-note"))
+                        .on_hover_text(tr!("sstv-qso-note-hint", placeholder = "{note}"));
                     focus |= field(ui, &mut cur.note, 90.0, "").has_focus();
 
                     if cur.logged {
-                        ui.label(RichText::new("✓ logged").size(10.0).color(crate::theme::GREEN()))
-                            .on_hover_text(
-                                "This contact is in the log. The next station's ID starts a new \
-                                 one",
-                            );
-                    }
-                    if crate::chrome::chip(ui, false, "Log…")
-                        .on_hover_text(
-                            "Open a log entry filled in from this contact, to check and save",
+                        ui.label(
+                            RichText::new(tr!("sstv-qso-logged"))
+                                .size(10.0)
+                                .color(crate::theme::GREEN()),
                         )
+                        .on_hover_text(tr!("sstv-qso-logged-hint"));
+                    }
+                    if crate::chrome::chip(ui, false, tr!("sstv-qso-log"))
+                        .on_hover_text(tr!("sstv-qso-log-hint"))
                         .clicked()
                     {
                         log = true;
                     }
-                    if crate::chrome::chip(ui, false, "Clear QSO")
-                        .on_hover_text(
-                            "Empty these fields for the next contact (the report sent goes back \
-                             to 595). The slots' pictures and text are not touched.",
-                        )
+                    if crate::chrome::chip(ui, false, tr!("sstv-qso-clear"))
+                        .on_hover_text(tr!("sstv-qso-clear-hint"))
                         .clicked()
                     {
                         cur = sdroxide_types::SstvQso::default();
@@ -2479,7 +2569,7 @@ impl SdroxideApp {
         let seeded = self.digi_cfg_seeded;
         let mut open = true;
         let mut changed = false;
-        egui::Window::new("Image banner")
+        egui::Window::new(tr!("sstv-image-banner"))
             .id(crate::layout::salted_id(ctx, "Image banner"))
             .open(&mut open)
             .collapsible(false)
@@ -2489,17 +2579,12 @@ impl SdroxideApp {
             .show(ctx, |ui| {
                 crate::chrome::window_body_bg(ui);
                 ui.label(
-                    RichText::new(
-                        "Drawn into every picture this station transmits, over the slot's own \
-                         message.",
-                    )
-                    .size(10.5)
-                    .weak(),
+                    RichText::new(tr!("sstv-drawn-into-every-picture-station")).size(10.5).weak(),
                 );
                 ui.add_space(6.0);
                 let cfg = &mut self.digi_cfg_edit;
                 ui.add_enabled_ui(seeded, |ui| {
-                    if crate::chrome::checkbox(ui, &mut cfg.sstv_banner, "Draw the banner")
+                    if crate::chrome::checkbox(ui, &mut cfg.sstv_banner, tr!("sstv-draw-banner"))
                         .changed()
                     {
                         changed = true;
@@ -2509,7 +2594,7 @@ impl SdroxideApp {
                         // The placeholder list is the whole documentation for
                         // these two fields, so it hangs off both of them.
                         let hint: String = std::iter::once(
-                            "Substituted when the picture is composed:".to_string(),
+                            tr!("sstv-substituted-when-picture-composed").to_string(),
                         )
                         .chain(
                             crate::sstv::PLACEHOLDERS
@@ -2522,7 +2607,7 @@ impl SdroxideApp {
                             .num_columns(2)
                             .spacing([10.0, 7.0])
                             .show(ui, |ui| {
-                                ui.label("Top left");
+                                ui.label(tr!("sstv-top-left"));
                                 let resp = crate::chrome::field(
                                     ui,
                                     egui::TextEdit::singleline(&mut cfg.sstv_banner_left)
@@ -2541,7 +2626,7 @@ impl SdroxideApp {
                                 }
                                 ui.end_row();
 
-                                ui.label("Top right");
+                                ui.label(tr!("sstv-top-right"));
                                 let resp = crate::chrome::field(
                                     ui,
                                     egui::TextEdit::singleline(&mut cfg.sstv_banner_right)
@@ -2554,36 +2639,30 @@ impl SdroxideApp {
                                 }
                                 ui.end_row();
 
-                                ui.label("Colours");
+                                ui.label(tr!("sstv-colours"));
                                 ui.horizontal(|ui| {
                                     changed |= ui
                                         .color_edit_button_srgb(&mut cfg.sstv_banner_fill)
-                                        .on_hover_text(
-                                            "The strip, at its top edge — it fades to black, or \
-                                             to the gradient colour below it",
-                                        )
+                                        .on_hover_text(tr!("sstv-strip-top-edge-fades-black"))
                                         .changed();
                                     ui.label(RichText::new("strip").size(10.5).weak());
                                     ui.add_space(8.0);
                                     changed |= ui
                                         .color_edit_button_srgb(&mut cfg.sstv_banner_ink)
-                                        .on_hover_text("Both texts")
+                                        .on_hover_text(tr!("sstv-both-texts"))
                                         .changed();
                                     ui.label(RichText::new("text").size(10.5).weak());
                                 });
                                 ui.end_row();
 
-                                ui.label("Gradient");
+                                ui.label(tr!("sstv-gradient"));
                                 ui.horizontal(|ui| {
                                     changed |= crate::chrome::checkbox(
                                         ui,
                                         &mut cfg.sstv_style.banner_gradient,
-                                        "fade to",
+                                        tr!("sstv-fade"),
                                     )
-                                    .on_hover_text(
-                                        "Fade the strip from its top colour to a second one \
-                                         instead of to black.",
-                                    )
+                                    .on_hover_text(tr!("sstv-fade-strip-top-colour-second"))
                                     .changed();
                                     ui.add_enabled_ui(cfg.sstv_style.banner_gradient, |ui| {
                                         changed |= ui
@@ -2595,17 +2674,14 @@ impl SdroxideApp {
                                 });
                                 ui.end_row();
 
-                                ui.label("Text outline");
+                                ui.label(tr!("sstv-text-outline"));
                                 ui.horizontal(|ui| {
                                     changed |= crate::chrome::checkbox(
                                         ui,
                                         &mut cfg.sstv_style.banner_outline,
                                         "in",
                                     )
-                                    .on_hover_text(
-                                        "Draw an outline around the banner text, so it stays \
-                                         readable over a busy or light strip.",
-                                    )
+                                    .on_hover_text(tr!("sstv-draw-outline-around-banner-text"))
                                     .changed();
                                     ui.add_enabled_ui(cfg.sstv_style.banner_outline, |ui| {
                                         changed |= ui
@@ -2617,17 +2693,14 @@ impl SdroxideApp {
                                 });
                                 ui.end_row();
 
-                                ui.label("Text gradient");
+                                ui.label(tr!("sstv-text-gradient"));
                                 ui.horizontal(|ui| {
                                     changed |= crate::chrome::checkbox(
                                         ui,
                                         &mut cfg.sstv_style.banner_ink_gradient,
-                                        "fade to",
+                                        tr!("sstv-fade"),
                                     )
-                                    .on_hover_text(
-                                        "Fade the banner text from its colour to a second one \
-                                         across the width of the picture.",
-                                    )
+                                    .on_hover_text(tr!("sstv-fade-banner-text-colour-second"))
                                     .changed();
                                     ui.add_enabled_ui(
                                         cfg.sstv_style.banner_ink_gradient
@@ -2643,25 +2716,18 @@ impl SdroxideApp {
                                 });
                                 ui.end_row();
 
-                                ui.label("Rainbow text");
+                                ui.label(tr!("sstv-rainbow-text"));
                                 changed |= crate::chrome::checkbox(
                                     ui,
                                     &mut cfg.sstv_style.rainbow_text,
-                                    "overriding the colours above",
+                                    tr!("sstv-overriding-colours-above"),
                                 )
-                                .on_hover_text(
-                                    "Draw the banner's text as a horizontal rainbow, ignoring the \
-                                     colours above. Each text layer has a rainbow of its own.",
-                                )
+                                .on_hover_text(tr!("sstv-draw-banner-text-rainbow"))
                                 .changed();
                                 ui.end_row();
 
-                                ui.label("Height").on_hover_text(
-                                    "How tall the strip is, in pixels of the transmitted \
-                                     picture. The text is sized from it — an SSTV frame is only \
-                                     320 pixels wide, so a taller banner is what makes it \
-                                     readable on the far end.",
-                                );
+                                ui.label(tr!("sstv-height"))
+                                    .on_hover_text(tr!("sstv-how-tall-strip-pixels-transmitted"));
                                 ui.spacing_mut().slider_width = 180.0;
                                 let resp = crate::chrome::slider(
                                     ui,
@@ -2675,10 +2741,8 @@ impl SdroxideApp {
                     });
                     ui.add_space(6.0);
                     if ui
-                        .button("Reset")
-                        .on_hover_text(
-                            "Back to the callsign on the left and the version on the right",
-                        )
+                        .button(tr!("sstv-reset"))
+                        .on_hover_text(tr!("sstv-back-callsign-left-version-right"))
                         .clicked()
                     {
                         let d = sdroxide_types::DigiConfig::default();
@@ -2693,11 +2757,9 @@ impl SdroxideApp {
                     }
                     if !seeded {
                         ui.label(
-                            RichText::new(
-                                "Waiting for the station's digital-mode settings to load…",
-                            )
-                            .size(10.0)
-                            .weak(),
+                            RichText::new(tr!("sstv-waiting-station-s-digital-mode"))
+                                .size(10.0)
+                                .weak(),
                         );
                     }
                 });
@@ -2717,7 +2779,9 @@ impl SdroxideApp {
         let mut changed = false;
 
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("RIFP").size(12.0).strong().color(crate::theme::CYAN()));
+            ui.label(
+                RichText::new(tr!("sstv-rifp")).size(12.0).strong().color(crate::theme::CYAN()),
+            );
             // Outside the enabled scope: which frequency to sit on has nothing
             // to do with whether the operator's digi config has loaded yet.
             self.digi_freq_chip(ui, cmds);
@@ -2725,12 +2789,12 @@ impl SdroxideApp {
                 for p in RifpProfile::ALL {
                     let active = self.digi_cfg_edit.rifp_profile == p;
                     if crate::chrome::chip(ui, active, p.label())
-                        .on_hover_text(format!(
-                            "{} — {:.0} baud CPFSK, ±{:.0} Hz, {:.0} kHz occupied bandwidth",
-                            p.name(),
-                            p.symbol_rate(),
-                            p.deviation_hz(),
-                            p.bandwidth_hz() / 1000.0,
+                        .on_hover_text(tr!(
+                            "sstv-baud-cpfsk-hz-khz-occupied",
+                            value = p.name(),
+                            symbol_rate = format!("{:.0}", p.symbol_rate()),
+                            deviation_hz = format!("{:.0}", p.deviation_hz()),
+                            bandwidth_hz = format!("{:.0}", p.bandwidth_hz() / 1000.0)
                         ))
                         .clicked()
                         && !active
@@ -2740,7 +2804,7 @@ impl SdroxideApp {
                     }
                 }
                 ui.separator();
-                ui.label(RichText::new("Size").size(10.0).weak());
+                ui.label(RichText::new(tr!("sstv-size")).size(10.0).weak());
                 for s in RifpSize::ALL {
                     let active = self.digi_cfg_edit.rifp_size == s;
                     if crate::chrome::chip(ui, active, s.label()).clicked() && !active {
@@ -2760,38 +2824,34 @@ impl SdroxideApp {
             let profile = self.digi_cfg_edit.rifp_profile;
             if profile.fits_at(dial) {
                 ui.label(
-                    RichText::new(format!(
-                        "{} · ~{:.0} kHz occupied · dial is the channel centre",
-                        profile.name(),
-                        profile.bandwidth_hz() / 1000.0,
+                    RichText::new(tr!(
+                        "sstv-rifp-profile",
+                        profile = profile.name(),
+                        khz = format!("{:.0}", profile.bandwidth_hz() / 1000.0)
                     ))
                     .size(10.5)
                     .weak(),
                 );
             } else {
                 ui.label(
-                    RichText::new(format!(
-                        "⚠ {} occupies ~{:.0} kHz — too wide for a narrow-band segment",
-                        profile.name(),
-                        profile.bandwidth_hz() / 1000.0,
+                    RichText::new(tr!(
+                        "sstv-rifp-too-wide",
+                        profile = profile.name(),
+                        khz = format!("{:.0}", profile.bandwidth_hz() / 1000.0)
                     ))
                     .size(10.5)
                     .strong()
                     .color(crate::theme::ALERT()),
                 )
-                .on_hover_text(format!(
-                    "RIFP assigns no frequency, and sdroxide will transmit it wherever you tune. \
-                     A {:.0} kHz channel only fits where wideband or FM operation is allowed — \
-                     {} — and not in a narrow-band segment, least of all on HF. Even inside those \
-                     your own licence conditions may be narrower. You are the operator; check \
-                     your own rules.",
-                    profile.bandwidth_hz() / 1000.0,
-                    profile.wide_segments_text(),
+                .on_hover_text(tr!(
+                    "sstv-rifp-no-frequency",
+                    khz = format!("{:.0}", profile.bandwidth_hz() / 1000.0),
+                    segments = profile.wide_segments_text()
                 ));
             }
             if (dial - sdroxide_types::RIFP_CALLING_HZ).abs() > 1.0
                 && crate::chrome::chip(ui, false, "433.920")
-                    .on_hover_text("The calling frequency the draft names")
+                    .on_hover_text(tr!("sstv-calling-frequency-draft-names"))
                     .clicked()
             {
                 cmds.push(Command::SetVfo {
@@ -2805,17 +2865,15 @@ impl SdroxideApp {
         // Encoding and depth: what the picture is turned into before framing.
         ui.horizontal_wrapped(|ui| {
             ui.add_enabled_ui(seeded, |ui| {
-                ui.label(RichText::new("Encode").size(10.0).weak()).on_hover_text(
-                    "How the picture is encoded into the object RIFP carries. Auto tries each and \
-                 sends the smallest.",
-                );
+                ui.label(RichText::new(tr!("sstv-encode")).size(10.0).weak())
+                    .on_hover_text(tr!("sstv-how-picture-encoded-into-object"));
                 for e in RifpEncoding::TX_MENU {
                     let active = self.digi_cfg_edit.rifp_encoding == e;
                     let hover = match e.manifest_pair() {
                         Some((mt, ce)) => format!("{mt} / {ce}"),
-                        None => "Try every encoding, send the smallest (never lossy)".into(),
+                        None => tr!("sstv-try-every-encoding-send-smallest"),
                     };
-                    if crate::chrome::chip(ui, active, e.label()).on_hover_text(hover).clicked()
+                    if crate::chrome::chip(ui, active, e.tr()).on_hover_text(hover).clicked()
                         && !active
                     {
                         self.digi_cfg_edit.rifp_encoding = e;
@@ -2823,10 +2881,8 @@ impl SdroxideApp {
                     }
                 }
                 ui.separator();
-                ui.label(RichText::new("Gray").size(10.0).weak()).on_hover_text(
-                "Grayscale depth. RIFP's raster is grayscale by definition — colour has no place \
-                 in its manifest.",
-            );
+                ui.label(RichText::new(tr!("sstv-gray")).size(10.0).weak())
+                    .on_hover_text(tr!("sstv-grayscale-depth-rifp-s-raster"));
                 for bits in [1u8, 2, 4, 8] {
                     let active = self.digi_cfg_edit.rifp_bits_per_pixel == bits;
                     if crate::chrome::chip(ui, active, &format!("{bits}b")).clicked() && !active {
@@ -2835,8 +2891,8 @@ impl SdroxideApp {
                     }
                 }
                 let mut dither = self.digi_cfg_edit.rifp_dither;
-                if crate::chrome::chip(ui, dither, "Dither")
-                    .on_hover_text("Diffuse quantisation error — worth it below 8 bits")
+                if crate::chrome::chip(ui, dither, tr!("sstv-dither"))
+                    .on_hover_text(tr!("sstv-diffuse-quantisation-error-worth-below"))
                     .clicked()
                 {
                     dither = !dither;
@@ -2852,15 +2908,13 @@ impl SdroxideApp {
         // Distinct from the slot message, which is drawn into the picture.
         ui.horizontal(|ui| {
             ui.add_enabled_ui(seeded, |ui| {
-                ui.label(RichText::new("Caption").size(10.0).weak()).on_hover_text(
-                    "Sent in the manifest as the content hint, and shown under the picture by \
-                     receivers. Travels as text — it is not drawn into the image.",
-                );
+                ui.label(RichText::new(tr!("sstv-caption")).size(10.0).weak())
+                    .on_hover_text(tr!("sstv-sent-manifest-content-hint-shown"));
                 let resp = crate::chrome::field(
                     ui,
                     egui::TextEdit::singleline(&mut self.digi_cfg_edit.rifp_content_hint)
                         .desired_width(f32::INFINITY)
-                        .hint_text("What this picture is"),
+                        .hint_text(tr!("sstv-what-picture")),
                 );
                 // On focus loss rather than per keystroke: this is persisted
                 // engine-side, and a config write per character is absurd.
@@ -2875,18 +2929,16 @@ impl SdroxideApp {
         // recovery there is.
         ui.horizontal_wrapped(|ui| {
             ui.add_enabled_ui(seeded, |ui| {
-                ui.label(RichText::new("Repeat data").size(10.0).weak()).on_hover_text(
-                    "Send every data frame this many times. RIFP is one-way with no repair \
-                     requests, so this is the only recovery a receiver gets.",
-                );
+                ui.label(RichText::new(tr!("sstv-repeat-data")).size(10.0).weak())
+                    .on_hover_text(tr!("sstv-send-every-data-frame-many"));
                 ui.spacing_mut().slider_width = 90.0;
                 changed |= crate::chrome::slider(
                     ui,
                     egui::Slider::new(&mut self.digi_cfg_edit.rifp_data_repeats, 1..=4),
                 )
                 .drag_stopped();
-                ui.label(RichText::new("Chunk").size(10.0).weak())
-                    .on_hover_text("Payload octets per data frame (the profile recommends 192)");
+                ui.label(RichText::new(tr!("sstv-chunk")).size(10.0).weak())
+                    .on_hover_text(tr!("sstv-payload-octets-per-data-frame"));
                 changed |= crate::chrome::slider(
                     ui,
                     egui::Slider::new(&mut self.digi_cfg_edit.rifp_chunk_size, 32..=1024)
@@ -2897,9 +2949,11 @@ impl SdroxideApp {
             ui.separator();
             if st.tx_active {
                 ui.label(
-                    RichText::new(format!(
-                        "● TX frame {}/{} · {} s left",
-                        st.tx_frame, st.tx_frames, st.tx_remaining_s
+                    RichText::new(tr!(
+                        "sstv-rifp-tx-frame",
+                        frame = st.tx_frame,
+                        frames = st.tx_frames,
+                        secs = st.tx_remaining_s
                     ))
                     .size(11.0)
                     .strong()
@@ -2908,9 +2962,13 @@ impl SdroxideApp {
             }
             if let Some(enc) = st.tx_encoding {
                 ui.label(
-                    RichText::new(format!("sent as {} · {} octets", enc.label(), st.tx_bytes))
-                        .size(10.0)
-                        .weak(),
+                    RichText::new(tr!(
+                        "sstv-rifp-sent-as",
+                        encoding = enc.tr(),
+                        octets = st.tx_bytes
+                    ))
+                    .size(10.0)
+                    .weak(),
                 );
             }
         });
@@ -2919,16 +2977,18 @@ impl SdroxideApp {
         // Counters and the sessions being reassembled.
         ui.horizontal_wrapped(|ui| {
             ui.label(
-                RichText::new(format!(
-                    "frames {} · bad {} · pictures {}",
-                    st.rx_frames, st.rx_bad_frames, st.rx_objects
+                RichText::new(tr!(
+                    "sstv-rifp-rx-stats",
+                    frames = st.rx_frames,
+                    bad = st.rx_bad_frames,
+                    pictures = st.rx_objects
                 ))
                 .size(10.0)
                 .weak(),
             )
-            .on_hover_text("Valid frames, frames that failed CRC, and complete verified pictures");
+            .on_hover_text(tr!("sstv-valid-frames-frames-failed-crc"));
             if st.sessions.is_empty() {
-                ui.label(RichText::new("no transfer in progress").size(10.0).weak());
+                ui.label(RichText::new(tr!("sstv-no-transfer-progress")).size(10.0).weak());
             }
             for s in &st.sessions {
                 ui.separator();
@@ -2942,17 +3002,22 @@ impl SdroxideApp {
                     if s.have_manifest { crate::theme::GREEN() } else { crate::theme::YELLOW() };
                 ui.label(RichText::new(label).size(10.5).strong().color(colour)).on_hover_text(
                     if s.have_manifest {
-                        format!("session {} · idle {} s", s.session, s.idle_s)
+                        tr!(
+                            "sstv-rifp-session-idle",
+                            session = s.session.to_string(),
+                            secs = s.idle_s
+                        )
                     } else {
-                        format!(
-                            "session {} · chunks held, still waiting for the manifest · idle {} s",
-                            s.session, s.idle_s
+                        tr!(
+                            "sstv-rifp-session-waiting",
+                            session = s.session.to_string(),
+                            secs = s.idle_s
                         )
                     },
                 );
                 rifp_chunk_map(ui, s);
                 if crate::chrome::chip(ui, false, "✕")
-                    .on_hover_text("Forget this incomplete transfer")
+                    .on_hover_text(tr!("sstv-forget-incomplete-transfer"))
                     .clicked()
                 {
                     cmds.push(Command::RifpDropSession(s.session.clone()));
@@ -2974,9 +3039,9 @@ impl SdroxideApp {
     /// difference between a useful hint and a wrong one.
     pub(in crate::app) fn store_where(&self, dir: &str) -> String {
         if self.ctrl.engine_is_remote() {
-            format!("on the radio, in {dir}")
+            tr!("sstv-store-on-radio", dir = dir.to_string())
         } else {
-            format!("in {dir}")
+            tr!("sstv-store-in", dir = dir.to_string())
         }
     }
 }

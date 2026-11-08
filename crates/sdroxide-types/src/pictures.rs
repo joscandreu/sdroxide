@@ -48,7 +48,9 @@ impl ImageKind {
 
 /// How many transmit presets there are. Fixed so a slot number means the same
 /// thing in the panel, in `slot{i}.png` on disk, and on the wire.
-pub const IMAGE_SLOTS: usize = 5;
+///
+/// Ten since issue #753; a slot past an older peer's five reads as empty there.
+pub const IMAGE_SLOTS: usize = 10;
 
 /// Longest edge a stored source picture is kept at.
 ///
@@ -86,7 +88,7 @@ pub const IMAGE_NAME_MAX: usize = 128;
 pub struct ImageSlotInfo {
     /// The text composited over this slot's picture, bottom layer first. Per
     /// slot, not per session: switching slots swaps the text, which is what
-    /// makes the five of them presets rather than one picture and one caption.
+    /// makes the ten of them presets rather than one picture and one caption.
     pub layers: Vec<TextLayer>,
     /// Size of the stored source; `(0, 0)` when the slot holds no picture.
     pub width: u16,
@@ -102,7 +104,7 @@ pub struct ImageSlotInfo {
     /// PNG thumbnail, longest edge [`IMAGE_SLOT_THUMB_EDGE`].
     ///
     /// Carried in the snapshot rather than fetched, because the panel draws all
-    /// five slot buttons at once and only ever composes from one of them.
+    /// ten slot buttons at once and only ever composes from one of them.
     pub thumb: Vec<u8>,
 }
 
@@ -246,10 +248,10 @@ impl SstvQso {
 
     /// Bring a contact from a client, or from disk, into range.
     pub fn sanitise(&mut self) {
-        if let Some(o) = self.offered.as_mut() {
-            if let Some((cut, _)) = o.char_indices().nth(Self::FIELD_MAX) {
-                o.truncate(cut);
-            }
+        if let Some(o) = self.offered.as_mut()
+            && let Some((cut, _)) = o.char_indices().nth(Self::FIELD_MAX)
+        {
+            o.truncate(cut);
         }
         for f in [
             &mut self.call,

@@ -14,6 +14,8 @@
 //! the wasm browser client — the composed buffer is both the live preview and,
 //! PNG-encoded, the transmit payload.
 
+use std::collections::HashMap;
+
 use ab_glyph::{Font, FontRef, PxScale, ScaleFont, point};
 use eframe::egui;
 use sdroxide_types::{TextAnchor, TextLayer};
@@ -339,6 +341,13 @@ pub fn color_image(rgb: &[u8], w: u16, h: u16) -> egui::ColorImage {
 // something), a few seconds later, when the engine's version is adopted. The
 // same arrangement the voice keyer's slot labels use, kept here rather than in
 // the panel so it can be tested without an `egui::Context`.
+//
+// Between handing a slot back and the engine echoing it, the layers are in
+// flight: the presets still hold the old ones. That window is not hypothetical
+// — moving to another slot and pressing TX straight back on this one composes
+// from it (issue #752). Those writes are kept in an [`InFlight`] map until the
+// engine says the same thing back (or the same few seconds pass), and
+// everything shown or sent reads through it.
 
 /// Seconds an edit waits for the operator to pause before it is sent.
 const SEND_AFTER: f64 = 0.4;
@@ -415,16 +424,25 @@ pub struct LayerEdit {
     sent: Option<f64>,
 }
 
-/// The layers to show for `slot`: the ones in hand if it is this slot,
-/// otherwise the engine's.
+/// Layers handed back to the engine and not yet echoed, by slot, with when
+/// they were sent. Shown, previewed and transmitted in place of the stale
+/// presets meanwhile (issue #752).
+pub type InFlight = HashMap<usize, (Vec<TextLayer>, f64)>;
+
+/// The layers to show for `slot`: the ones in hand if it is this slot, else
+/// the ones last written to the engine for it, else the engine's.
 pub fn layers_shown<'a>(
     edit: &'a Option<LayerEdit>,
+    sent: &'a InFlight,
     presets: &'a sdroxide_types::ImagePresets,
     slot: usize,
 ) -> &'a [TextLayer] {
     match edit {
         Some(e) if e.slot == slot => &e.layers,
-        _ => presets.slots.get(slot).map_or(&[][..], |s| s.layers.as_slice()),
+        _ => match sent.get(&slot) {
+            Some((layers, _)) => layers,
+            None => presets.slots.get(slot).map_or(&[][..], |s| s.layers.as_slice()),
+        },
     }
 }
 
@@ -435,16 +453,17 @@ pub fn layers_shown<'a>(
 /// `now`, and is sent once the operator has paused for a moment after it.
 pub fn edit_layers<'a>(
     edit: &'a mut Option<LayerEdit>,
+    sent: &mut InFlight,
     presets: &sdroxide_types::ImagePresets,
     slot: usize,
     now: f64,
     cmds: &mut Vec<sdroxide_types::Command>,
 ) -> &'a mut Vec<TextLayer> {
     if !matches!(edit, Some(e) if e.slot == slot) {
-        cmds.extend(commit(edit, presets));
+        cmds.extend(commit(edit, sent, presets, now));
         *edit = Some(LayerEdit {
             slot,
-            layers: layers_shown(&None, presets, slot).to_vec(),
+            layers: layers_shown(&None, sent, presets, slot).to_vec(),
             pending: None,
             sent: None,
         });
@@ -460,6 +479,7 @@ pub fn edit_layers<'a>(
 /// does not hold back a send: a pause mid-sentence is still worth saving.
 pub fn tick(
     edit: &mut Option<LayerEdit>,
+    sent: &mut InFlight,
     presets: &sdroxide_types::ImagePresets,
     now: f64,
     busy: bool,
@@ -471,8 +491,16 @@ pub fn tick(
         }
         e.pending = None;
         e.sent = Some(now);
-        let stored = presets.slots.get(e.slot).map(|s| &s.layers);
-        return (stored != Some(&e.layers)).then(|| sdroxide_types::Command::ImageSetLayers {
+        // Compared with what the engine is about to hold, not with the presets
+        // alone: going back to the old text before the first write is echoed
+        // is still a change, and has to be written.
+        if layers_shown(&None, sent, presets, e.slot) == e.layers.as_slice() {
+            return None;
+        }
+        // The slot in hand is what is shown for it; an older write for it
+        // still in flight would only be read once it was handed back.
+        sent.remove(&e.slot);
+        return Some(sdroxide_types::Command::ImageSetLayers {
             slot: e.slot as u8,
             layers: e.layers.clone(),
         });
@@ -492,6 +520,7 @@ pub fn tick(
 /// the engine's older copy for a round trip.
 pub fn send_now(
     edit: &mut Option<LayerEdit>,
+    sent: &mut InFlight,
     presets: &sdroxide_types::ImagePresets,
     now: f64,
 ) -> Option<sdroxide_types::Command> {
@@ -499,18 +528,46 @@ pub fn send_now(
     // Already sent: it is on its way, and a second copy would add nothing.
     e.pending?;
     e.pending = Some(now - SEND_AFTER);
-    tick(edit, presets, now, true)
+    tick(edit, sent, presets, now, true)
 }
 
 /// Send whatever is in hand now and hand the slot back — what leaving it for
-/// another slot does.
+/// another slot does. What was sent is held in `sent` until it is echoed.
+///
+/// `None` when nothing was in hand or nothing changed, so a click that edits
+/// nothing does not spray writes at the engine.
 pub fn commit(
     edit: &mut Option<LayerEdit>,
+    sent: &mut InFlight,
     presets: &sdroxide_types::ImagePresets,
+    now: f64,
 ) -> Option<sdroxide_types::Command> {
     let e = edit.take()?;
-    (presets.slots.get(e.slot).map(|s| &s.layers) != Some(&e.layers))
-        .then_some(sdroxide_types::Command::ImageSetLayers { slot: e.slot as u8, layers: e.layers })
+    // Sent already and not changed since: the write is on its way, so keep
+    // showing it until it lands rather than flicking back to the presets.
+    if e.pending.is_none() {
+        if let Some(t) = e.sent {
+            let echoed = presets.slots.get(e.slot).is_some_and(|s| s.layers == e.layers);
+            if !echoed {
+                sent.insert(e.slot, (e.layers, t));
+            }
+            return None;
+        }
+    }
+    if layers_shown(&None, sent, presets, e.slot) == e.layers.as_slice() {
+        return None;
+    }
+    sent.insert(e.slot, (e.layers.clone(), now));
+    Some(sdroxide_types::Command::ImageSetLayers { slot: e.slot as u8, layers: e.layers })
+}
+
+/// Drop the writes the engine has now echoed, and those it never echoed in
+/// time (it sanitised them, or another screen wrote in between). One still in
+/// flight survives an announcement that went out before the engine got to it.
+pub fn settle_layers(sent: &mut InFlight, presets: &sdroxide_types::ImagePresets, now: f64) {
+    sent.retain(|&slot, (layers, t)| {
+        now - *t <= RELEASE_AFTER && presets.slots.get(slot).map(|s| &s.layers) != Some(layers)
+    });
 }
 
 fn put(img: &mut [u8], w: usize, h: usize, x: i32, y: i32, r: u8, g: u8, b: u8) {
@@ -974,21 +1031,27 @@ mod tests {
         Fields { call: call.into(), grid: grid.into(), ..Fields::default() }
     }
 
+    fn none() -> InFlight {
+        InFlight::new()
+    }
+
     /// The echo of our own write comes back a round trip after it went out.
     /// Adopting it would snap a dragged layer back to where it was.
     #[test]
     fn a_server_echo_does_not_clobber_the_slot_being_edited() {
         let p = presets(&["a", "b", "old", "d", "e"]);
+        let mut sent = none();
         let mut edit = None;
         let mut cmds = Vec::new();
-        edit_layers(&mut edit, &p, 2, 0.0, &mut cmds)[0].text = "CQ CQ de OE1TEST".into();
+        edit_layers(&mut edit, &mut sent, &p, 2, 0.0, &mut cmds)[0].text =
+            "CQ CQ de OE1TEST".into();
         assert!(cmds.is_empty(), "nothing else was in hand");
-        assert_eq!(layers_shown(&edit, &p, 2)[0].text, "CQ CQ de OE1TEST");
+        assert_eq!(layers_shown(&edit, &sent, &p, 2)[0].text, "CQ CQ de OE1TEST");
         // Every other slot follows the engine.
-        assert_eq!(layers_shown(&edit, &p, 3)[0].text, "d");
-        assert_eq!(layers_shown(&None, &p, 2)[0].text, "old");
+        assert_eq!(layers_shown(&edit, &sent, &p, 3)[0].text, "d");
+        assert_eq!(layers_shown(&None, &sent, &p, 2)[0].text, "old");
         // A slot the engine has never mentioned is empty rather than a panic.
-        assert!(layers_shown(&None, &p, 99).is_empty());
+        assert!(layers_shown(&None, &sent, &p, 99).is_empty());
     }
 
     /// Edits go out once the operator pauses, not on every frame of a drag,
@@ -996,26 +1059,28 @@ mod tests {
     #[test]
     fn an_edit_is_sent_after_a_pause_and_released_on_its_echo() {
         let p = presets(&["a", "b", "old", "d", "e"]);
+        let mut sent = none();
         let mut edit = None;
         let mut cmds = Vec::new();
-        edit_layers(&mut edit, &p, 2, 0.0, &mut cmds)[0].x = 10.0;
-        edit_layers(&mut edit, &p, 2, 0.3, &mut cmds)[0].x = 20.0;
-        assert_eq!(tick(&mut edit, &p, 0.5, true), None, "still moving");
-        let Some(Command::ImageSetLayers { slot: 2, layers }) = tick(&mut edit, &p, 0.8, true)
+        edit_layers(&mut edit, &mut sent, &p, 2, 0.0, &mut cmds)[0].x = 10.0;
+        edit_layers(&mut edit, &mut sent, &p, 2, 0.3, &mut cmds)[0].x = 20.0;
+        assert_eq!(tick(&mut edit, &mut sent, &p, 0.5, true), None, "still moving");
+        let Some(Command::ImageSetLayers { slot: 2, layers }) =
+            tick(&mut edit, &mut sent, &p, 0.8, true)
         else {
             panic!("the paused edit should be sent");
         };
         assert_eq!(layers[0].x, 20.0);
         // Held while busy, even though sent.
-        assert_eq!(tick(&mut edit, &p, 0.9, true), None);
+        assert_eq!(tick(&mut edit, &mut sent, &p, 0.9, true), None);
         assert!(edit.is_some());
         // Not yet echoed: still held.
-        assert_eq!(tick(&mut edit, &p, 1.0, false), None);
+        assert_eq!(tick(&mut edit, &mut sent, &p, 1.0, false), None);
         assert!(edit.is_some());
         // Echoed: handed back.
         let mut echoed = p.clone();
         echoed.slots[2].layers = layers;
-        assert_eq!(tick(&mut edit, &echoed, 1.1, false), None);
+        assert_eq!(tick(&mut edit, &mut sent, &echoed, 1.1, false), None);
         assert!(edit.is_none());
     }
 
@@ -1024,30 +1089,102 @@ mod tests {
     #[test]
     fn a_slot_is_released_when_its_echo_never_comes() {
         let p = presets(&["a", "b", "old", "d", "e"]);
+        let mut sent = none();
         let mut edit = None;
-        edit_layers(&mut edit, &p, 2, 0.0, &mut Vec::new())[0].text = "mine".into();
-        assert!(tick(&mut edit, &p, 1.0, false).is_some());
-        assert_eq!(tick(&mut edit, &p, 2.0, false), None);
+        edit_layers(&mut edit, &mut sent, &p, 2, 0.0, &mut Vec::new())[0].text = "mine".into();
+        assert!(tick(&mut edit, &mut sent, &p, 1.0, false).is_some());
+        assert_eq!(tick(&mut edit, &mut sent, &p, 2.0, false), None);
         assert!(edit.is_some());
-        assert_eq!(tick(&mut edit, &p, 4.5, false), None);
+        assert_eq!(tick(&mut edit, &mut sent, &p, 4.5, false), None);
         assert!(edit.is_none(), "the engine's word is taken in the end");
     }
 
     #[test]
     fn editing_another_slot_commits_the_one_in_hand() {
         let p = presets(&["a", "b", "old", "d", "e"]);
+        let mut sent = none();
         let mut edit = None;
         let mut cmds = Vec::new();
-        edit_layers(&mut edit, &p, 2, 0.0, &mut cmds)[0].text = "half-typed".into();
-        let l4 = edit_layers(&mut edit, &p, 4, 0.1, &mut cmds);
+        edit_layers(&mut edit, &mut sent, &p, 2, 0.0, &mut cmds)[0].text = "half-typed".into();
+        let l4 = edit_layers(&mut edit, &mut sent, &p, 4, 0.1, &mut cmds);
         assert_eq!(l4[0].text, "e", "the new slot starts from the engine's layers");
         assert_eq!(cmds, vec![Command::ImageSetLayers { slot: 2, layers: text("half-typed") }]);
         // Committing something unchanged writes nothing.
+        let mut sent = none();
         let mut same = None;
-        edit_layers(&mut same, &p, 1, 0.0, &mut cmds);
-        assert_eq!(commit(&mut same, &p), None);
+        edit_layers(&mut same, &mut sent, &p, 1, 0.0, &mut cmds);
+        assert_eq!(commit(&mut same, &mut sent, &p, 0.0), None);
         assert!(same.is_none());
-        assert_eq!(commit(&mut None, &p), None);
+        assert!(sent.is_empty());
+        assert_eq!(commit(&mut None, &mut sent, &p, 0.0), None);
+    }
+
+    /// #752: what goes on the air is what is on screen. A slot handed back to
+    /// the engine — by moving to another one — is still read from the write in
+    /// flight, not from the presets it has not reached yet.
+    #[test]
+    fn a_committed_edit_is_what_is_sent_until_the_engine_echoes_it() {
+        let stale = presets(&["a", "b", "old", "d", "e"]);
+        let mut sent = none();
+        let mut edit = None;
+        let mut cmds = Vec::new();
+        edit_layers(&mut edit, &mut sent, &stale, 2, 0.0, &mut cmds)[0].text = "new".into();
+        assert!(commit(&mut edit, &mut sent, &stale, 0.1).is_some());
+        assert_eq!(layers_shown(&edit, &sent, &stale, 2)[0].text, "new");
+
+        // An announcement that left the engine before the write arrived does
+        // not undo it.
+        settle_layers(&mut sent, &stale, 0.2);
+        assert_eq!(layers_shown(&None, &sent, &stale, 2)[0].text, "new");
+
+        // Coming back to the slot before the echo picks up the new text, and
+        // leaving it again unchanged writes nothing more.
+        edit_layers(&mut edit, &mut sent, &stale, 2, 0.3, &mut cmds);
+        assert_eq!(edit.as_ref().unwrap().layers[0].text, "new");
+        assert_eq!(commit(&mut edit, &mut sent, &stale, 0.4), None);
+
+        // The echo hands the slot back to the engine for good.
+        let echoed = presets(&["a", "b", "new", "d", "e"]);
+        settle_layers(&mut sent, &echoed, 0.5);
+        assert!(sent.is_empty());
+        assert_eq!(layers_shown(&None, &sent, &echoed, 2)[0].text, "new");
+    }
+
+    /// A slot sent by the pause timer and then left before its echo stays in
+    /// flight too, rather than flicking back to the engine's older copy.
+    #[test]
+    fn leaving_a_slot_whose_edit_was_already_sent_keeps_it_in_flight() {
+        let stale = presets(&["a", "b", "old", "d", "e"]);
+        let mut sent = none();
+        let mut edit = None;
+        edit_layers(&mut edit, &mut sent, &stale, 2, 0.0, &mut Vec::new())[0].text = "new".into();
+        assert!(tick(&mut edit, &mut sent, &stale, 0.5, true).is_some());
+        assert_eq!(commit(&mut edit, &mut sent, &stale, 0.6), None, "already on its way");
+        assert_eq!(layers_shown(&None, &sent, &stale, 2)[0].text, "new");
+        // Never echoed (the engine sanitised it, say): the engine's word wins
+        // in the end.
+        settle_layers(&mut sent, &stale, 4.0);
+        assert_eq!(layers_shown(&None, &sent, &stale, 2)[0].text, "old");
+    }
+
+    /// Typing the old text back before the first write is echoed is still a
+    /// change from what the engine is about to hold, so it has to be written.
+    #[test]
+    fn reverting_an_unechoed_edit_still_writes() {
+        let stale = presets(&["a", "b", "old", "d", "e"]);
+        let mut sent = none();
+        let mut edit = None;
+        let mut cmds = Vec::new();
+        edit_layers(&mut edit, &mut sent, &stale, 2, 0.0, &mut cmds)[0].text = "new".into();
+        commit(&mut edit, &mut sent, &stale, 0.1);
+        edit_layers(&mut edit, &mut sent, &stale, 2, 0.2, &mut cmds)[0].text = "old".into();
+        assert_eq!(
+            commit(&mut edit, &mut sent, &stale, 0.3),
+            Some(Command::ImageSetLayers { slot: 2, layers: text("old") }),
+        );
+        // The echo of the first write does not settle the second.
+        settle_layers(&mut sent, &presets(&["a", "b", "new", "d", "e"]), 0.4);
+        assert_eq!(layers_shown(&None, &sent, &stale, 2)[0].text, "old");
     }
 
     /// The stock settings have to compose the strip the header was hard-wired
@@ -1430,15 +1567,16 @@ mod tests {
     #[test]
     fn transmitting_sends_the_edit_and_keeps_the_slot() {
         let p = presets(&["a", "b", "c", "d", "e"]);
+        let mut sent = none();
         let mut edit = None;
-        edit_layers(&mut edit, &p, 1, 10.0, &mut Vec::new())[0].text = "now".into();
+        edit_layers(&mut edit, &mut sent, &p, 1, 10.0, &mut Vec::new())[0].text = "now".into();
         assert!(matches!(
-            send_now(&mut edit, &p, 10.0),
+            send_now(&mut edit, &mut sent, &p, 10.0),
             Some(Command::ImageSetLayers { slot: 1, .. })
         ));
         assert_eq!(edit.as_ref().map(|e| e.slot), Some(1));
         // Nothing left to send.
-        assert_eq!(send_now(&mut edit, &p, 10.1), None);
+        assert_eq!(send_now(&mut edit, &mut sent, &p, 10.1), None);
     }
 
     fn qso_fields() -> Fields {

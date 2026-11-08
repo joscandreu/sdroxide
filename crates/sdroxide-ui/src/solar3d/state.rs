@@ -4,6 +4,7 @@
 //! the window cannot borrow `SdroxideApp`. All of its mutable state lives here
 //! behind an `Arc<Mutex<_>>` that both the root pass and the child pass hold.
 
+use crate::i18n::tr;
 use std::sync::{Arc, Mutex};
 
 use sdroxide_solar::SolarData;
@@ -51,8 +52,8 @@ impl Focus {
     /// of them, they would swamp a popup meant for choosing between eleven
     /// planets, and the search box finds them by name — which is how you look
     /// for a body you already have in mind, and the only way that scales.
-    pub fn groups() -> Vec<(&'static str, Vec<Focus>)> {
-        let mut v = vec![("HOME", Focus::NEAR.to_vec())];
+    pub fn groups() -> Vec<(String, Vec<Focus>)> {
+        let mut v = vec![(tr!("solarstate-home"), Focus::NEAR.to_vec())];
         for p in sdroxide_solar::Planet::ALL {
             let mut row = vec![Focus::Planet(p)];
             row.extend(
@@ -62,10 +63,11 @@ impl Focus {
                     .filter(|(_, m)| m.parent == p)
                     .map(|(i, _)| Focus::Satellite(i)),
             );
-            v.push((p.name(), row));
+            // Captions are drawn as given, so the name is put in capitals here.
+            v.push((p.name().to_uppercase(), row));
         }
         v.push((
-            "DWARF PLANETS",
+            tr!("solarstate-dwarf-planets"),
             sdroxide_solar::smallbody::BODIES
                 .iter()
                 .enumerate()
@@ -233,6 +235,17 @@ pub struct SolarUi {
     pub prop_rgba_key: Option<(u64, u8, u8, u32)>,
     /// Bumped on every rebuild, so the GPU upload can skip an unchanged one.
     pub prop_gen: u64,
+    /// The 3D window's remembered geometry, seeded from the screen's
+    /// `UiSettings`. The builder consults it only when the window is
+    /// (re)built, so a live resize is never fought. Native only: the browser
+    /// tab is the page's to size.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub window_seed: Option<sdroxide_types::Solar3dWindow>,
+    /// The geometry the window is actually at, written by the window's own pass
+    /// and read back into `UiSettings` by the host. `pos` is `None` on Wayland,
+    /// which reports no absolute window position.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub window_now: Option<sdroxide_types::Solar3dWindow>,
     /// Where the activity time-lapse's replay head sits, in seconds before now.
     /// Zero is live, which is where it starts every run: a globe that came back
     /// up showing forty minutes ago would read as a stalled feed.
@@ -406,6 +419,10 @@ impl SolarUi {
             prop_rgba: Default::default(),
             prop_rgba_key: None,
             prop_gen: 0,
+            #[cfg(not(target_arch = "wasm32"))]
+            window_seed: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            window_now: None,
             lapse_back_s: 0.0,
             lapse_playing: false,
             search: String::new(),

@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -344,6 +344,55 @@ impl RxStats {
     }
 }
 
+/// The local UDP socket RX I/Q arrives on, with the largest receive buffer the
+/// system will give it.
+///
+/// **The default is sized for control traffic, not for an IQ stream.** Linux
+/// hands out about 212 KB and Windows as little as 64 KB; at 384 ksample/s a
+/// second of interleaved stereo is 1.5 MB, so the buffer holds a tenth of a
+/// second on Linux and forty milliseconds on Windows. Any stall longer than
+/// that — a repaint, a scan, a page fault, a resume from idle — is a burst of
+/// datagrams the kernel throws away before the loop can read them, and the
+/// radio goes on sending, so the gap is silent and permanent. Reported by
+/// DK8JV as a handful of datagrams lost "almost precisely every two seconds",
+/// which is exactly how a periodic stall shows up against a two-second
+/// statistics window (issue #388).
+///
+/// Asked for four megabytes and **the granted size is logged**, because that is
+/// the number that decides how long a stall can last: on Linux the kernel
+/// doubles the request and then caps it at `net.core.rmem_max`, which is 212 KB
+/// on a stock kernel and cannot be raised from inside a process. A log line
+/// that says `recv buffer 425984 bytes` is the operator's evidence that the
+/// limit is theirs to raise.
+fn receive_socket() -> std::io::Result<UdpSocket> {
+    const WANT: usize = 4 * 1024 * 1024;
+    // Best effort at every step: a system that refuses the size still streams,
+    // it just streams with the buffer it gave us.
+    let socket = match socket2::Socket::new(
+        socket2::Domain::IPV4,
+        socket2::Type::DGRAM,
+        Some(socket2::Protocol::UDP),
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::debug!("HPSDR: socket2 unavailable ({e}); using a plain UDP socket");
+            return UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0));
+        }
+    };
+    if let Err(e) = socket.set_recv_buffer_size(WANT) {
+        tracing::debug!("HPSDR: asking for a {WANT}-byte receive buffer failed: {e}");
+    }
+    socket.bind(&std::net::SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)).into())?;
+    match socket.recv_buffer_size() {
+        Ok(got) => tracing::info!(
+            "HPSDR: UDP receive buffer {got} bytes (~{:.0} ms of a 384 ksps stereo stream)",
+            got as f64 / 1_536_000.0 * 1000.0
+        ),
+        Err(e) => tracing::debug!("HPSDR: could not read back the receive buffer size: {e}"),
+    }
+    Ok(socket.into())
+}
+
 /// Follows a radio→host datagram sequence counter and reports how many
 /// datagrams went missing. UDP loss on a busy 100 Mbit link is the usual cause
 /// of a stream that runs at the right rate but sounds torn up, and nothing else
@@ -662,6 +711,8 @@ pub(crate) struct ThreadCtx {
     /// [`HpsdrRx::pa_temp_c`]. [`TEMP_UNKNOWN`] until the board reports one —
     /// which most of them never do.
     pub temp_centi_c: Arc<AtomicI32>,
+    pub fwd_power_raw: Arc<AtomicU16>,
+    pub rev_power_raw: Arc<AtomicU16>,
     pub tx: Consumer<f32>,
     pub ctrl: Receiver<Ctrl>,
 }
@@ -674,6 +725,18 @@ pub(crate) struct ThreadCtx {
 /// has to be told apart from one that is genuinely 0 °C — a Hermes-Lite in a
 /// cold shack in February reads exactly that.
 pub const TEMP_UNKNOWN: i32 = i32::MIN;
+
+/// Sentinel for HL2 forward/reverse ADC readings before the first report.
+pub const POWER_UNKNOWN: u16 = u16::MAX;
+
+/// Empirical HL2 coupler calibration determined against an external SWR meter.
+/// Applied to |Gamma| = REV/FWD before converting to SWR.
+const HL2_SWR_GAMMA_CAL: f32 = 1.23;
+
+/// The SWR an HL2 reports once the reflected reading reaches the forward one:
+/// the top of the range the SWR guard can be set to, so a pegged bridge trips
+/// it at any limit. The same ceiling the Icom meter curve ends at.
+const HL2_SWR_MAX: f32 = sdroxide_types::SWR_LIMIT_MAX;
 
 /// What every stream of one connection shares. Dropping the last handle stops
 /// the stream and shuts the network thread down.
@@ -714,6 +777,8 @@ struct DevInner {
     /// The board's own temperature, hundredths of a degree — see
     /// [`TEMP_UNKNOWN`].
     temp_centi_c: Arc<AtomicI32>,
+    fwd_power_raw: Arc<AtomicU16>,
+    rev_power_raw: Arc<AtomicU16>,
     /// The TX ring's feed end, claimable exactly once — by DDC 0's stream.
     tx_endpoint: Mutex<Option<Producer<f32>>>,
     /// Which DDCs have a live [`HpsdrRx`], so one cannot be vended twice: two
@@ -757,7 +822,24 @@ impl HpsdrBoard {
         auto_gain: AutoGain,
     ) -> Result<HpsdrBoard, HpsdrError> {
         tracing::info!("HPSDR: opening {ip}, requested RX rate {sample_rate_hz:.0} Hz");
-        let (board, protocol) = match discovery::probe(ip, Duration::from_millis(800)) {
+        // Some boards answer only a *broadcast* discovery request: an ANAN-10
+        // and an ANAN-100D on Protocol 1 gateware were found as "P1" by
+        // Settings → Discover yet never answered the directed probe, so the
+        // open guessed Protocol 2 and got no I/Q (#744, #789). When the
+        // directed probe is silent, broadcast and keep the answer from `ip`.
+        let probed = discovery::probe(ip, Duration::from_millis(800)).or_else(|| {
+            let ip_s = ip.to_string();
+            let dev = discovery::discover(Duration::from_millis(800))
+                .into_iter()
+                .find(|d| d.ip == ip_s);
+            if dev.is_some() {
+                tracing::info!(
+                    "HPSDR: {ip} ignored the directed probe but answered a broadcast one"
+                );
+            }
+            dev
+        });
+        let (board, protocol) = match probed {
             Some(dev) => {
                 tracing::info!(
                     "HPSDR: {ip} answered probe: board \"{}\", Protocol {}, MAC {}, {}",
@@ -843,7 +925,7 @@ impl HpsdrBoard {
             }
         }
 
-        let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
+        let socket = receive_socket()?;
         socket.set_read_timeout(Some(Duration::from_millis(2)))?;
         tracing::debug!(
             "HPSDR: bound local UDP socket {}",
@@ -864,6 +946,8 @@ impl HpsdrBoard {
         let conn_id = claim_connection(IpAddr::V4(ip));
         let radio_ptt = Arc::new(AtomicBool::new(false));
         let temp_centi_c = Arc::new(AtomicI32::new(TEMP_UNKNOWN));
+        let fwd_power_raw = Arc::new(AtomicU16::new(POWER_UNKNOWN));
+        let rev_power_raw = Arc::new(AtomicU16::new(POWER_UNKNOWN));
         let lna_gain_centi_db = Arc::new(AtomicI32::new((lna_gain_db * 100.0) as i32));
         let adc_overload = Arc::new(AtomicBool::new(false));
         if auto_gain.enabled && board_has_lna_gain(&board) {
@@ -894,6 +978,8 @@ impl HpsdrBoard {
             adc_overload: Arc::clone(&adc_overload),
             radio_ptt: Arc::clone(&radio_ptt),
             temp_centi_c: Arc::clone(&temp_centi_c),
+            fwd_power_raw: Arc::clone(&fwd_power_raw),
+            rev_power_raw: Arc::clone(&rev_power_raw),
             tx: tx_cons,
             ctrl: ctrl_rx,
         };
@@ -929,6 +1015,8 @@ impl HpsdrBoard {
                 transmitting: Arc::new(AtomicBool::new(false)),
                 radio_ptt,
                 temp_centi_c,
+                fwd_power_raw,
+                rev_power_raw,
                 tx_endpoint: Mutex::new(Some(tx_prod)),
                 attached: Mutex::new(std::collections::HashSet::new()),
             }),
@@ -1089,6 +1177,26 @@ impl Drop for HpsdrRx {
     }
 }
 
+/// Calculate Hermes-Lite 2 SWR from Protocol-1 detector ADC amplitudes.
+///
+/// `None` only with no forward drive to measure against. A reflected reading
+/// at or above the forward one (after calibration) is the worst the bridge can
+/// say, not an unreadable one: an open or a shorted feed reads exactly that,
+/// and reporting nothing there left the SWR guard blind to the fault it exists
+/// for. So it pegs at [`HL2_SWR_MAX`]. Nor are the two ever swapped: a
+/// reflected reading larger than the forward one is a bad load, and reading
+/// it the other way round made it a good one.
+fn hl2_swr_from_raw(fwd: u16, rev: u16) -> Option<f32> {
+    if fwd <= 6 {
+        return None;
+    }
+    let gamma = (rev as f32 / fwd as f32) * HL2_SWR_GAMMA_CAL;
+    if gamma >= 1.0 {
+        return Some(HL2_SWR_MAX);
+    }
+    Some(((1.0 + gamma) / (1.0 - gamma)).min(HL2_SWR_MAX))
+}
+
 impl HpsdrRx {
     /// Which DDC this stream is (0-based, as the wire counts them).
     pub fn ddc(&self) -> u8 {
@@ -1107,6 +1215,22 @@ impl HpsdrRx {
     /// See [`HpsdrBoard::tx_rate_hz`].
     pub fn tx_rate_hz(&self) -> f64 {
         self.dev.tx_rate_hz
+    }
+
+    /// Hermes-Lite 2 SWR from Protocol-1 forward/reverse detector readings.
+    pub fn swr(&self) -> Option<f32> {
+        if self.dev.protocol != 1 || !board_is_hermes_lite(&self.dev.board) {
+            return None;
+        }
+
+        let fwd = self.dev.fwd_power_raw.load(Ordering::Relaxed);
+        let rev = self.dev.rev_power_raw.load(Ordering::Relaxed);
+
+        if fwd == POWER_UNKNOWN || rev == POWER_UNKNOWN {
+            return None;
+        }
+
+        hl2_swr_from_raw(fwd, rev)
     }
 
     pub fn board(&self) -> &str {
@@ -1635,5 +1759,69 @@ mod tests {
         assert_eq!(TX_RATE_HZ_P2, 192_000);
         assert_eq!(tx_rate_for_protocol(1), 48_000);
         assert_eq!(tx_rate_for_protocol(2), 192_000);
+    }
+}
+
+#[cfg(test)]
+mod hl2_swr_regression_tests {
+    use super::{HL2_SWR_MAX, hl2_swr_from_raw};
+
+    #[test]
+    fn known_hl2_reading_is_about_1_30_to_1() {
+        let swr = hl2_swr_from_raw(1803, 192).expect("valid SWR");
+        assert!((swr - 1.30).abs() < 0.01, "SWR was {swr}");
+    }
+
+    /// An open or a short reflects about what goes forward. That is the
+    /// reading the SWR guard exists for, so it pegs the meter rather than
+    /// reporting nothing — and a reflection larger than the forward reading is
+    /// never read the other way round as a good match.
+    #[test]
+    fn a_reflection_at_or_above_forward_pegs_the_meter() {
+        assert_eq!(hl2_swr_from_raw(192, 1803), Some(HL2_SWR_MAX));
+        assert_eq!(hl2_swr_from_raw(1000, 1000), Some(HL2_SWR_MAX));
+        // Past |Γ| = 1 after calibration, but short of rev = fwd.
+        assert_eq!(hl2_swr_from_raw(1000, 850), Some(HL2_SWR_MAX));
+    }
+
+    /// More reflected power never reads as a better match.
+    #[test]
+    fn swr_rises_with_the_reflected_reading() {
+        let mut last = 1.0f32;
+        for rev in (0..=1200).step_by(10) {
+            let swr = hl2_swr_from_raw(1000, rev).expect("driven");
+            assert!(swr >= last, "rev {rev}: {swr} fell below {last}");
+            last = swr;
+        }
+        assert_eq!(last, HL2_SWR_MAX);
+    }
+
+    #[test]
+    fn no_forward_drive_has_no_meaningful_swr() {
+        assert_eq!(hl2_swr_from_raw(0, 0), None);
+        assert_eq!(hl2_swr_from_raw(6, 0), None);
+    }
+
+    /// The receive buffer is the one number that decides how long a stall the radio
+    /// can survive, and it is the OS's decision, not ours.
+    ///
+    /// Asserted as a comparison rather than against a size: the kernel doubles the
+    /// request and then caps it at `net.core.rmem_max`, which differs per machine,
+    /// so an absolute floor would be a test of the machine rather than of this
+    /// code. What is ours to get right is that asking for a larger buffer never
+    /// yields a smaller one than a plain bind, and that the socket still binds.
+    #[test]
+    fn the_receive_socket_asks_for_more_room_than_a_plain_bind() {
+        let plain = std::net::UdpSocket::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).unwrap();
+        let plain_size = socket2::SockRef::from(&plain).recv_buffer_size().unwrap();
+        drop(plain);
+
+        let socket = super::receive_socket().expect("a local UDP socket");
+        assert!(socket.local_addr().is_ok(), "the socket is bound");
+        let size = socket2::SockRef::from(&socket).recv_buffer_size().unwrap();
+        assert!(
+            size >= plain_size,
+            "the receive buffer ({size}) is smaller than a plain bind's ({plain_size})"
+        );
     }
 }
