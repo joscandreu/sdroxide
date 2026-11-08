@@ -1,0 +1,18 @@
+FE-Schrift sdroxide (FESchrift-sdroxide.otf)
+
+Built by tools/gen_fe_font.py from the drawing "File:FE-Schrift.svg" on
+Wikimedia Commons (https://commons.wikimedia.org/wiki/File:FE-Schrift.svg):
+the glyphs of the FE-Schrift, the typeface of German vehicle number plates,
+designed by Karlgeorg Hoefer for the Bundesanstalt für Straßenwesen, and
+vectorised by Liftarn. Wikimedia Commons marks that drawing as public domain
+("The depicted text is ineligible for copyright and therefore in the public
+domain").
+
+This font file is dedicated to the public domain under CC0 1.0 Universal:
+to the extent possible under law, the sdroxide authors have waived all
+copyright and related or neighbouring rights to it.
+https://creativecommons.org/publicdomain/zero/1.0/
+
+It holds A–Z (lower case maps onto the capitals), 0–9, Ä Ö Ü, a space, a
+hyphen and a full stop. Any other character is drawn by sdroxide from its
+default face.
