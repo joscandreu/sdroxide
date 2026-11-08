@@ -2194,20 +2194,17 @@ impl ScrollPalette {
 
 fn install_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
-    fonts.font_data.insert(
-        "chakra".into(),
-        Arc::new(FontData::from_static(include_bytes!("../assets/fonts/ChakraPetch-Regular.ttf"))),
-    );
+    fonts
+        .font_data
+        .insert("chakra".into(), Arc::new(FontData::from_static(crate::fonts::CHAKRA_REGULAR)));
     fonts.font_data.insert(
         "chakra-bold".into(),
-        Arc::new(FontData::from_static(include_bytes!("../assets/fonts/ChakraPetch-SemiBold.ttf"))),
+        Arc::new(FontData::from_static(crate::fonts::CHAKRA_SEMIBOLD)),
     );
     // Angular techno monospace for the FT8 decode list (Share Tech Mono, OFL).
     fonts.font_data.insert(
         "cyber-mono".into(),
-        Arc::new(FontData::from_static(include_bytes!(
-            "../assets/fonts/ShareTechMono-Regular.ttf"
-        ))),
+        Arc::new(FontData::from_static(crate::fonts::SHARE_TECH_MONO)),
     );
     // Chinese: the GB 2312 characters of Noto Sans SC (SIL OFL, see
     // assets/fonts/NotoSansSC-OFL.txt). Last in each stack, so it is only
@@ -2247,7 +2244,20 @@ fn install_fonts(ctx: &egui::Context) {
     if let Some(prop) = fonts.families.get(&FontFamily::Proportional) {
         bold_stack.extend(prop.iter().cloned());
     }
-    fonts.families.insert(FontFamily::Name("chakra-bold".into()), bold_stack);
+    fonts.families.insert(FontFamily::Name("chakra-bold".into()), bold_stack.clone());
+
+    // The faces a picture's text layers can be drawn in, each a family of its
+    // own so the SSTV editor can list every face in itself. Behind each, the
+    // bold stack, for a character the face does not have — the same fallback
+    // the picture itself uses.
+    for (id, _) in sdroxide_types::TEXT_FONTS {
+        let Some(bytes) = crate::fonts::layer_face(id) else { continue };
+        let key = format!("sstv-face-{id}");
+        fonts.font_data.insert(key.clone(), Arc::new(FontData::from_static(bytes)));
+        let mut stack = vec![key];
+        stack.extend(bold_stack.iter().cloned());
+        fonts.families.insert(crate::fonts::layer_family(id), stack);
+    }
 
     ctx.set_fonts(fonts);
 }
@@ -2256,6 +2266,23 @@ fn install_fonts(ctx: &egui::Context) {
 mod tests {
     use super::*;
     use crate::layout::Tier;
+
+    /// The SSTV editor lists every picture face in that face; each has to be
+    /// a family of its own, or the list falls back to the interface font.
+    #[test]
+    fn every_picture_face_is_a_family_of_its_own() {
+        let ctx = egui::Context::default();
+        install_fonts(&ctx);
+        // Fonts set now take effect, and can be asked about, from a frame on.
+        ctx.run_ui(egui::RawInput::default(), |_| {}).textures_delta.clear();
+        for (id, name) in sdroxide_types::TEXT_FONTS {
+            assert_eq!(
+                crate::fonts::layer_family_in(&ctx, id),
+                crate::fonts::layer_family(id),
+                "{name}"
+            );
+        }
+    }
 
     /// Every metric [`apply_metrics`] sets has to be set in *both* directions.
     ///

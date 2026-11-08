@@ -1024,6 +1024,7 @@ impl SstvUi {
             ui.add_space(3.0);
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
+                font_picker(ui, (self.selected_slot, sel), &mut cur);
                 ui.label(RichText::new(tr!("sstv-size")).size(10.0).weak())
                     .on_hover_text(tr!("sstv-layer-size-hint"));
                 ui.spacing_mut().slider_width = 90.0;
@@ -1212,6 +1213,38 @@ fn sstv_log_form(
         .collect::<Vec<_>>()
         .join(" · ");
     form
+}
+
+/// The layer's typeface: a dropdown of the bundled faces, each name shown in
+/// its own face so the choice is made by eye.
+///
+/// A face this build does not ship — named by a layer a later build saved —
+/// shows under its id, in the default face it is drawn in here, and stays
+/// chosen until the operator picks another.
+fn font_picker(ui: &mut egui::Ui, salt: (usize, usize), layer: &mut TextLayer) {
+    use crate::chrome::StyledCombo;
+    use sdroxide_types::TEXT_FONTS;
+    let shown = match layer.font_name() {
+        Some(name) => {
+            RichText::new(name).family(crate::fonts::layer_family_in(ui.ctx(), &layer.font))
+        }
+        None => RichText::new(&layer.font).italics(),
+    };
+    ui.label(RichText::new(tr!("sstv-layer-font")).size(10.0).weak())
+        .on_hover_text(tr!("sstv-layer-font-hint"));
+    egui::ComboBox::from_id_salt(("sstv-font", salt))
+        .width(118.0)
+        .selected_text(shown.size(12.0))
+        .show_styled(ui, |ui| {
+            for (id, name) in TEXT_FONTS {
+                let face = RichText::new(name)
+                    .size(14.0)
+                    .family(crate::fonts::layer_family_in(ui.ctx(), id));
+                if ui.selectable_label(layer.font == id, face).clicked() {
+                    layer.font = id.to_string();
+                }
+            }
+        });
 }
 
 /// A 3×3 grid of small squares, one per anchor, the layer's own lit.

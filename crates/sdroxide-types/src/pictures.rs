@@ -389,7 +389,35 @@ pub struct TextLayer {
     pub rainbow: bool,
     /// Hidden layers stay in the preset but are not drawn.
     pub visible: bool,
+    /// The typeface, by its id in [`TEXT_FONTS`]. Empty is the default face.
+    ///
+    /// An id rather than an enum so a layer saved by a later build, naming a
+    /// face this one does not ship, still loads — it is drawn in the default
+    /// face instead, and keeps its own name for when it comes back.
+    pub font: String,
 }
+
+/// The typefaces a text layer can be drawn in: the id a layer stores in
+/// [`TextLayer::font`] and the name the editor shows. The first is the
+/// default, and the face every other one falls back to for a character it
+/// does not have.
+///
+/// New faces go on the end; an id, once used, is never given to another face,
+/// because presets on disk name them.
+pub const TEXT_FONTS: [(&str, &str); 8] = [
+    ("", "Chakra Petch"),
+    ("oswald", "Oswald"),
+    ("roboto-slab", "Roboto Slab"),
+    ("share-tech-mono", "Share Tech Mono"),
+    ("comfortaa", "Comfortaa"),
+    ("pacifico", "Pacifico"),
+    ("black-ops-one", "Black Ops One"),
+    ("fe-schrift", "FE-Schrift"),
+];
+
+/// Longest font id kept: far more than any in [`TEXT_FONTS`], short enough
+/// that a client cannot pad a preset out with one.
+const TEXT_FONT_ID_MAX: usize = 40;
 
 impl Default for TextLayer {
     /// White with a black edge, which is what the slot message always was:
@@ -407,6 +435,7 @@ impl Default for TextLayer {
             shadow: false,
             rainbow: false,
             visible: true,
+            font: String::new(),
         }
     }
 }
@@ -429,6 +458,19 @@ impl TextLayer {
         if let Some((cut, _)) = self.text.char_indices().nth(IMAGE_LAYER_TEXT_MAX) {
             self.text.truncate(cut);
         }
+        // An unknown id is kept (see the field); one that could not be an id
+        // at all is not.
+        if self.font.len() > TEXT_FONT_ID_MAX
+            || !self.font.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        {
+            self.font.clear();
+        }
+    }
+
+    /// The name of this layer's typeface as the editor lists it, or `None`
+    /// for an id this build does not ship.
+    pub fn font_name(&self) -> Option<&'static str> {
+        TEXT_FONTS.iter().find(|(id, _)| *id == self.font).map(|(_, name)| *name)
     }
 
     /// The layers a slot message from before layers existed becomes.
@@ -585,6 +627,34 @@ pub fn safe_name(name: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A layer saved before faces existed reads as the default face; one
+    /// naming a face this build does not ship keeps its id but has no name to
+    /// show; and an id that could not be one is dropped.
+    #[test]
+    fn a_layers_font_survives_old_files_and_unknown_faces() {
+        let old: TextLayer = serde_json::from_str(r#"{"text":"CQ","size":12.0}"#).unwrap();
+        assert_eq!(old.font, "");
+        assert_eq!(old.font_name(), Some("Chakra Petch"));
+
+        let mut later = TextLayer { font: "some-later-face".into(), ..TextLayer::default() };
+        later.sanitise();
+        assert_eq!(later.font, "some-later-face");
+        assert_eq!(later.font_name(), None);
+
+        for junk in ["../../x", "Oswald", &"a".repeat(41)] {
+            let mut l = TextLayer { font: junk.into(), ..TextLayer::default() };
+            l.sanitise();
+            assert_eq!(l.font, "", "{junk:?}");
+        }
+        // Every shipped id is one sanitising keeps, and none is used twice.
+        for (i, (id, _)) in TEXT_FONTS.iter().enumerate() {
+            let mut l = TextLayer { font: (*id).into(), ..TextLayer::default() };
+            l.sanitise();
+            assert_eq!(l.font, *id);
+            assert!(TEXT_FONTS[..i].iter().all(|(other, _)| other != id));
+        }
+    }
 
     /// The name is a fetch key that arrives over an unauthenticated socket and
     /// is joined to a directory we then read. Everything that could reach out

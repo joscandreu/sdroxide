@@ -23,6 +23,7 @@ mod download;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod event_loop;
 mod flags;
+mod fonts;
 mod fuzzy;
 mod hell;
 mod help;

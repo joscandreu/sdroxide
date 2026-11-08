@@ -4652,11 +4652,27 @@ one of the two.
     click, just inside the chosen corner or edge. Lines of a layer line up with
     the side it is pinned to.
   - **Styling.** The chips above the text box pick a layer; below them are its
-    **Size** (a share of the picture's height, so it looks the same in Robot 36
+    **Font**, its **Size** (a share of the picture's height, so it looks the same in Robot 36
     and in PD-290 — text too wide for the picture is shrunk to fit), its
     **colour**, an **Outline** in a colour of its own (on by default: plain
     coloured text is hard to read once noise and the mode's coarse colour have
     had their way with it), a **Shadow**, and **Rainbow**.
+  - **Fonts.** Each layer can be drawn in its own typeface, picked from the
+    **Font** list, where every name is shown in its own face: **Chakra Petch**
+    (the default, and the banner's), **Oswald** (tall and condensed — a lot of
+    text across a narrow picture), **Roboto Slab** (a bold serif), **Share Tech
+    Mono** (typewriter-style), **Comfortaa** (rounded), **Pacifico** (a
+    brush script, for a greeting), **Black Ops One** (stencil) and
+    **FE-Schrift** (the German number-plate face: capitals, figures and Ä Ö Ü
+    only — lower case comes out in capitals, as on a plate). The fonts
+    are built into sdroxide rather than taken from your computer, so a picture
+    comes out the same on every screen attached to the radio, the browser
+    included. A letter a font does not have — an accent missing from Share
+    Tech Mono, say, or Cyrillic — is drawn from the default font (or from
+    Oswald, for Cyrillic) instead of going out as an empty box. All of them are
+    under the SIL Open Font License, except Roboto Slab (Apache 2.0) and
+    FE-Schrift, which sdroxide builds from a public-domain drawing of the
+    letters and places in the public domain (CC0).
   - **Hide** keeps a layer in the slot but off the picture; **▲ / ▼** change
     which layer is drawn over which; **Delete** removes it.
   - The same placeholders as the banner work in any layer — `{call}`, `{grid}`,

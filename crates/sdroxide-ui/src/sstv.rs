@@ -240,11 +240,81 @@ pub fn resolve(layers: &[TextLayer], f: &Fields) -> Vec<TextLayer> {
         .collect()
 }
 
-/// The single font used for the header and the message overlay
-/// (ChakraPetch-SemiBold, already bundled OFL for the UI's own text).
-fn message_font() -> Option<FontRef<'static>> {
-    const RAW: &[u8] = include_bytes!("../assets/fonts/ChakraPetch-SemiBold.ttf");
-    FontRef::try_from_slice(RAW).ok()
+/// A typeface to draw a line in: the face a layer chose, with the default
+/// face (Chakra Petch SemiBold, the banner's) behind it for any character the
+/// chosen one does not have — an accented letter Share Tech Mono lacks, say —
+/// and Oswald behind that, for the Cyrillic Chakra Petch has none of, rather
+/// than a row of empty boxes in the transmitted picture.
+struct Face {
+    fonts: Vec<FontRef<'static>>,
+}
+
+impl Face {
+    /// The face a layer names by its id in [`sdroxide_types::TEXT_FONTS`]; the
+    /// default face for an id this build does not ship.
+    fn new(id: &str) -> Option<Face> {
+        let mut used: Vec<&str> = Vec::new();
+        let mut fonts = Vec::new();
+        for i in [id, "", "oswald"] {
+            if used.contains(&i) {
+                continue;
+            }
+            if let Some(f) =
+                crate::fonts::layer_face(i).and_then(|b| FontRef::try_from_slice(b).ok())
+            {
+                used.push(i);
+                fonts.push(f);
+            }
+        }
+        (!fonts.is_empty()).then_some(Face { fonts })
+    }
+
+    /// The face the banner is drawn in.
+    fn banner() -> Option<Face> {
+        Face::new("")
+    }
+
+    /// The font a character is drawn from, and its glyph there: the first
+    /// that has it, or the chosen face's missing-glyph box if none does.
+    fn glyph(&self, ch: char) -> (&FontRef<'static>, ab_glyph::GlyphId) {
+        self.fonts
+            .iter()
+            .map(|f| (f, f.glyph_id(ch)))
+            .find(|(_, g)| g.0 != 0)
+            .unwrap_or_else(|| (&self.fonts[0], self.fonts[0].glyph_id(ch)))
+    }
+
+    /// The ascent of the chosen face, which the line is laid out by.
+    fn ascent(&self, scale: PxScale) -> f32 {
+        self.fonts[0].as_scaled(scale).ascent()
+    }
+
+    /// Each glyph of `text` with the font it comes from and where its origin
+    /// falls, starting at `x`; and the width of the whole run. Kerning applies
+    /// between two glyphs of the same font only.
+    fn run(
+        &self,
+        text: &str,
+        scale: PxScale,
+        x: f32,
+    ) -> (Vec<(&FontRef<'static>, ab_glyph::GlyphId, f32)>, f32) {
+        let mut caret = x;
+        let mut prev: Option<(&FontRef<'static>, ab_glyph::GlyphId)> = None;
+        let mut out = Vec::with_capacity(text.len());
+        for ch in text.chars() {
+            let (font, gid) = self.glyph(ch);
+            let scaled = font.as_scaled(scale);
+            if let Some((pf, pg)) = prev {
+                if std::ptr::eq(pf, font) {
+                    caret += scaled.kern(pg, gid);
+                }
+            }
+            out.push((font, gid, caret));
+            caret += scaled.h_advance(gid);
+            prev = Some((font, gid));
+        }
+        (out, caret - x)
+    }
 }
 
 /// Decode arbitrary image file bytes (PNG/JPEG) to interleaved RGB + size.
@@ -630,7 +700,7 @@ fn draw_banner(img: &mut [u8], w: usize, h: usize, banner: &Banner) -> usize {
             put(img, w, h, x as i32, y as i32, r, g, b);
         }
     }
-    let Some(font) = message_font() else {
+    let Some(font) = Face::banner() else {
         return strip;
     };
     let ink = if banner.rainbow {
@@ -821,7 +891,7 @@ struct Layout<'t> {
 /// the whole layer until it fits rather than running off the edge.
 fn layout<'t>(
     layer: &'t TextLayer,
-    font: &FontRef<'static>,
+    font: &Face,
     w: usize,
     h: usize,
     top: usize,
@@ -846,7 +916,7 @@ fn layout<'t>(
     let (ax, ay) = anchor_point(layer.anchor, wf, hf, top as f32);
     let (ax, ay) = (ax + layer.x / 100.0 * wf, ay + layer.y / 100.0 * hf);
     let (x0, y0) = (ax - fx * bw, ay - fy * bh);
-    let ascent = font.as_scaled(PxScale::from(px)).ascent();
+    let ascent = font.ascent(PxScale::from(px));
     let align = layer.anchor.align();
     let placed = lines
         .iter()
@@ -868,7 +938,7 @@ fn draw_layer(
     layer: &TextLayer,
     top: usize,
 ) -> Option<LayerBox> {
-    let font = message_font()?;
+    let font = Face::new(&layer.font)?;
     let lay = layout(layer, &font, w, h, top)?;
     let scale = PxScale::from(lay.px);
     let ink = if layer.rainbow { Ink::Rainbow } else { Ink::Solid(layer.ink) };
@@ -906,19 +976,8 @@ fn draw_layer(
     Some(lay.rect)
 }
 
-fn text_width(text: &str, font: &FontRef<'static>, scale: PxScale) -> f32 {
-    let scaled = font.as_scaled(scale);
-    let mut width = 0.0;
-    let mut prev = None;
-    for ch in text.chars() {
-        let g = font.glyph_id(ch);
-        if let Some(p) = prev {
-            width += scaled.kern(p, g);
-        }
-        width += scaled.h_advance(g);
-        prev = Some(g);
-    }
-    width
+fn text_width(text: &str, font: &Face, scale: PxScale) -> f32 {
+    font.run(text, scale, 0.0).1
 }
 
 /// How text is coloured as it is drawn: one colour, a gradient across the
@@ -979,20 +1038,13 @@ fn draw_text(
     x: f32,
     baseline: f32,
     text: &str,
-    font: &FontRef<'static>,
+    font: &Face,
     scale: PxScale,
     ink: Ink,
     alpha: f32,
 ) {
     let span = w as f32;
-    let scaled = font.as_scaled(scale);
-    let mut caret = x;
-    let mut prev = None;
-    for ch in text.chars() {
-        let gid = font.glyph_id(ch);
-        if let Some(p) = prev {
-            caret += scaled.kern(p, gid);
-        }
+    for (font, gid, caret) in font.run(text, scale, x).0 {
         let glyph = gid.with_scale_and_position(scale, point(caret, baseline));
         if let Some(outlined) = font.outline_glyph(glyph) {
             let bounds = outlined.px_bounds();
@@ -1003,8 +1055,6 @@ fn draw_text(
                 blend(img, w, h, px, py, r, g, b, cov * alpha);
             });
         }
-        caret += scaled.h_advance(gid);
-        prev = Some(gid);
     }
 }
 
@@ -1378,6 +1428,48 @@ mod tests {
         compose(vec![0; w as usize * h as usize * 3], w, h, banner.as_ref(), layers).1
     }
 
+    /// The face a layer names is the one it is drawn in: every bundled face
+    /// lays the same text out at its own width, and draws something.
+    #[test]
+    fn a_layer_is_drawn_in_its_own_face() {
+        let mut widths = Vec::new();
+        for (id, name) in sdroxide_types::TEXT_FONTS {
+            let l = TextLayer {
+                text: "CQ de EA3ABC".into(),
+                font: id.into(),
+                outline: false,
+                ..TextLayer::default()
+            };
+            let (img, b) = compose(vec![0; 320 * 256 * 3], 320, 256, None, &[l]);
+            let b = b[0].unwrap_or_else(|| panic!("{name} drew nothing"));
+            assert!(img.iter().any(|&v| v > 128), "{name} left the picture black");
+            widths.push(((b.x1 - b.x0) * 10.0).round() as i32);
+        }
+        widths.sort_unstable();
+        widths.dedup();
+        assert_eq!(widths.len(), sdroxide_types::TEXT_FONTS.len(), "two faces measured alike");
+        // A face this build does not ship draws in the default one.
+        let unknown =
+            TextLayer { text: "73".into(), font: "later-face".into(), ..TextLayer::default() };
+        let default = TextLayer { text: "73".into(), ..TextLayer::default() };
+        assert_eq!(boxes(320, 256, 0, &[unknown]), boxes(320, 256, 0, &[default]));
+    }
+
+    /// A character the chosen face lacks comes from the faces behind it rather
+    /// than going out as an empty box: Black Ops One has no Cyrillic, nor has
+    /// Chakra Petch, but Oswald has.
+    #[test]
+    fn a_character_the_face_lacks_falls_back() {
+        let face = Face::new("black-ops-one").unwrap();
+        for ch in ['Ж', 'ñ', 'Ł'] {
+            assert_ne!(face.glyph(ch).1.0, 0, "{ch} has no glyph");
+        }
+        assert_eq!(face.fonts.len(), 3);
+        // The default face is not listed twice behind itself.
+        assert_eq!(Face::new("").unwrap().fonts.len(), 2);
+        assert_eq!(Face::new("oswald").unwrap().fonts.len(), 2);
+    }
+
     /// Each anchor pins its own corner, edge or middle of the box to the same
     /// point of the picture, so a bottom-right caption hangs up and left from
     /// the corner rather than off it.
@@ -1458,7 +1550,7 @@ mod tests {
     /// conversion is scaled for.
     #[test]
     fn a_converted_message_lands_where_it_was_drawn() {
-        let font = message_font().unwrap();
+        let font = Face::new("").unwrap();
         let conv = TextLayer::from_message("CQ\nde OE1TEST", [255; 3], Some([0; 3]), false);
         let title = layout(&conv[0], &font, 320, 256, 16).unwrap();
         let body = layout(&conv[1], &font, 320, 256, 16).unwrap();

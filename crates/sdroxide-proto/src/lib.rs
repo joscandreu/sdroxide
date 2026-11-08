@@ -1650,7 +1650,12 @@ use sdroxide_types::{
 /// `rx_id_seq` (a count of IDs decoded, so the same call heard again still
 /// registers). A v190 peer would read the tails of all three as the start of
 /// the next message.
-pub const PROTO_VERSION: u16 = 191;
+///
+/// v192: a text layer's typeface. [`sdroxide_types::TextLayer`] gains `font`
+/// (`String`, an id in [`sdroxide_types::TEXT_FONTS`]) on its tail. Layers ride
+/// every preset announcement and `Command::ImageSetLayers`, so a v191 peer
+/// reads the extra bytes as the start of the next layer.
+pub const PROTO_VERSION: u16 = 192;
 const VERSION_BYTE: u8 = 0x12;
 
 #[derive(Debug, thiserror::Error)]
@@ -2423,6 +2428,7 @@ mod tests {
                 layers: vec![sdroxide_types::TextLayer {
                     text: "73".into(),
                     anchor: sdroxide_types::TextAnchor::BottomRight,
+                    font: "pacifico".into(),
                     ..Default::default()
                 }],
             }),
