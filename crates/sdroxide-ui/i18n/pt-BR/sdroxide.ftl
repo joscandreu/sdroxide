@@ -5699,3 +5699,8 @@ sstv-qso-log = Log…
 sstv-qso-log-hint = Abrir uma entrada do log preenchida com este contato, para conferir e salvar
 sstv-qso-clear = Limpar QSO
 sstv-qso-clear-hint = Esvaziar estes campos para o próximo contato (o relatório enviado volta a 595). As imagens e textos das posições não são alterados.
+
+## SSTV panel: the text layer's typeface (src/app/panels/sstv.rs)
+
+sstv-layer-font = Fonte
+sstv-layer-font-hint = A fonte deste texto. Um caractere que ela não tenha é desenhado com a fonte padrão.

@@ -5691,3 +5691,8 @@ sstv-qso-log = Log…
 sstv-qso-log-hint = Een logboekregel openen die met dit contact is ingevuld, om te controleren en op te slaan
 sstv-qso-clear = QSO wissen
 sstv-qso-clear-hint = Deze velden leegmaken voor het volgende contact (het verzonden rapport gaat terug naar 595). De afbeeldingen en teksten van de plekken blijven ongemoeid.
+
+## SSTV panel: the text layer's typeface (src/app/panels/sstv.rs)
+
+sstv-layer-font = Lettertype
+sstv-layer-font-hint = Het lettertype van deze tekst. Een teken dat erin ontbreekt, komt uit het standaardlettertype.

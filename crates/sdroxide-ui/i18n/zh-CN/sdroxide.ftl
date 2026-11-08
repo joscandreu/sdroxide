@@ -5632,3 +5632,8 @@ sstv-qso-log = 日志…
 sstv-qso-log-hint = 打开一条根据此次通联填好的日志记录，以便检查和保存
 sstv-qso-clear = 清空 QSO
 sstv-qso-clear-hint = 清空这些字段，为下一次通联做准备（发送的报告恢复为 595）。各槽的图片和文字不受影响。
+
+## SSTV panel: the text layer's typeface (src/app/panels/sstv.rs)
+
+sstv-layer-font = 字体
+sstv-layer-font-hint = 此文字所用的字体。字体中没有的字符以默认字体绘制。

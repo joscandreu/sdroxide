@@ -5701,3 +5701,8 @@ sstv-qso-log = Log…
 sstv-qso-log-hint = Aprire una voce di registro compilata con questo contatto, da controllare e salvare
 sstv-qso-clear = Svuota QSO
 sstv-qso-clear-hint = Svuotare questi campi per il contatto successivo (il rapporto inviato torna a 595). Le immagini e i testi degli slot non vengono toccati.
+
+## SSTV panel: the text layer's typeface (src/app/panels/sstv.rs)
+
+sstv-layer-font = Carattere
+sstv-layer-font-hint = Il carattere di questo testo. Un segno che non contiene viene disegnato con quello predefinito.

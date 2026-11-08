@@ -5690,3 +5690,8 @@ sstv-qso-log = Log…
 sstv-qso-log-hint = Bu görüşmeyle doldurulmuş bir günlük girdisi açar; kontrol edip kaydedin
 sstv-qso-clear = QSO'yu temizle
 sstv-qso-clear-hint = Sonraki görüşme için bu alanları boşaltır (gönderilen rapor 595'e döner). Yuvaların görüntüleri ve metinleri değiştirilmez.
+
+## SSTV panel: the text layer's typeface (src/app/panels/sstv.rs)
+
+sstv-layer-font = Yazı tipi
+sstv-layer-font-hint = Bu metnin yazı tipi. Yazı tipinde olmayan bir karakter varsayılan yazı tipiyle çizilir.

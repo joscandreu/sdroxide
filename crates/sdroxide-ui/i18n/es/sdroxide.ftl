@@ -5682,3 +5682,8 @@ sstv-qso-log = Log…
 sstv-qso-log-hint = Abrir una entrada del registro rellenada con este contacto, para revisar y guardar
 sstv-qso-clear = Vaciar QSO
 sstv-qso-clear-hint = Vaciar estos campos para el siguiente contacto (el informe enviado vuelve a 595). Las imágenes y textos de las ranuras no se tocan.
+
+## SSTV panel: the text layer's typeface (src/app/panels/sstv.rs)
+
+sstv-layer-font = Fuente
+sstv-layer-font-hint = El tipo de letra de este texto. Un carácter que no tenga se dibuja con el tipo predeterminado.

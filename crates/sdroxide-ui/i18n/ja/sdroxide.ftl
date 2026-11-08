@@ -5640,3 +5640,8 @@ sstv-qso-log = ログ…
 sstv-qso-log-hint = この交信から入力されたログエントリーを開き、確認して保存します
 sstv-qso-clear = QSO をクリア
 sstv-qso-clear-hint = 次の交信のためにこれらの欄を空にします（送信レポートは 595 に戻ります）。スロットの画像やテキストは変更されません。
+
+## SSTV panel: the text layer's typeface (src/app/panels/sstv.rs)
+
+sstv-layer-font = フォント
+sstv-layer-font-hint = このテキストの書体。書体にない文字は既定の書体で描かれます。

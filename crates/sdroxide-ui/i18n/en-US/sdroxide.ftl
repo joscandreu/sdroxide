@@ -5708,3 +5708,5 @@ sstv-qso-log = Log…
 sstv-qso-log-hint = Open a log entry filled in from this contact, to check and save
 sstv-qso-clear = Clear QSO
 sstv-qso-clear-hint = Empty these fields for the next contact (the report sent goes back to 595). The slots' pictures and text are not touched.
+sstv-layer-font = Font
+sstv-layer-font-hint = The typeface this text is drawn in. A character the face does not have is drawn from the default one.

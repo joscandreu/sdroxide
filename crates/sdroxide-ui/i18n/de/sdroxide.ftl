@@ -5690,3 +5690,8 @@ sstv-qso-log = Log…
 sstv-qso-log-hint = Einen Logbucheintrag aus diesem Kontakt öffnen, zum Prüfen und Speichern
 sstv-qso-clear = QSO leeren
 sstv-qso-clear-hint = Diese Felder für den nächsten Kontakt leeren (der gesendete Rapport geht auf 595 zurück). Die Bilder und Texte der Plätze bleiben unberührt.
+
+## SSTV panel: the text layer's typeface (src/app/panels/sstv.rs)
+
+sstv-layer-font = Schrift
+sstv-layer-font-hint = Die Schriftart dieses Textes. Zeichen, die sie nicht enthält, kommen aus der Standardschrift.
