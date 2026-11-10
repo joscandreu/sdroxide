@@ -24,6 +24,7 @@ pub(in crate::app) mod adsb;
 pub(in crate::app) mod ais;
 pub(in crate::app) mod aprs;
 pub(in crate::app) mod atchat;
+pub(in crate::app) mod chase;
 pub(in crate::app) mod cw;
 pub(in crate::app) mod decodes;
 pub(in crate::app) mod fsq;

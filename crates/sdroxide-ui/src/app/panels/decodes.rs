@@ -1583,6 +1583,9 @@ impl SdroxideApp {
             });
         }
 
+        // What the chase is doing, while it is on.
+        self.chase_readout(ui);
+
         // The rest of the column: the conversation, the message picker and the
         // action buttons.
         //
@@ -1739,6 +1742,7 @@ impl SdroxideApp {
             if cq.inner.clicked() {
                 cmds.push(Command::DigiCallCq);
             }
+            self.chase_chips(ui, tx_ok);
             if crate::chrome::chip(ui, false, RichText::new(tr!("decodes-stop-qso")).size(14.0))
                 .clicked()
             {

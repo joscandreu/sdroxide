@@ -1660,7 +1660,10 @@ use sdroxide_types::{
 /// after `js8_groups`. `Js8Status` gains `auto_pending`
 /// (`Vec<Js8AutoPending>`) on its tail. Both ride `DigiStatus`, so a v195 peer
 /// misreads every digital status.
-pub const PROTO_VERSION: u16 = 196;
+///
+/// v197: FT8 chase. [`sdroxide_types::Command`] gains `DigiChaseQso`,
+/// appended; a v196 peer has no variant to decode it into.
+pub const PROTO_VERSION: u16 = 197;
 const VERSION_BYTE: u8 = 0x12;
 
 #[derive(Debug, thiserror::Error)]

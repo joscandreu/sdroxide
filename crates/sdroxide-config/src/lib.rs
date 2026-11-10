@@ -261,6 +261,13 @@ pub struct Settings {
     ///
     /// A table again, and last for the same reason.
     pub remote_server: sdroxide_types::RemoteServer,
+    /// FT8/FT4/FT2 chase: which stations this screen answers by itself. A
+    /// client-side preference like `[alerts]`, because the judgement is made
+    /// against the logbook this screen keeps. Whether chase is switched on is
+    /// deliberately not stored — see [`sdroxide_types::ChaseSettings::enabled`].
+    ///
+    /// A table, so after every plain value.
+    pub chase: sdroxide_types::ChaseSettings,
 }
 
 impl Default for Settings {
@@ -291,6 +298,7 @@ impl Default for Settings {
             speech: sdroxide_types::SpeechSettings::default(),
             alerts: sdroxide_types::AlertSettings::default(),
             remote_server: sdroxide_types::RemoteServer::default(),
+            chase: sdroxide_types::ChaseSettings::default(),
         }
     }
 }
@@ -578,6 +586,19 @@ pub fn load_alerts_settings() -> sdroxide_types::AlertSettings {
 pub fn save_alerts_settings(alerts: &sdroxide_types::AlertSettings) -> Result<(), ConfigError> {
     let mut s = Settings::load();
     s.alerts = alerts.clone();
+    s.save()
+}
+
+/// Load just the chase preferences.
+pub fn load_chase_settings() -> sdroxide_types::ChaseSettings {
+    Settings::load().chase
+}
+
+/// Persist the chase preferences, preserving every other setting
+/// (read-modify-write, like [`save_alerts_settings`]).
+pub fn save_chase_settings(chase: &sdroxide_types::ChaseSettings) -> Result<(), ConfigError> {
+    let mut s = Settings::load();
+    s.chase = chase.clone();
     s.save()
 }
 

@@ -188,6 +188,36 @@ pub(in crate::app) fn persist_alerts_settings(_cfg: &sdroxide_types::AlertSettin
     // Written by eframe's periodic `save()` into localStorage.
 }
 
+// FT8 chase options: a client-side preference, persisted the way the alerts
+// are. Whether chase is on is never stored (`ChaseSettings::enabled` is
+// `serde(skip)`), on either build.
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(in crate::app) fn load_chase_settings(
+    _storage: Option<&dyn eframe::Storage>,
+) -> sdroxide_types::ChaseSettings {
+    sdroxide_config::load_chase_settings()
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(in crate::app) fn load_chase_settings(
+    storage: Option<&dyn eframe::Storage>,
+) -> sdroxide_types::ChaseSettings {
+    storage.and_then(|s| eframe::get_value(s, "chase_settings")).unwrap_or_default()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(in crate::app) fn persist_chase_settings(cfg: &sdroxide_types::ChaseSettings) {
+    if let Err(e) = sdroxide_config::save_chase_settings(cfg) {
+        eprintln!("failed to save chase settings: {e}");
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(in crate::app) fn persist_chase_settings(_cfg: &sdroxide_types::ChaseSettings) {
+    // Written by eframe's periodic `save()` into localStorage.
+}
+
 // ── TX Audio profiles ─────────────────────────────────────────────────────────
 
 #[cfg(not(target_arch = "wasm32"))]

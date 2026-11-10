@@ -1281,4 +1281,28 @@ pub enum Command {
     /// view inside the window is left where it is. An engine that is never
     /// told (an older client) does not centre. Appended for the usual reason.
     SetViewUncovered(bool),
+
+    /// FT8/FT4/FT2: start a contact that a screen's **chase** picked — a
+    /// station not yet worked, heard steadily enough to be worth calling (see
+    /// [`crate::Chaser`]). The same fields as [`Command::DigiStartQso`], and
+    /// deliberately not the same command, because what it may do differs:
+    ///
+    /// * It is **refused unless the sequencer is free** — idle, or a finished
+    ///   contact only waiting out its re-send window — and nothing is queued.
+    ///   The operator's own contact, CQ run or queue is never interrupted, and
+    ///   two screens chasing at once cannot pull the sequencer between them.
+    /// * It is **not an operator action**. A hand-started contact takes the
+    ///   transmit watchdog down; a chased one must not, or an unattended
+    ///   station chasing into a band nobody answers would never be stopped.
+    ///   It is refused outright while the watchdog is up.
+    ///
+    /// Appended for the usual reason — postcard numbers variants by position.
+    DigiChaseQso {
+        from: String,
+        grid: Option<String>,
+        snr: i16,
+        audio_hz: f32,
+        /// Hold until they call CQ, as [`Command::DigiStartQso`] does.
+        wait_for_cq: bool,
+    },
 }

@@ -1021,6 +1021,7 @@ impl eframe::App for SdroxideApp {
         self.tx_audio_window(&ctx, &mut cmds);
         self.settings_window(&ctx, &mut cmds);
         self.digi_settings_window(&ctx, &mut cmds);
+        self.chase_window(&ctx);
         self.logbook_window(&ctx, &mut cmds);
         self.palette_window(&ctx, now, &mut cmds);
         self.mail_window(&ctx, &mut cmds);
@@ -1236,6 +1237,9 @@ impl eframe::App for SdroxideApp {
             // natively.
             #[cfg(target_arch = "wasm32")]
             eframe::set_value(storage, "tx_voice_profiles", self.tx_audio.profiles());
+            // The chase options: config.toml's `[chase]` natively.
+            #[cfg(target_arch = "wasm32")]
+            eframe::set_value(storage, "chase_settings", &self.chase);
         }
     }
 }
@@ -1523,6 +1527,12 @@ impl SdroxideApp {
                 self.login_tests_pending.insert(*t);
                 self.login_tests.remove(t);
             }
+            // Stopping by hand stops the chase too. Without this a chase left
+            // on would start the next station the moment STOP made the
+            // sequencer free, which is the opposite of what the button is for.
+            if matches!(c, Command::DigiStopQso | Command::DigiAbortTx) && self.chase.enabled {
+                self.chase_set_enabled(false);
+            }
             if let Command::TestPictureUpload(_) = &c {
                 self.picup_test_pending = Some(crate::time::now_unix_f64());
                 self.picup_test = None;
@@ -1769,6 +1779,9 @@ impl SdroxideApp {
                             }
                         }
                     }
+                    // Chase: count who has been heard, and call the best of
+                    // this slot when it is on and the sequencer is free.
+                    self.chase_on_decodes(&d);
                     // Prepend newest-slot decodes; keep a rolling window.
                     let dial = self.state.rx_freq_hz();
                     // ...and fold them into the propagation field as they

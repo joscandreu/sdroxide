@@ -74,8 +74,8 @@ use self::panels::fsq::fsq_load_contacts;
 use self::panels::rf_paint::RfPaintUi;
 use self::panels::sstv::SstvUi;
 use self::persist::{
-    load_alerts_settings, load_broadcast_stations, load_filter_presets, load_hfdl_channels,
-    load_morse_progress, load_qso_log, load_speech_settings, load_ui_settings,
+    load_alerts_settings, load_broadcast_stations, load_chase_settings, load_filter_presets,
+    load_hfdl_channels, load_morse_progress, load_qso_log, load_speech_settings, load_ui_settings,
 };
 use self::settings::servers::TciServerStatus;
 use self::settings::{SatEditState, SettingsTab, TestOutcome};
@@ -326,6 +326,19 @@ pub struct SdroxideApp {
     /// the sink is closed and the cost is a boolean per decode batch. One for
     /// the whole station: every radio tab holds the same one.
     alerts: alerts::AlertRuntime,
+    /// FT8/FT4/FT2 chase options (see [`panels::chase`]). Shared by every tab
+    /// through the config file; `enabled` is this tab's own and never stored.
+    chase: sdroxide_types::ChaseSettings,
+    /// Who this tab has heard in which periods, and who it chased lately.
+    chaser: sdroxide_types::Chaser,
+    /// The chase's view of the band at the last decode batch, for its readout.
+    chase_tally: sdroxide_types::ChaseTally,
+    /// The station this tab's chase last called, and how often it was heard.
+    chase_last: Option<(String, u8)>,
+    show_chase_settings: bool,
+    /// The watch and never-answer lists as the operator typed them.
+    chase_watch_text: String,
+    chase_ignore_text: String,
     radio_cfg: Option<sdroxide_types::RadioConfig>,
     /// The config of the radio lent to this one as its panadapter receiver,
     /// by id: its diversity filter is the one this radio's DIV box drives
@@ -1434,6 +1447,7 @@ impl SdroxideApp {
         // reads them, or the first frame flashes the default theme at the
         // default scale.
         let ui_settings = load_ui_settings(storage);
+        let chase_settings = load_chase_settings(storage);
         let band_dock = persist::load_band_dock();
         crate::theme::set_look(
             ui_settings.theme,
@@ -1547,6 +1561,13 @@ impl SdroxideApp {
             speech: speech::SpeechRuntime::new(load_speech_settings(storage)),
             speech_voices: Vec::new(),
             alerts: alerts::AlertRuntime::station(load_alerts_settings(storage)),
+            chase_watch_text: chase_settings.watch.join(", "),
+            chase_ignore_text: chase_settings.ignore.join(", "),
+            chase: chase_settings,
+            chaser: sdroxide_types::Chaser::new(),
+            chase_tally: sdroxide_types::ChaseTally::default(),
+            chase_last: None,
+            show_chase_settings: false,
             radio_cfg: None,
             div_lender: None,
             converter_edit_hz: None,

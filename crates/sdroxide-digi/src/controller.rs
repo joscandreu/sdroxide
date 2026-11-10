@@ -525,6 +525,35 @@ impl DigiController {
         audio_hz: f32,
         wait_for_cq: bool,
     ) {
+        let now = self.prepare_reply(&from, audio_hz);
+        self.qso.start_qso(from, grid, snr, wait_for_cq, now);
+        self.status_dirty = true;
+    }
+
+    /// Start a contact a screen's chase picked (see
+    /// [`sdroxide_types::Command::DigiChaseQso`]). Refused — and nothing moved,
+    /// not the period, not the tone — unless the sequencer is free for it.
+    pub fn chase_qso(
+        &mut self,
+        from: String,
+        grid: Option<String>,
+        snr: i16,
+        audio_hz: f32,
+        wait_for_cq: bool,
+    ) {
+        if !self.qso.can_chase() {
+            return;
+        }
+        let now = self.prepare_reply(&from, audio_hz);
+        if self.qso.chase_start(from, grid, snr, wait_for_cq, now) {
+            self.status_dirty = true;
+        }
+    }
+
+    /// Choose the period and the tone to answer `from` on, the same way for a
+    /// contact the operator opens and one the chase does. Returns now, in Unix
+    /// seconds.
+    fn prepare_reply(&mut self, from: &str, audio_hz: f32) -> i64 {
         let now_sys = SystemTime::now();
         let now = SlotScheduler::unix_now(now_sys) as i64;
         // Reply in the slot *opposite* to when the DX actually transmitted, using
@@ -533,7 +562,7 @@ impl DigiController {
         // of them (which reproduces the old parity == parity(now) behaviour).
         let dx_slot = self
             .last_heard
-            .get(&from)
+            .get(from)
             .copied()
             .unwrap_or_else(|| self.scheduler.slot_index(now_sys) - 1);
         self.tx_even = !self.scheduler.is_even(dx_slot);
@@ -550,8 +579,7 @@ impl DigiController {
                 self.set_audio_hz(audio_hz);
             }
         }
-        self.qso.start_qso(from, grid, snr, wait_for_cq, now);
-        self.status_dirty = true;
+        now
     }
 
     /// Move our transmit tone to the quietest part of the band *in the period
@@ -1147,6 +1175,16 @@ impl crate::DigiEngine for DigiController {
         wait_for_cq: bool,
     ) {
         DigiController::start_qso(self, from, grid, snr, audio_hz, wait_for_cq)
+    }
+    fn chase_qso(
+        &mut self,
+        from: String,
+        grid: Option<String>,
+        snr: i16,
+        audio_hz: f32,
+        wait_for_cq: bool,
+    ) {
+        DigiController::chase_qso(self, from, grid, snr, audio_hz, wait_for_cq)
     }
     fn stop_qso(&mut self) {
         DigiController::stop_qso(self)

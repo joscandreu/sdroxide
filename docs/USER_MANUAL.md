@@ -4195,6 +4195,34 @@ lets it go. Decoded stations stay on the FT8/FT4 map for ten minutes, fading.
   a CQ nobody is answering. Click a queued call to drop it, or **CLEAR** to
   empty the queue. The transmit watchdog still stops the run: it exists to stop
   an unattended station transmitting, and the queue does not override it.
+- **Chase the stations you still need.** **CHASE**, beside **CALL CQ**, answers
+  a station by itself once two things are true: your logbook says it is still
+  wanted, and it has been decoded *steadily* — by default in 3 different
+  periods within 5 minutes, so one lucky decode at the noise floor does not put
+  you on the air. It starts only when the sequencer is free (idle, or a contact
+  just finished), never over your own contact, CQ run or queue, and it uses the
+  same reply period and transmit frequency a double-click would. A `CHASE` line
+  above the transcript shows what it last called, who is next and how many it
+  is still hearing in (`2/3`), and a tally of why the rest are not being called.
+  **⚙** opens its options:
+  - **Chase** — who is wanted: not worked on this band (the default), a new
+    callsign, a new grid, a DXCC new on this band, or a DXCC never worked. A
+    station already in the log on this band is never chased.
+  - **Answer** — *CQ only* (directed CQs not meant for you are skipped); *CQ or
+    sign-off*, which also calls a station the moment it sends RR73 or 73 to
+    somebody else (tail-ending); or *Any message*, which also takes a station
+    in the middle of a contact but holds silently until it is free.
+  - **Heard in … periods within … min**, **Minimum signal**, **Other continents
+    only**, **Who goes first** (rarest, strongest or farthest).
+  - **Rest after a try** — a chased station that did not complete is left alone
+    on that band for 30 minutes.
+  - **Watch list** and **Never answer** — callsigns, or prefixes ending in `*`.
+
+  Chase is off every time sdroxide starts, and **STOP QSO** or **STOP TX**
+  switches it off. Starting a chased contact is not "touching the controls": the
+  TX watchdog keeps counting across a run of chases nobody answers, and once it
+  fires chase waits for you. The options belong to this screen, like alerts —
+  each radio tab chases its own band.
 - **Directed CQs are read as directed.** `CQ DX`, `CQ EU`, `CQ JA`, `CQ POTA`,
   `CQ TEST` — sdroxide works out whether the call names you. One that does gets
   a thicker accent bar than a plain CQ; one aimed at somebody else is neither

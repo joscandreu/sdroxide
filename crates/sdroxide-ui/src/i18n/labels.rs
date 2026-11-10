@@ -516,6 +516,41 @@ impl Tr for ButtonMode {
     }
 }
 
+impl Tr for sdroxide_types::ChaseNeed {
+    fn tr(self) -> String {
+        use sdroxide_types::ChaseNeed::*;
+        match self {
+            NotOnBand => tr!("chase-need-not-on-band"),
+            NewCall => tr!("chase-need-new-call"),
+            NewGrid => tr!("chase-need-new-grid"),
+            NewDxccBand => tr!("chase-need-new-dxcc-band"),
+            NewDxcc => tr!("chase-need-new-dxcc"),
+        }
+    }
+}
+
+impl Tr for sdroxide_types::ChaseAnswer {
+    fn tr(self) -> String {
+        use sdroxide_types::ChaseAnswer::*;
+        match self {
+            Cq => tr!("chase-answer-cq"),
+            CqOrSignoff => tr!("chase-answer-cq-signoff"),
+            Any => tr!("chase-answer-any"),
+        }
+    }
+}
+
+impl Tr for sdroxide_types::ChaseOrder {
+    fn tr(self) -> String {
+        use sdroxide_types::ChaseOrder::*;
+        match self {
+            Needed => tr!("chase-order-needed"),
+            Strongest => tr!("chase-order-strongest"),
+            Farthest => tr!("chase-order-farthest"),
+        }
+    }
+}
+
 impl Tr for ContestMode {
     fn tr(self) -> String {
         match self {
