@@ -241,6 +241,11 @@ pub struct QsoMachine {
     /// controls since. Only such a contact gives way to a station calling us;
     /// see [`can_chase_caller`](Self::can_chase_caller).
     chased: bool,
+    /// Calls without a reply after which the contact in hand is given up, set
+    /// by the chase that started it; 0 leaves it to
+    /// [`DigiConfig::max_tx_repeats`]. Cleared like `chased`: a contact the
+    /// operator has touched is theirs, and so is its patience.
+    chase_max_calls: u32,
 }
 
 impl QsoMachine {
@@ -273,6 +278,7 @@ impl QsoMachine {
             called_us: std::collections::HashMap::new(),
             last_tx_utc: 0,
             chased: false,
+            chase_max_calls: 0,
         }
     }
 
@@ -392,6 +398,7 @@ impl QsoMachine {
         self.watchdog = false;
         // Whatever the chase had started is the operator's contact now.
         self.chased = false;
+        self.chase_max_calls = 0;
     }
 
     /// True when the transmit watchdog has stopped the sequencer.
@@ -568,6 +575,10 @@ impl QsoMachine {
     /// A station that called us is different: somebody on the air answered,
     /// which is progress as much as a reply in a contact is, so answering them
     /// opens a fresh watchdog clock.
+    ///
+    /// `max_calls`, when not 0, gives the contact up after that many calls
+    /// with no reply, or sooner if the station's own count says so.
+    #[allow(clippy::too_many_arguments)]
     pub fn chase_start(
         &mut self,
         from: String,
@@ -575,6 +586,7 @@ impl QsoMachine {
         snr: i16,
         wait_for_cq: bool,
         caller: bool,
+        max_calls: u32,
         now_utc: i64,
     ) -> bool {
         if !(if caller { self.can_chase_caller(&from) } else { self.can_chase() }) {
@@ -591,6 +603,7 @@ impl QsoMachine {
         // A station that called us is already answering: giving them up for
         // the next caller would be dropping a contact that is under way.
         self.chased = !caller;
+        self.chase_max_calls = max_calls;
         let note = match (caller, left) {
             (true, Some(prev)) => format!("chase: {call} called us, answering instead of {prev}"),
             (true, None) => format!("chase: answering {call}"),
@@ -1312,7 +1325,11 @@ impl QsoMachine {
         // Calling one station that never comes back: give up rather than call
         // into the void all afternoon. (Repeating a CQ is exempt — that *is*
         // the operation; the watchdog above bounds it instead.)
-        let repeats = self.cfg.max_tx_repeats;
+        let repeats = match (self.cfg.max_tx_repeats, self.chase_max_calls) {
+            (r, 0) => r,
+            (0, c) => c,
+            (r, c) => r.min(c),
+        };
         if repeats > 0
             && self.tx_since_progress >= repeats
             && matches!(self.step, QsoStep::TxGrid | QsoStep::TxReport | QsoStep::TxRReport)
@@ -1938,11 +1955,11 @@ mod tests {
         let mut q = QsoMachine::new(Mode::Ft8, cfg());
         // The operator's CQ run is theirs: a chase does not cut into it.
         q.call_cq();
-        assert!(!q.chase_start("JA1XYZ".into(), None, -12, false, false, 100));
+        assert!(!q.chase_start("JA1XYZ".into(), None, -12, false, false, 0, 100));
         assert_eq!(q.step(), QsoStep::CallingCq);
         // Nor into a contact in progress.
         q.start_qso("W9XYZ".into(), None, -10, false, 100);
-        assert!(!q.chase_start("JA1XYZ".into(), None, -12, false, false, 100));
+        assert!(!q.chase_start("JA1XYZ".into(), None, -12, false, false, 0, 100));
         assert_eq!(q.dx_call(), Some("W9XYZ"));
         // Nor ahead of stations the operator marked by hand.
         q.stop();
@@ -1950,7 +1967,7 @@ mod tests {
         assert!(!q.can_chase());
         q.queue_remove("");
         // Free: it starts, and the transcript says it was the chase.
-        assert!(q.chase_start("JA1XYZ".into(), Some("PM95".into()), -12, false, false, 100));
+        assert!(q.chase_start("JA1XYZ".into(), Some("PM95".into()), -12, false, false, 0, 100));
         assert_eq!(q.step(), QsoStep::TxGrid);
         assert_eq!(q.dx_call(), Some("JA1XYZ"));
         let note = q.status(false).transcript.pop().expect("a note");
@@ -1962,7 +1979,7 @@ mod tests {
         let mut q = at(QsoStep::TxRr73);
         q.note_tx_sent(200);
         assert_eq!(q.step(), QsoStep::Confirming);
-        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 230));
+        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 0, 230));
         assert_eq!(q.dx_call(), Some("JA1XYZ"));
     }
 
@@ -1976,7 +1993,7 @@ mod tests {
     #[test]
     fn chasing_does_not_hold_the_watchdog_off() {
         let mut q = QsoMachine::new(Mode::Ft8, cfg());
-        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 100));
+        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 0, 100));
         q.tick(100);
         // Called a few times, never answered; given up on (as the
         // unanswered-call count would) and the next one chased straight away.
@@ -1984,26 +2001,26 @@ mod tests {
             q.note_tx_sent(t);
         }
         q.stop();
-        assert!(q.chase_start("VK2ABC".into(), None, -15, false, false, 190));
+        assert!(q.chase_start("VK2ABC".into(), None, -15, false, false, 0, 190));
         q.note_tx_sent(205);
         assert!(!q.tick(100 + 5 * 60), "the clock still runs from the first chase");
         assert!(q.tick(100 + 6 * 60), "six minutes of unanswered chasing trips it");
         assert!(q.tx_watchdog());
         // And once it is up, a chase is refused: only the operator resumes.
-        assert!(!q.chase_start("ZL1ABC".into(), None, -9, false, false, 100 + 6 * 60 + 15));
+        assert!(!q.chase_start("ZL1ABC".into(), None, -9, false, false, 0, 100 + 6 * 60 + 15));
         assert_eq!(q.step(), QsoStep::Idle);
     }
 
     #[test]
     fn a_chase_after_a_quiet_spell_starts_the_clock_afresh() {
         let mut q = QsoMachine::new(Mode::Ft8, cfg());
-        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 100));
+        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 0, 100));
         q.tick(100);
         q.note_tx_sent(115);
         q.stop();
         // Twenty minutes idle: none of that was spent transmitting.
         let later = 100 + 20 * 60;
-        assert!(q.chase_start("VK2ABC".into(), None, -15, false, false, later));
+        assert!(q.chase_start("VK2ABC".into(), None, -15, false, false, 0, later));
         assert!(!q.tick(later + 60));
         assert!(!q.tx_watchdog());
     }
@@ -2011,13 +2028,13 @@ mod tests {
     #[test]
     fn a_station_calling_us_takes_over_an_unanswered_chase() {
         let mut q = QsoMachine::new(Mode::Ft8, cfg());
-        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 100));
+        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 0, 100));
         q.note_tx_sent(115);
         // W9XYZ calls us while JA1XYZ has not come back.
         q.on_rx(&[decode("AB1CD W9XYZ EN52")], 130);
         assert!(!q.can_chase(), "an ordinary chase still waits");
         assert!(q.can_chase_caller("W9XYZ"));
-        assert!(q.chase_start("W9XYZ".into(), None, -8, false, true, 130));
+        assert!(q.chase_start("W9XYZ".into(), None, -8, false, true, 0, 130));
         assert_eq!(q.dx_call(), Some("W9XYZ"));
         // Picked up from where their call stands: they sent a grid, we report.
         assert_eq!(q.step(), QsoStep::TxReport);
@@ -2029,13 +2046,13 @@ mod tests {
     fn a_caller_being_answered_is_not_given_up_for_the_next() {
         let mut q = QsoMachine::new(Mode::Ft8, cfg());
         q.on_rx(&[decode("AB1CD W9XYZ EN52")], 100);
-        assert!(q.chase_start("W9XYZ".into(), None, -8, false, true, 100));
+        assert!(q.chase_start("W9XYZ".into(), None, -8, false, true, 0, 100));
         // Even pushed back to our grid — the step a fresh chase calls from —
         // a caller's contact is theirs and not up for grabs.
         q.step = QsoStep::TxGrid;
         q.on_rx(&[decode("AB1CD K1ABC FN42")], 130);
         assert!(!q.can_chase_caller("K1ABC"));
-        assert!(!q.chase_start("K1ABC".into(), None, -9, false, true, 130));
+        assert!(!q.chase_start("K1ABC".into(), None, -9, false, true, 0, 130));
         assert_eq!(q.dx_call(), Some("W9XYZ"));
     }
 
@@ -2043,7 +2060,7 @@ mod tests {
     fn a_caller_waits_while_the_chased_station_is_waited_for_too() {
         let mut q = QsoMachine::new(Mode::Ft8, cfg());
         // Held for a CQ: still nothing exchanged, so a caller may take over.
-        assert!(q.chase_start("JA1XYZ".into(), None, -12, true, false, 100));
+        assert!(q.chase_start("JA1XYZ".into(), None, -12, true, false, 0, 100));
         assert_eq!(q.step(), QsoStep::WaitCq);
         assert!(q.can_chase_caller("W9XYZ"));
         // But the station we are chasing calling us is the chase's own business.
@@ -2053,11 +2070,11 @@ mod tests {
     #[test]
     fn a_chase_under_way_is_not_given_up_for_a_caller() {
         let mut q = QsoMachine::new(Mode::Ft8, cfg());
-        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 100));
+        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 0, 100));
         q.on_rx(&[decode("AB1CD JA1XYZ -11")], 130);
         assert_eq!(q.step(), QsoStep::TxRReport);
         assert!(!q.can_chase_caller("W9XYZ"));
-        assert!(!q.chase_start("W9XYZ".into(), None, -8, false, true, 130));
+        assert!(!q.chase_start("W9XYZ".into(), None, -8, false, true, 0, 130));
         assert_eq!(q.dx_call(), Some("JA1XYZ"));
     }
 
@@ -2068,7 +2085,7 @@ mod tests {
         assert!(!q.can_chase_caller("W9XYZ"));
         // Nor a chased one the operator has since taken in hand.
         q.stop();
-        assert!(q.chase_start("VK2ABC".into(), None, -12, false, false, 160));
+        assert!(q.chase_start("VK2ABC".into(), None, -12, false, false, 0, 160));
         assert!(q.set_step(QsoStep::TxGrid));
         assert!(!q.can_chase_caller("W9XYZ"));
     }
@@ -2076,13 +2093,13 @@ mod tests {
     #[test]
     fn answering_a_caller_restarts_the_watchdog_clock() {
         let mut q = QsoMachine::new(Mode::Ft8, cfg());
-        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 100));
+        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 0, 100));
         q.tick(100);
         for t in [115, 145, 175, 205, 235] {
             q.note_tx_sent(t);
         }
         q.on_rx(&[decode("AB1CD W9XYZ EN52")], 250);
-        assert!(q.chase_start("W9XYZ".into(), None, -8, false, true, 250));
+        assert!(q.chase_start("W9XYZ".into(), None, -8, false, true, 0, 250));
         q.tick(250);
         assert!(!q.tick(100 + 6 * 60), "the clock restarted when they called");
         assert!(!q.tx_watchdog());
@@ -2689,6 +2706,31 @@ mod tests {
 
         // After the confirm window the contact is retired.
         assert!(q.tick(145 + CONFIRM_S));
+        assert_eq!(q.step(), QsoStep::Idle);
+    }
+
+    #[test]
+    fn a_chase_gives_up_after_its_own_number_of_calls() {
+        let mut q = QsoMachine::new(Mode::Ft8, cfg()); // the station's own count: 10
+        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 3, 100));
+        for t in [115, 145] {
+            q.note_tx_sent(t);
+            assert_eq!(q.step(), QsoStep::TxGrid);
+        }
+        q.note_tx_sent(175);
+        assert_eq!(q.step(), QsoStep::Idle, "three calls and no reply");
+        // The operator's own contact keeps the station's count.
+        q.start_qso("VK2ABC".into(), None, -12, false, 200);
+        for t in [215, 245, 275, 305] {
+            q.note_tx_sent(t);
+        }
+        assert_eq!(q.step(), QsoStep::TxGrid);
+        // And the smaller of the two wins.
+        let short = DigiConfig { max_tx_repeats: 2, ..cfg() };
+        let mut q = QsoMachine::new(Mode::Ft8, short);
+        assert!(q.chase_start("JA1XYZ".into(), None, -12, false, false, 5, 100));
+        q.note_tx_sent(115);
+        q.note_tx_sent(145);
         assert_eq!(q.step(), QsoStep::Idle);
     }
 }

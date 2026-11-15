@@ -9773,9 +9773,9 @@ impl Engine {
                     d.start_qso(from, grid, snr, audio_hz, wait_for_cq);
                 }
             }
-            DigiChaseQso { from, grid, snr, audio_hz, wait_for_cq, caller } => {
+            DigiChaseQso { from, grid, snr, audio_hz, wait_for_cq, caller, max_calls } => {
                 if let Some(d) = self.digi.as_mut() {
-                    d.chase_qso(from, grid, snr, audio_hz, wait_for_cq, caller);
+                    d.chase_qso(from, grid, snr, audio_hz, wait_for_cq, caller, max_calls);
                 }
             }
             DigiSetStep(step) => {

@@ -4218,6 +4218,9 @@ lets it go. Decoded stations stay on the FT8/FT4 map for ten minutes, fading.
     default — a 20 m SSB contact does not stop chase calling the station on
     20 m FT8), the same band in any data mode (FT4 covers FT8, phone and CW do
     not), or the same band in any mode.
+  - **Give up after** — how many calls a station that does not reply gets
+    before chase moves on (4 by default). Your own unanswered-call limit still
+    wins when it is lower; contacts you start by hand keep that limit.
   - **Rest after a try** — a chased station that did not complete is left alone
     on that band for 30 minutes.
   - **Watch list** and **Never answer** — callsigns, or prefixes ending in `*`.

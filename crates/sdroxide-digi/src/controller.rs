@@ -534,6 +534,7 @@ impl DigiController {
     /// [`sdroxide_types::Command::DigiChaseQso`]). Refused — and nothing moved,
     /// not the period, not the tone — unless the sequencer is free for it, or,
     /// for a station that called us, holds only a chase nobody answered yet.
+    #[allow(clippy::too_many_arguments)]
     pub fn chase_qso(
         &mut self,
         from: String,
@@ -542,13 +543,14 @@ impl DigiController {
         audio_hz: f32,
         wait_for_cq: bool,
         caller: bool,
+        max_calls: u8,
     ) {
         let allowed = if caller { self.qso.can_chase_caller(&from) } else { self.qso.can_chase() };
         if !allowed {
             return;
         }
         let now = self.prepare_reply(&from, audio_hz);
-        if self.qso.chase_start(from, grid, snr, wait_for_cq, caller, now) {
+        if self.qso.chase_start(from, grid, snr, wait_for_cq, caller, u32::from(max_calls), now) {
             self.status_dirty = true;
         }
     }
@@ -1187,8 +1189,9 @@ impl crate::DigiEngine for DigiController {
         audio_hz: f32,
         wait_for_cq: bool,
         caller: bool,
+        max_calls: u8,
     ) {
-        DigiController::chase_qso(self, from, grid, snr, audio_hz, wait_for_cq, caller)
+        DigiController::chase_qso(self, from, grid, snr, audio_hz, wait_for_cq, caller, max_calls)
     }
     fn stop_qso(&mut self) {
         DigiController::stop_qso(self)

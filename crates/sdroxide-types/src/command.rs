@@ -1309,5 +1309,8 @@ pub enum Command {
         wait_for_cq: bool,
         /// They called us: see above.
         caller: bool,
+        /// Give up after this many calls with no reply, or sooner if the
+        /// station's own unanswered-call count says so; 0 leaves it to that.
+        max_calls: u8,
     },
 }

@@ -198,6 +198,9 @@ impl ChaseDupe {
 /// Roundup, WW Digi and the VHF contests' `CQ TEST`.
 const CONTEST_CQ: [&str; 4] = ["TEST", "FD", "RU", "WW"];
 
+/// The default for [`ChaseSettings::max_calls`].
+pub const CHASE_MAX_CALLS: u8 = 4;
+
 /// The operator's chase options. A screen's preference, like the alerts: it is
 /// the screen that holds the log the judgement is made against.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -232,6 +235,11 @@ pub struct ChaseSettings {
     pub order: ChaseOrder,
     /// What counts as already worked.
     pub dupe: ChaseDupe,
+    /// Give up on a chased station after calling it this many times with no
+    /// reply — sooner than the sequencer's own unanswered-call count, which
+    /// is set for a contact the operator is minding, so the chase moves on to
+    /// the next station while it is still being heard.
+    pub max_calls: u8,
     /// Never chase these. A callsign, or a prefix ending in `*` (`VE3*`).
     pub ignore: Vec<String>,
     /// Always worth chasing, whatever [`need`](Self::need) says — though still
@@ -252,6 +260,7 @@ impl Default for ChaseSettings {
             retry_after_min: 30,
             order: ChaseOrder::Needed,
             dupe: ChaseDupe::BandMode,
+            max_calls: CHASE_MAX_CALLS,
             ignore: Vec::new(),
             watch: Vec::new(),
         }

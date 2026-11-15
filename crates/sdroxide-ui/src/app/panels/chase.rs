@@ -164,6 +164,7 @@ impl SdroxideApp {
                 audio_hz: p.audio_hz,
                 wait_for_cq: p.wait_for_cq,
                 caller: is_caller,
+                max_calls: settings.max_calls,
             });
         }
     }
@@ -404,6 +405,11 @@ impl SdroxideApp {
                         })
                         .response
                         .on_hover_text(tr!("chase-dupe-hint"));
+                    ui.end_row();
+
+                    ui.label(tr!("chase-max-calls"));
+                    ui.add(egui::DragValue::new(&mut s.max_calls).range(1..=20))
+                        .on_hover_text(tr!("chase-max-calls-hint"));
                     ui.end_row();
 
                     ui.label(tr!("chase-retry"));

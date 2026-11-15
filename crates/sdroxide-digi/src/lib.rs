@@ -198,6 +198,7 @@ pub trait DigiEngine: Send {
     /// [`start_qso`](Self::start_qso) it is refused unless the sequencer is
     /// free, and it does not count as an operator action — see
     /// [`sdroxide_types::Command::DigiChaseQso`].
+    #[allow(clippy::too_many_arguments)]
     fn chase_qso(
         &mut self,
         _from: String,
@@ -206,6 +207,7 @@ pub trait DigiEngine: Send {
         _audio_hz: f32,
         _wait_for_cq: bool,
         _caller: bool,
+        _max_calls: u8,
     ) {
     }
     fn stop_qso(&mut self) {}

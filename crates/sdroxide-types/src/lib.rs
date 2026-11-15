@@ -133,8 +133,9 @@ pub use broadcast::{BroadcastStation, BroadcastStations};
 pub use callsign::{CallsignInfo, LoginTarget, LoginTestResult, UploadResult, UploadTarget};
 pub use caps::{DeviceCaps, DeviceSetting, Direction, GainElement, GainUnit, SettingKind};
 pub use chase::{
-    CHASE_ANY_SNR, ChaseAnswer, ChaseCtx, ChaseDupe, ChaseNeed, ChaseOrder, ChasePick,
-    ChaseSettings, ChaseTally, ChaseVerdict, Chaser, chase_list_matches, parse_chase_list,
+    CHASE_ANY_SNR, CHASE_MAX_CALLS, ChaseAnswer, ChaseCtx, ChaseDupe, ChaseNeed, ChaseOrder,
+    ChasePick, ChaseSettings, ChaseTally, ChaseVerdict, Chaser, chase_list_matches,
+    parse_chase_list,
 };
 pub use chirp::{chirp_csv_to_memories, memories_to_chirp_csv};
 pub use command::Command;
