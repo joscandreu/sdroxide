@@ -4218,6 +4218,25 @@ lets it go. Decoded stations stay on the FT8/FT4 map for ten minutes, fading.
     on that band for 30 minutes.
   - **Watch list** and **Never answer** — callsigns, or prefixes ending in `*`.
 
+  **A station that calls you is answered first**, whatever the options above
+  say — even weak, heard once, or already in the log on this band. Only
+  **Never answer** and **Rest after a try** still apply — the rest not to a
+  station sending you a report, which is answering a call of yours late or
+  after chase moved on, but always to one you skipped. While the TX watchdog
+  is up nobody is answered until you act. When several stations are calling, one
+  already in the log on this band goes after every one that is not, then the
+  newest call, then **Who goes first** between calls from the same period. If chase is still
+  calling a station that has not come back yet, it switches to the one calling
+  you. A contact already under way, or one you started yourself, is finished
+  first, and a station that called in the meantime is answered afterwards if
+  its last message to you is under 2 minutes old.
+
+  **SKIP**, beside **CHASE** while chase is on, drops the station chase is
+  working and moves on: the next decoded period picks the next one. The skipped
+  station rests for the **Rest after a try** time, and chase stays on — unlike
+  **STOP QSO**. It is greyed out unless the contact in hand is one chase
+  started and is still running.
+
   Chase is off every time sdroxide starts, and **STOP QSO** or **STOP TX**
   switches it off. Starting a chased contact is not "touching the controls": the
   TX watchdog keeps counting across a run of chases nobody answers, and once it

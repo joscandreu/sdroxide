@@ -40,9 +40,53 @@ pub(in crate::app) fn sequencer_free(s: &DigiStatus) -> bool {
         }
 }
 
+/// How long a chase command waits for the station's status to show it taken
+/// up before it is counted as refused. Several slots' worth of decodes can be
+/// handled before that status arrives — a window the system is not drawing is
+/// woken late, with a backlog — and each of them, read against the status from
+/// before the command, would look free for another.
+const CHASE_CONFIRM_S: f64 = 8.0;
+
+/// A chase command sent to the station and not yet seen taken up.
+#[derive(Debug, Clone)]
+pub(in crate::app) struct ChaseSent {
+    call: String,
+    /// Answering a station that called us.
+    caller: bool,
+    band: String,
+    sent_s: f64,
+}
+
+/// True when the sequencer holds only a contact the chase started, with
+/// `chased`, that has not been answered yet — still sending them our grid, or
+/// waiting for them to come free. A station calling us may take its place. The
+/// engine asks the same question again (`QsoMachine::can_chase_caller`).
+pub(in crate::app) fn chase_unanswered(s: &DigiStatus, chased: Option<&str>) -> bool {
+    matches!(s.mode, Mode::Ft8 | Mode::Ft4 | Mode::Ft2)
+        && !s.tx_watchdog
+        && s.call_queue.is_empty()
+        && s.config.dxped_mode != DxpedMode::Fox
+        && !s.config.my_call.trim().is_empty()
+        && matches!(s.step, QsoStep::TxGrid | QsoStep::WaitCq)
+        && s.qso.as_ref().is_none_or(|q| q.rpt_rcvd.is_none())
+        && chased.is_some_and(|c| s.dx_call.as_deref().is_some_and(|d| d.eq_ignore_ascii_case(c)))
+}
+
+/// True when the contact in hand is the one the chase last started, `chased`,
+/// and it is still going: something SKIP can drop. A finished contact, a CQ
+/// run, or a station the operator picked themselves is not the chase's to skip.
+pub(in crate::app) fn chase_skippable(s: &DigiStatus, chased: Option<&str>) -> bool {
+    matches!(s.mode, Mode::Ft8 | Mode::Ft4 | Mode::Ft2)
+        && !matches!(s.step, QsoStep::Idle | QsoStep::Confirming | QsoStep::CallingCq)
+        && chased.is_some_and(|c| s.dx_call.as_deref().is_some_and(|d| d.eq_ignore_ascii_case(c)))
+}
+
 impl SdroxideApp {
     /// Fold a batch of decodes into the chase, and call the best station in it
     /// when chase is on and the sequencer is free.
+    ///
+    /// A station calling us comes first, whatever the chase's filters say, and
+    /// may also take the place of a chased contact nobody has answered yet.
     pub(in crate::app) fn chase_on_decodes(&mut self, batch: &[Decode]) {
         let Some(st) = self.digi_status.clone() else { return };
         if !matches!(st.mode, Mode::Ft8 | Mode::Ft4 | Mode::Ft2) || batch.is_empty() {
@@ -56,18 +100,51 @@ impl SdroxideApp {
         let mut chaser = std::mem::take(&mut self.chaser);
         chaser.observe(batch, band);
         let settings = self.chase.clone();
-        let may_call =
-            settings.enabled && !band.is_empty() && self.tx_capable() && sequencer_free(&st);
+        let can_tx = settings.enabled && !band.is_empty() && self.tx_capable();
+        if self
+            .chase_pending
+            .as_ref()
+            .is_some_and(|p| crate::time::now_unix_f64() - p.sent_s > CHASE_CONFIRM_S)
+        {
+            self.chase_pending = None;
+        }
+        let pending = self.chase_pending.as_ref().map(|p| p.caller);
+        // A command still on its way counts as the contact it asked for: the
+        // status in hand predates it.
+        let free = sequencer_free(&st) && pending.is_none();
+        let may_call = can_tx && free;
+        // Not `free` alone: a call to us arrives in the slot we answer in, so
+        // while we are calling a station in that same period the batch lands
+        // with our burst on the air, every time. Only a chase that *called*
+        // somebody gives way; one answering a caller is a contact under way.
+        let calling =
+            self.chase_own.as_ref().filter(|(_, caller)| !caller).map(|(c, _)| c.as_str());
+        let unanswered = match pending {
+            Some(caller) => !caller,
+            None => chase_unanswered(&st, calling),
+        };
+        let may_answer = can_tx && (free || unanswered);
         let log = self.log_index();
         let ctx = ChaseCtx { my_call: &st.config.my_call, my_grid: &st.config.my_grid, band, now };
         let tally = chaser.tally(&settings, log, &ctx);
-        let pick = may_call.then(|| chaser.pick(batch, &settings, log, &ctx)).flatten();
-        if let Some(p) = &pick {
-            chaser.mark_tried(&p.call, band, now);
-        }
+        let caller = may_answer
+            .then(|| chaser.pick_caller(&settings, log, &ctx, st.dx_call.as_deref()))
+            .flatten();
+        let is_caller = caller.is_some();
+        let pick =
+            caller.or_else(|| may_call.then(|| chaser.pick(batch, &settings, log, &ctx)).flatten());
         self.chaser = chaser;
         self.chase_tally = tally;
         if let Some(p) = pick {
+            // Marked as tried only once the station takes it up (see
+            // `chase_on_status`): a command it refuses — the status here was
+            // a step behind — must not leave a station that called us resting.
+            self.chase_pending = Some(ChaseSent {
+                call: p.call.clone(),
+                caller: is_caller,
+                band: band.to_string(),
+                sent_s: crate::time::now_unix_f64(),
+            });
             self.chase_last = Some((p.call.clone(), p.heard));
             self.ctrl.send(Command::DigiChaseQso {
                 from: p.call,
@@ -75,8 +152,52 @@ impl SdroxideApp {
                 snr: p.snr_db,
                 audio_hz: p.audio_hz,
                 wait_for_cq: p.wait_for_cq,
+                caller: is_caller,
             });
         }
+    }
+
+    /// Follow a new status from the station: a chase command it took up, and
+    /// a chased contact it no longer holds.
+    pub(in crate::app) fn chase_on_status(&mut self) {
+        let Some(st) = self.digi_status.as_ref() else { return };
+        let holds = |call: &str| {
+            st.step != QsoStep::Idle
+                && st.dx_call.as_deref().is_some_and(|d| d.eq_ignore_ascii_case(call))
+        };
+        if let Some(p) = self.chase_pending.take_if(|p| holds(&p.call)) {
+            self.chaser.mark_tried(&p.call, &p.band, crate::time::now_unix());
+            self.chase_own = Some((p.call, p.caller));
+            return;
+        }
+        if self
+            .chase_own
+            .as_ref()
+            .is_some_and(|(c, _)| !st.dx_call.as_deref().is_some_and(|d| d.eq_ignore_ascii_case(c)))
+        {
+            self.chase_own = None;
+        }
+    }
+
+    /// Drop the chased contact in hand and let the chase move on. The station
+    /// rests for the configured time from now, as one that never answered
+    /// would, and the next decoded slot picks the next one. Sent straight to
+    /// the station rather than as a STOP QSO through the screen's commands,
+    /// which would switch the chase off.
+    pub(in crate::app) fn chase_skip(&mut self) {
+        let Some(st) = self.digi_status.as_ref() else { return };
+        let chased = self.chase_own.as_ref().map(|(c, _)| c.as_str());
+        if !self.chase.enabled || !chase_skippable(st, chased) {
+            return;
+        }
+        let Some(call) = st.dx_call.clone() else { return };
+        let dial_hz = self.state.active_freq_hz();
+        if dial_hz > 0.0 {
+            let band = sdroxide_types::adif_band(dial_hz);
+            self.chaser.mark_skipped(&call, band, crate::time::now_unix());
+        }
+        self.chase_own = None;
+        self.ctrl.send(Command::DigiStopQso);
     }
 
     /// Switch chase on or off on this tab.
@@ -84,6 +205,7 @@ impl SdroxideApp {
         self.chase.enabled = on;
         if !on {
             self.chase_last = None;
+            self.chase_pending = None;
         }
     }
 
@@ -110,6 +232,17 @@ impl SdroxideApp {
             .clicked()
         {
             self.chase_set_enabled(!on);
+        }
+        let chased = self.chase_own.as_ref().map(|(c, _)| c.as_str());
+        let skippable =
+            on && tx_ok && self.digi_status.as_ref().is_some_and(|st| chase_skippable(st, chased));
+        if on {
+            let skip = ui.add_enabled_ui(skippable, |ui| {
+                crate::chrome::chip(ui, false, RichText::new(tr!("chase-skip")).size(14.0))
+            });
+            if skip.inner.on_hover_text(tr!("chase-skip-hint")).clicked() {
+                self.chase_skip();
+            }
         }
         if crate::chrome::chip(ui, self.show_chase_settings, RichText::new("⚙").size(14.0))
             .on_hover_text(tr!("chase-options"))
@@ -318,5 +451,47 @@ mod tests {
         let mut s = status(QsoStep::Idle);
         s.mode = Mode::Js8;
         assert!(!sequencer_free(&s));
+    }
+
+    #[test]
+    fn a_caller_may_replace_only_an_unanswered_chase() {
+        let mut s = status(QsoStep::TxGrid);
+        s.dx_call = Some("JA1XYZ".into());
+        assert!(chase_unanswered(&s, Some("ja1xyz")));
+        // The operator's own contact, not the chase's.
+        assert!(!chase_unanswered(&s, Some("VK2ABC")));
+        assert!(!chase_unanswered(&s, None));
+        // They answered: the contact is under way.
+        s.qso = Some(sdroxide_types::QsoLive {
+            started_utc: 0,
+            rpt_sent: Some(-10),
+            rpt_rcvd: Some(-12),
+        });
+        assert!(!chase_unanswered(&s, Some("JA1XYZ")));
+        let mut s = status(QsoStep::TxRReport);
+        s.dx_call = Some("JA1XYZ".into());
+        assert!(!chase_unanswered(&s, Some("JA1XYZ")));
+        let mut s = status(QsoStep::WaitCq);
+        s.dx_call = Some("JA1XYZ".into());
+        assert!(chase_unanswered(&s, Some("JA1XYZ")));
+        s.tx_watchdog = true;
+        assert!(!chase_unanswered(&s, Some("JA1XYZ")));
+    }
+
+    #[test]
+    fn only_the_chase_s_own_running_contact_can_be_skipped() {
+        let mut s = status(QsoStep::TxReport);
+        s.dx_call = Some("JA1XYZ".into());
+        assert!(chase_skippable(&s, Some("ja1xyz")));
+        assert!(!chase_skippable(&s, Some("VK2ABC")), "the operator's own contact");
+        assert!(!chase_skippable(&s, None));
+        for done in [QsoStep::Idle, QsoStep::Confirming, QsoStep::CallingCq] {
+            let mut s = status(done);
+            s.dx_call = Some("JA1XYZ".into());
+            assert!(!chase_skippable(&s, Some("JA1XYZ")), "{done:?}");
+        }
+        let mut s = status(QsoStep::WaitCq);
+        s.dx_call = Some("JA1XYZ".into());
+        assert!(chase_skippable(&s, Some("JA1XYZ")));
     }
 }

@@ -335,6 +335,11 @@ pub struct SdroxideApp {
     chase_tally: sdroxide_types::ChaseTally,
     /// The station this tab's chase last called, and how often it was heard.
     chase_last: Option<(String, u8)>,
+    /// A chase command sent and not yet taken up by the station.
+    chase_pending: Option<panels::chase::ChaseSent>,
+    /// The contact in hand is one this tab's chase started, and whether it
+    /// was to answer a station that called us.
+    chase_own: Option<(String, bool)>,
     show_chase_settings: bool,
     /// The watch and never-answer lists as the operator typed them.
     chase_watch_text: String,
@@ -1567,6 +1572,8 @@ impl SdroxideApp {
             chaser: sdroxide_types::Chaser::new(),
             chase_tally: sdroxide_types::ChaseTally::default(),
             chase_last: None,
+            chase_pending: None,
+            chase_own: None,
             show_chase_settings: false,
             radio_cfg: None,
             div_lender: None,

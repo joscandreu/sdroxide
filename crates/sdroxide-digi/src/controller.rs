@@ -532,7 +532,8 @@ impl DigiController {
 
     /// Start a contact a screen's chase picked (see
     /// [`sdroxide_types::Command::DigiChaseQso`]). Refused — and nothing moved,
-    /// not the period, not the tone — unless the sequencer is free for it.
+    /// not the period, not the tone — unless the sequencer is free for it, or,
+    /// for a station that called us, holds only a chase nobody answered yet.
     pub fn chase_qso(
         &mut self,
         from: String,
@@ -540,12 +541,14 @@ impl DigiController {
         snr: i16,
         audio_hz: f32,
         wait_for_cq: bool,
+        caller: bool,
     ) {
-        if !self.qso.can_chase() {
+        let allowed = if caller { self.qso.can_chase_caller(&from) } else { self.qso.can_chase() };
+        if !allowed {
             return;
         }
         let now = self.prepare_reply(&from, audio_hz);
-        if self.qso.chase_start(from, grid, snr, wait_for_cq, now) {
+        if self.qso.chase_start(from, grid, snr, wait_for_cq, caller, now) {
             self.status_dirty = true;
         }
     }
@@ -1183,8 +1186,9 @@ impl crate::DigiEngine for DigiController {
         snr: i16,
         audio_hz: f32,
         wait_for_cq: bool,
+        caller: bool,
     ) {
-        DigiController::chase_qso(self, from, grid, snr, audio_hz, wait_for_cq)
+        DigiController::chase_qso(self, from, grid, snr, audio_hz, wait_for_cq, caller)
     }
     fn stop_qso(&mut self) {
         DigiController::stop_qso(self)

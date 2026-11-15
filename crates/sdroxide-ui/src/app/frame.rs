@@ -1859,6 +1859,7 @@ impl SdroxideApp {
                         self.speech.announcer.on_digi(&s, &self.state, now);
                     }
                     self.digi_status = Some(s);
+                    self.chase_on_status();
                 }
                 RadioEvent::Ft8QsoLogged(mut r) => {
                     // Another tab may have logged since this copy was read;

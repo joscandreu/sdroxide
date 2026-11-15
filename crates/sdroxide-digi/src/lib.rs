@@ -205,6 +205,7 @@ pub trait DigiEngine: Send {
         _snr: i16,
         _audio_hz: f32,
         _wait_for_cq: bool,
+        _caller: bool,
     ) {
     }
     fn stop_qso(&mut self) {}

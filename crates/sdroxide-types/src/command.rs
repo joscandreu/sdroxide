@@ -1295,6 +1295,9 @@ pub enum Command {
     ///   transmit watchdog down; a chased one must not, or an unattended
     ///   station chasing into a band nobody answers would never be stopped.
     ///   It is refused outright while the watchdog is up.
+    /// * A station that **called us** (`caller`) may also take the place of a
+    ///   chased contact that station has not answered yet — never of the
+    ///   operator's own, nor of a chased one already under way.
     ///
     /// Appended for the usual reason — postcard numbers variants by position.
     DigiChaseQso {
@@ -1304,5 +1307,7 @@ pub enum Command {
         audio_hz: f32,
         /// Hold until they call CQ, as [`Command::DigiStartQso`] does.
         wait_for_cq: bool,
+        /// They called us: see above.
+        caller: bool,
     },
 }

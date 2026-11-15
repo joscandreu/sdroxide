@@ -42,6 +42,11 @@ const DX_FALLBACK_KM: f64 = 3000.0;
 /// window, so a long session does not grow the table without bound.
 const HEARD_KEEP_S: i64 = 60 * 60;
 
+/// How long after a station last called us the chase still answers them, for
+/// a call that arrived while the sequencer was busy. Longer than this and they
+/// have most likely given up and gone elsewhere.
+pub const CHASE_CALLER_KEEP_S: i64 = 120;
+
 /// Which stations are worth chasing — the log's judgement, at the strictness
 /// the operator asks for. A station already worked **on this band** is never
 /// chased, whichever of these is chosen.
@@ -323,6 +328,10 @@ pub struct Chaser {
     heard: HashMap<String, Heard>,
     /// When each station was last chased on each band (Unix s).
     tried: HashMap<(String, String), i64>,
+    /// When the operator last skipped each station on each band (Unix s). A
+    /// rest of the same length as `tried`, but one that even the station
+    /// answering us does not lift: the operator said no.
+    skipped: HashMap<(String, String), i64>,
 }
 
 /// A decoded callsign in the form the chase keys on, or `None` for one it
@@ -330,6 +339,16 @@ pub struct Chaser {
 fn clean_call(c: &str) -> Option<String> {
     let c = c.trim().trim_start_matches('<').trim_end_matches('>').to_ascii_uppercase();
     (!c.is_empty() && !c.contains('.')).then_some(c)
+}
+
+/// True for a message carrying a signal report (`-12`, `R+05`): a station
+/// answering a call, as opposed to opening one with a grid or bare calls.
+fn is_report(d: &Decode) -> bool {
+    let Some(t) = d.message.split_whitespace().last() else { return false };
+    let t = t.strip_prefix('R').unwrap_or(t);
+    t.len() == 3
+        && matches!(t.as_bytes()[0], b'+' | b'-')
+        && t[1..].bytes().all(|b| b.is_ascii_digit())
 }
 
 /// True for a message that closes a contact with somebody else: the moment
@@ -399,10 +418,31 @@ impl Chaser {
         self.tried.insert((call.trim().to_ascii_uppercase(), band.to_string()), now);
     }
 
+    /// Note that the operator skipped `call` on `band` at `now`: left alone,
+    /// whatever it sends, for [`ChaseSettings::retry_after_min`].
+    pub fn mark_skipped(&mut self, call: &str, band: &str, now: i64) {
+        let key = (call.trim().to_ascii_uppercase(), band.to_string());
+        self.tried.insert(key.clone(), now);
+        self.skipped.insert(key, now);
+    }
+
+    /// True when `call` was chased (`tried`) or skipped (`skipped`) on this
+    /// band less than the rest ago.
+    fn resting_in(
+        map: &HashMap<(String, String), i64>,
+        call: &str,
+        s: &ChaseSettings,
+        ctx: &ChaseCtx,
+    ) -> bool {
+        let retry = i64::from(s.retry_after_min) * 60;
+        map.get(&(call.to_string(), ctx.band.to_string())).is_some_and(|t| ctx.now - *t < retry)
+    }
+
     /// Forget everything: who was heard and who was chased.
     pub fn clear(&mut self) {
         self.heard.clear();
         self.tried.clear();
+        self.skipped.clear();
     }
 
     /// Periods `call` was decoded in within the window ending at `now`.
@@ -435,10 +475,7 @@ impl Chaser {
         if !watched && !s.need.wants(novelty) {
             return (ChaseVerdict::NotNeeded, novelty);
         }
-        let retry = i64::from(s.retry_after_min) * 60;
-        if let Some(t) = self.tried.get(&(call.to_string(), ctx.band.to_string()))
-            && ctx.now - *t < retry
-        {
+        if Self::resting_in(&self.tried, call, s, ctx) {
             return (ChaseVerdict::Resting, novelty);
         }
         if s.min_snr_db > CHASE_ANY_SNR && d.snr_db < s.min_snr_db {
@@ -540,6 +577,71 @@ impl Chaser {
             }
         }
         best.map(|(_, p)| p)
+    }
+
+    /// A station calling **us** to answer now, or `None`.
+    ///
+    /// Somebody calling us is the contact the chase is for, already half made,
+    /// so none of the chase's judgement of a station applies — not the need,
+    /// not the signal, not how often they were heard, not even a dupe on the
+    /// band: they asked. Only the operator's never-answer list and the rest
+    /// after a chase that went nowhere hold — and that rest not for a station
+    /// sending us a report, which is answering a call of ours: late, or after
+    /// the chase moved on to somebody else, but a contact all the same. A
+    /// station the operator skipped stays skipped. Their latest message must be
+    /// addressed to us, sent within [`CHASE_CALLER_KEEP_S`], and not a
+    /// sign-off; a station that has since called CQ or gone to somebody else
+    /// has moved on. `busy_with` — the station the sequencer has in hand — is
+    /// left to the sequencer.
+    ///
+    /// Who goes first: a station already in the log on this band only after
+    /// every one that is not — answering it costs a contact that adds nothing
+    /// — then the newest call, then the order setting (strongest, rarest or
+    /// farthest) between calls from the same period.
+    pub fn pick_caller(
+        &self,
+        s: &ChaseSettings,
+        log: &LogIndex,
+        ctx: &ChaseCtx,
+        busy_with: Option<&str>,
+    ) -> Option<ChasePick> {
+        let my_call = ctx.my_call.trim().to_ascii_uppercase();
+        if my_call.is_empty() {
+            return None;
+        }
+        let busy = busy_with.and_then(clean_call);
+        self.heard
+            .iter()
+            .filter(|(call, h)| {
+                let d = &h.last;
+                d.to.as_deref().and_then(clean_call).is_some_and(|t| t == my_call)
+                    && !d.is_cq
+                    && !is_signoff(d)
+                    && ctx.now - d.slot_utc <= CHASE_CALLER_KEEP_S
+                    && **call != my_call
+                    && busy.as_deref() != Some(call.as_str())
+                    && !chase_list_matches(&s.ignore, call)
+                    && !Self::resting_in(&self.skipped, call, s, ctx)
+                    && (is_report(d) || !Self::resting_in(&self.tried, call, s, ctx))
+            })
+            .map(|(call, h)| (call, h, log.novelty(call, h.grid.as_deref(), ctx.band)))
+            .max_by_key(|(call, h, n)| {
+                (
+                    !n.dupe,
+                    h.last.slot_utc,
+                    self.rank(call, h, *n, s, ctx),
+                    std::cmp::Reverse((*call).clone()),
+                )
+            })
+            .map(|(call, h, novelty)| ChasePick {
+                call: call.clone(),
+                grid: h.grid.clone(),
+                snr_db: h.last.snr_db,
+                audio_hz: h.last.audio_hz,
+                wait_for_cq: false,
+                heard: self.heard_count(h, s, ctx.now),
+                novelty,
+            })
     }
 
     /// Counts over every station heard within the window — what the readout
@@ -878,5 +980,137 @@ mod tests {
         d.from = Some("<...>".into());
         ch.observe(std::slice::from_ref(&d), "20m");
         assert_eq!(ch.pick(&[d], &s, &log, &ctx(0)), None);
+    }
+
+    #[test]
+    fn a_station_calling_us_is_answered_whatever_the_filters() {
+        // Heard once, weak, already worked on the band, not wanted by the need.
+        let log = log_of(&[("W9XYZ", "20m")]);
+        let s = ChaseSettings {
+            need: ChaseNeed::NewDxcc,
+            min_snr_db: -5,
+            dx_only: true,
+            ..Default::default()
+        };
+        let mut ch = Chaser::new();
+        hear(&mut ch, "EA4ABC W9XYZ EN52", -20, &[0]);
+        assert_eq!(ch.pick(&[dec(0, "EA4ABC W9XYZ EN52", -20)], &s, &log, &ctx(0)), None);
+        let p = ch.pick_caller(&s, &log, &ctx(0), None).expect("answered");
+        assert_eq!(p.call, "W9XYZ");
+        assert_eq!(p.grid.as_deref(), Some("EN52"));
+        assert!(!p.wait_for_cq);
+    }
+
+    #[test]
+    fn the_ignore_list_and_the_rest_still_hold_for_callers() {
+        let log = LogIndex::default();
+        let mut ch = Chaser::new();
+        hear(&mut ch, "EA4ABC W9XYZ EN52", -10, &[0]);
+        let s = ChaseSettings { ignore: vec!["W9*".into()], ..Default::default() };
+        assert_eq!(ch.pick_caller(&s, &log, &ctx(0), None), None);
+        let s = ChaseSettings::default(); // 30 min rest
+        ch.mark_tried("W9XYZ", "20m", -60);
+        assert_eq!(ch.pick_caller(&s, &log, &ctx(0), None), None);
+        let s = ChaseSettings { retry_after_min: 0, ..Default::default() };
+        assert!(ch.pick_caller(&s, &log, &ctx(0), None).is_some());
+    }
+
+    #[test]
+    fn a_caller_is_answered_for_two_minutes_unless_they_move_on() {
+        let log = LogIndex::default();
+        let s = ChaseSettings::default();
+        let mut ch = Chaser::new();
+        hear(&mut ch, "EA4ABC W9XYZ EN52", -10, &[0]);
+        assert!(ch.pick_caller(&s, &log, &ctx(CHASE_CALLER_KEEP_S), None).is_some());
+        assert_eq!(ch.pick_caller(&s, &log, &ctx(CHASE_CALLER_KEEP_S + 15), None), None);
+        // Gone to somebody else since: no longer calling us.
+        hear(&mut ch, "K1ABC W9XYZ EN52", -10, &[30]);
+        assert_eq!(ch.pick_caller(&s, &log, &ctx(30), None), None);
+        // A sign-off to us is the end of a contact, not a call.
+        hear(&mut ch, "EA4ABC VK2ABC RR73", -10, &[60]);
+        assert_eq!(ch.pick_caller(&s, &log, &ctx(60), None), None);
+    }
+
+    #[test]
+    fn the_station_in_hand_is_left_to_the_sequencer() {
+        let log = LogIndex::default();
+        let s = ChaseSettings::default();
+        let mut ch = Chaser::new();
+        hear(&mut ch, "EA4ABC W9XYZ EN52", -10, &[0]);
+        assert_eq!(ch.pick_caller(&s, &log, &ctx(0), Some("w9xyz")), None);
+    }
+
+    #[test]
+    fn the_newest_caller_goes_first_then_the_strongest() {
+        let log = LogIndex::default();
+        let s = ChaseSettings::default();
+        let mut ch = Chaser::new();
+        ch.observe(&[dec(0, "EA4ABC W9XYZ EN52", -2), dec(30, "EA4ABC K1ABC FN42", -15)], "20m");
+        ch.observe(&[dec(30, "EA4ABC N0AA EM48", -9)], "20m");
+        assert_eq!(
+            ch.pick_caller(&s, &log, &ctx(30), None).map(|p| p.call).as_deref(),
+            Some("N0AA")
+        );
+    }
+
+    #[test]
+    fn a_station_answering_our_call_late_is_answered_despite_the_rest() {
+        let log = LogIndex::default();
+        let s = ChaseSettings::default();
+        let mut ch = Chaser::new();
+        // Chased, and left for somebody else; now they come back with a report.
+        ch.mark_tried("JA1XYZ", "20m", 0);
+        hear(&mut ch, "EA4ABC JA1XYZ -15", -15, &[60]);
+        assert_eq!(
+            ch.pick_caller(&s, &log, &ctx(60), None).map(|p| p.call).as_deref(),
+            Some("JA1XYZ")
+        );
+        // A fresh call from a station resting after a try is still left alone.
+        hear(&mut ch, "EA4ABC JA1XYZ PM95", -15, &[90]);
+        assert_eq!(ch.pick_caller(&s, &log, &ctx(90), None), None);
+        // And one the operator skipped stays skipped, report or not.
+        ch.mark_skipped("VK2ABC", "20m", 0);
+        hear(&mut ch, "EA4ABC VK2ABC R-09", -9, &[120]);
+        assert_eq!(ch.pick_caller(&s, &log, &ctx(120), None), None);
+    }
+
+    #[test]
+    fn reports_are_told_from_other_messages() {
+        for (m, r) in [
+            ("EA4ABC W9XYZ -12", true),
+            ("EA4ABC W9XYZ R+05", true),
+            ("EA4ABC W9XYZ EN52", false),
+            ("EA4ABC W9XYZ RR73", false),
+            ("EA4ABC W9XYZ", false),
+        ] {
+            assert_eq!(is_report(&dec(0, m, -10)), r, "{m}");
+        }
+    }
+
+    #[test]
+    fn a_dupe_calling_us_goes_after_a_new_station_however_strong() {
+        let log = log_of(&[("W9XYZ", "20m")]);
+        let s = ChaseSettings { order: ChaseOrder::Strongest, ..Default::default() };
+        let mut ch = Chaser::new();
+        ch.observe(&[dec(30, "EA4ABC W9XYZ EN52", 5), dec(30, "EA4ABC K1ABC FN42", -18)], "20m");
+        let first = ch.pick_caller(&s, &log, &ctx(30), None).map(|p| p.call);
+        assert_eq!(first.as_deref(), Some("K1ABC"));
+        // Still answered when nobody new is calling.
+        ch.mark_tried("K1ABC", "20m", 30);
+        let next = ch.pick_caller(&s, &log, &ctx(30), None).map(|p| p.call);
+        assert_eq!(next.as_deref(), Some("W9XYZ"));
+    }
+
+    #[test]
+    fn callers_from_the_same_period_follow_the_order_setting() {
+        let log = LogIndex::default();
+        let mut ch = Chaser::new();
+        ch.observe(&[dec(30, "EA4ABC VK2ABC QF56", -15), dec(30, "EA4ABC F4ABC JN18", 3)], "20m");
+        let pick = |order| {
+            let s = ChaseSettings { order, ..Default::default() };
+            ch.pick_caller(&s, &log, &ctx(30), None).map(|p| p.call)
+        };
+        assert_eq!(pick(ChaseOrder::Strongest).as_deref(), Some("F4ABC"));
+        assert_eq!(pick(ChaseOrder::Farthest).as_deref(), Some("VK2ABC"));
     }
 }
