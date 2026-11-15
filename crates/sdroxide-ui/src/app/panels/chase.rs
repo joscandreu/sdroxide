@@ -125,11 +125,16 @@ impl SdroxideApp {
         };
         let may_answer = can_tx && (free || unanswered);
         let log = self.log_index();
+        // The contest the sequencer will really run: EU VHF only with the
+        // six-character locator its exchange needs (`QsoMachine::contest`).
+        let contest =
+            if st.config.my_grid.trim().len() == 6 { st.config.contest.cq_word() } else { "" };
         let ctx = ChaseCtx {
             my_call: &st.config.my_call,
             my_grid: &st.config.my_grid,
             band,
             mode: st.mode.label(),
+            contest,
             now,
         };
         let tally = chaser.tally(&settings, log, &ctx);

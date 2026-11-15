@@ -4241,6 +4241,12 @@ lets it go. Decoded stations stay on the FT8/FT4 map for ten minutes, fading.
   **STOP QSO**. It is greyed out unless the contact in hand is one chase
   started and is still running.
 
+  Stations working a contest — `CQ TEST`, `CQ FD`, `CQ RU`, `CQ WW` — are left
+  alone, including their sign-offs and their calls to you, because those
+  contests use an exchange chase does not send. The one exception is the
+  contest set in the FT8 settings (EU VHF answers `CQ TEST`). `CQ POTA`,
+  `CQ SOTA` and the like are answered as usual.
+
   Chase is off every time sdroxide starts, and **STOP QSO** or **STOP TX**
   switches it off. Starting a chased contact is not "touching the controls": the
   TX watchdog keeps counting across a run of chases nobody answers, and once it

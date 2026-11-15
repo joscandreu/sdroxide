@@ -193,6 +193,11 @@ impl ChaseDupe {
     }
 }
 
+/// The CQ words that open a contest with an exchange of its own, which the
+/// everyday reply a chase sends would only garble: ARRL Field Day, RTTY
+/// Roundup, WW Digi and the VHF contests' `CQ TEST`.
+const CONTEST_CQ: [&str; 4] = ["TEST", "FD", "RU", "WW"];
+
 /// The operator's chase options. A screen's preference, like the alerts: it is
 /// the screen that holds the log the judgement is made against.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -286,6 +291,9 @@ pub struct ChaseCtx<'a> {
     /// The ADIF mode being operated (`"FT8"`), for [`ChaseDupe`]. Empty asks
     /// by band alone.
     pub mode: &'a str,
+    /// The CQ word of the contest the station is set up for (`"TEST"`), or
+    /// empty outside one: the one contest whose stations may be answered.
+    pub contest: &'a str,
     /// Unix seconds now — in practice the start of the slot just decoded.
     pub now: i64,
 }
@@ -354,6 +362,10 @@ struct Heard {
     /// The last grid they sent. A CQ carries one and the rest of a contact
     /// does not, and the novelty of a station is the same either way.
     grid: Option<String>,
+    /// The contest word of their latest CQ (`"FD"`), or `None` once they call
+    /// an ordinary one. What says a station is in a contest even while its
+    /// latest message is an exchange or a sign-off.
+    contest: Option<String>,
 }
 
 /// The memory behind a chase: who has been heard in which periods on this band,
@@ -427,6 +439,7 @@ impl Chaser {
                 slots: Vec::new(),
                 last: d.clone(),
                 grid: None,
+                contest: None,
             });
             if !h.slots.contains(&d.slot_utc) {
                 h.slots.push(d.slot_utc);
@@ -434,6 +447,13 @@ impl Chaser {
             }
             if d.slot_utc >= h.last.slot_utc {
                 h.last = d.clone();
+                if d.is_cq {
+                    h.contest = d
+                        .cq_to
+                        .as_deref()
+                        .map(str::to_ascii_uppercase)
+                        .filter(|w| CONTEST_CQ.contains(&w.as_str()));
+                }
             }
             if let Some(g) = d.grid.as_deref().filter(|g| !g.is_empty()) {
                 h.grid = Some(g.to_string());
@@ -509,6 +529,12 @@ impl Chaser {
         n
     }
 
+    /// True when `h` is working a contest other than the one we are set up
+    /// for. Its exchange is not ours, and the everyday reply would garble it.
+    fn in_other_contest(h: &Heard, ctx: &ChaseCtx) -> bool {
+        h.contest.as_deref().is_some_and(|w| !w.eq_ignore_ascii_case(ctx.contest.trim()))
+    }
+
     /// Judge one heard station against the settings and the log.
     fn verdict(
         &self,
@@ -525,6 +551,7 @@ impl Chaser {
             return (ChaseVerdict::Ignored, novelty);
         }
         if (d.is_cq && !cq_is_for_us(d, ctx.my_call, ctx.my_grid))
+            || Self::in_other_contest(h, ctx)
             || (s.dx_only && !is_dx(call, h.grid.as_deref(), ctx.my_call, ctx.my_grid))
         {
             return (ChaseVerdict::NotForUs, novelty);
@@ -679,6 +706,7 @@ impl Chaser {
                     && **call != my_call
                     && busy.as_deref() != Some(call.as_str())
                     && !chase_list_matches(&s.ignore, call)
+                    && !Self::in_other_contest(h, ctx)
                     && !Self::resting_in(&self.skipped, call, s, ctx)
                     && (is_report(d) || !Self::resting_in(&self.tried, call, s, ctx))
             })
@@ -750,7 +778,7 @@ mod tests {
     const GRID: &str = "IN80";
 
     fn ctx(now: i64) -> ChaseCtx<'static> {
-        ChaseCtx { my_call: ME, my_grid: GRID, band: "20m", mode: "FT8", now }
+        ChaseCtx { my_call: ME, my_grid: GRID, band: "20m", mode: "FT8", contest: "", now }
     }
 
     fn dec(slot: i64, msg: &str, snr: i16) -> Decode {
@@ -1203,5 +1231,36 @@ mod tests {
         for d in ChaseDupe::ALL {
             assert!(!with(d, &ft8), "{d:?}");
         }
+    }
+
+    #[test]
+    fn a_station_in_another_contest_is_left_alone() {
+        let log = LogIndex::default();
+        let s = ChaseSettings { answer: ChaseAnswer::Any, ..Default::default() };
+        let mut ch = Chaser::new();
+        let b = hear(&mut ch, "CQ FD W9XYZ EN52", -5, &[0, 30, 60]);
+        assert_eq!(ch.pick(&b, &s, &log, &ctx(60)), None);
+        // Nor tail-ended, nor answered when it calls us mid-contest.
+        let b = hear(&mut ch, "K1ABC W9XYZ RR73", -5, &[90]);
+        assert_eq!(ch.pick(&b, &s, &log, &ctx(90)), None);
+        hear(&mut ch, "EA4ABC W9XYZ R 2A EMA", -5, &[120]);
+        assert_eq!(ch.pick_caller(&s, &log, &ctx(120), None), None);
+        // An ordinary CQ afterwards: the contest is over for them.
+        let b = hear(&mut ch, "CQ W9XYZ EN52", -5, &[150]);
+        assert!(ch.pick(&b, &s, &log, &ctx(150)).is_some());
+    }
+
+    #[test]
+    fn the_contest_we_are_set_up_for_is_answered() {
+        let log = LogIndex::default();
+        let s = ChaseSettings::default();
+        let mut ch = Chaser::new();
+        let b = hear(&mut ch, "CQ TEST DL1ABC JO62", -5, &[0, 30, 60]);
+        assert_eq!(ch.pick(&b, &s, &log, &ctx(60)), None);
+        let euvhf = ChaseCtx { contest: "TEST", ..ctx(60) };
+        assert!(ch.pick(&b, &s, &log, &euvhf).is_some());
+        // POTA and the like are not contests: answered as ever.
+        let b = hear(&mut ch, "CQ POTA K1ABC FN42", -5, &[0, 30, 60]);
+        assert!(ch.pick(&b, &s, &log, &ctx(60)).is_some());
     }
 }
