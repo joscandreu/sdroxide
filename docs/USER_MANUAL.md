@@ -4214,6 +4214,10 @@ lets it go. Decoded stations stay on the FT8/FT4 map for ten minutes, fading.
     in the middle of a contact but holds silently until it is free.
   - **Heard in … periods within … min**, **Minimum signal**, **Other continents
     only**, **Who goes first** (rarest, strongest or farthest).
+  - **Dupe** — what counts as already worked: the same band *and* mode (the
+    default — a 20 m SSB contact does not stop chase calling the station on
+    20 m FT8), the same band in any data mode (FT4 covers FT8, phone and CW do
+    not), or the same band in any mode.
   - **Rest after a try** — a chased station that did not complete is left alone
     on that band for 30 minutes.
   - **Watch list** and **Never answer** — callsigns, or prefixes ending in `*`.

@@ -163,6 +163,36 @@ impl ChaseOrder {
     }
 }
 
+/// What counts as already worked — a dupe — when the log is asked about a
+/// station. A dupe is never chased, and when one calls us it is answered only
+/// after everybody new.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ChaseDupe {
+    /// Worked on this band in any data mode: an FT4 contact covers FT8, a
+    /// phone or CW one does not.
+    DataModes,
+    /// Worked on this band in any mode at all.
+    Band,
+    /// Worked on this band in this very mode.
+    ///
+    /// Last and `#[serde(other)]` for the reason [`ChaseNeed::NotOnBand`] is.
+    #[default]
+    #[serde(other)]
+    BandMode,
+}
+
+impl ChaseDupe {
+    pub const ALL: [ChaseDupe; 3] = [ChaseDupe::BandMode, ChaseDupe::DataModes, ChaseDupe::Band];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ChaseDupe::BandMode => "Same band and mode",
+            ChaseDupe::DataModes => "Same band, any data mode",
+            ChaseDupe::Band => "Same band, any mode",
+        }
+    }
+}
+
 /// The operator's chase options. A screen's preference, like the alerts: it is
 /// the screen that holds the log the judgement is made against.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -195,6 +225,8 @@ pub struct ChaseSettings {
     pub retry_after_min: u16,
     /// Which eligible station goes first.
     pub order: ChaseOrder,
+    /// What counts as already worked.
+    pub dupe: ChaseDupe,
     /// Never chase these. A callsign, or a prefix ending in `*` (`VE3*`).
     pub ignore: Vec<String>,
     /// Always worth chasing, whatever [`need`](Self::need) says — though still
@@ -214,6 +246,7 @@ impl Default for ChaseSettings {
             dx_only: false,
             retry_after_min: 30,
             order: ChaseOrder::Needed,
+            dupe: ChaseDupe::BandMode,
             ignore: Vec::new(),
             watch: Vec::new(),
         }
@@ -250,6 +283,9 @@ pub struct ChaseCtx<'a> {
     /// The ADIF band being operated (`"20m"`), what "worked on this band"
     /// means.
     pub band: &'a str,
+    /// The ADIF mode being operated (`"FT8"`), for [`ChaseDupe`]. Empty asks
+    /// by band alone.
+    pub mode: &'a str,
     /// Unix seconds now — in practice the start of the slot just decoded.
     pub now: i64,
 }
@@ -451,6 +487,28 @@ impl Chaser {
         h.slots.iter().filter(|t| now - **t < window && **t <= now).count().min(255) as u8
     }
 
+    /// What the log makes of `call`, with a dupe judged the way the settings
+    /// ask: the index answers "worked on this band" in any mode, and the
+    /// narrower questions are put to it only when that is yes.
+    fn novelty(
+        &self,
+        call: &str,
+        grid: Option<&str>,
+        s: &ChaseSettings,
+        log: &LogIndex,
+        ctx: &ChaseCtx,
+    ) -> Novelty {
+        let mut n = log.novelty(call, grid, ctx.band);
+        if n.dupe && !ctx.mode.is_empty() {
+            n.dupe = match s.dupe {
+                ChaseDupe::Band => true,
+                ChaseDupe::BandMode => log.worked_band_mode(call, ctx.band, ctx.mode),
+                ChaseDupe::DataModes => log.worked_band_class(call, ctx.band, ctx.mode),
+            };
+        }
+        n
+    }
+
     /// Judge one heard station against the settings and the log.
     fn verdict(
         &self,
@@ -462,7 +520,7 @@ impl Chaser {
     ) -> (ChaseVerdict, Novelty) {
         let d = &h.last;
         let my_call = ctx.my_call.trim().to_ascii_uppercase();
-        let novelty = log.novelty(call, h.grid.as_deref(), ctx.band);
+        let novelty = self.novelty(call, h.grid.as_deref(), s, log, ctx);
         if call == my_call || chase_list_matches(&s.ignore, call) {
             return (ChaseVerdict::Ignored, novelty);
         }
@@ -624,7 +682,7 @@ impl Chaser {
                     && !Self::resting_in(&self.skipped, call, s, ctx)
                     && (is_report(d) || !Self::resting_in(&self.tried, call, s, ctx))
             })
-            .map(|(call, h)| (call, h, log.novelty(call, h.grid.as_deref(), ctx.band)))
+            .map(|(call, h)| (call, h, self.novelty(call, h.grid.as_deref(), s, log, ctx)))
             .max_by_key(|(call, h, n)| {
                 (
                     !n.dupe,
@@ -692,7 +750,7 @@ mod tests {
     const GRID: &str = "IN80";
 
     fn ctx(now: i64) -> ChaseCtx<'static> {
-        ChaseCtx { my_call: ME, my_grid: GRID, band: "20m", now }
+        ChaseCtx { my_call: ME, my_grid: GRID, band: "20m", mode: "FT8", now }
     }
 
     fn dec(slot: i64, msg: &str, snr: i16) -> Decode {
@@ -1112,5 +1170,38 @@ mod tests {
         };
         assert_eq!(pick(ChaseOrder::Strongest).as_deref(), Some("F4ABC"));
         assert_eq!(pick(ChaseOrder::Farthest).as_deref(), Some("VK2ABC"));
+    }
+
+    fn log_in_mode(call: &str, band: &str, mode: &str) -> LogIndex {
+        LogIndex::build(&[QsoRecord {
+            call: call.into(),
+            band: band.into(),
+            mode: mode.into(),
+            ..Default::default()
+        }])
+    }
+
+    #[test]
+    fn a_dupe_is_judged_by_band_and_mode_as_asked() {
+        let mut ch = Chaser::new();
+        let b = hear(&mut ch, "CQ W9XYZ EN52", -5, &[0, 30, 60]);
+        let with = |dupe, log: &LogIndex| {
+            let s = ChaseSettings { dupe, ..Default::default() };
+            ch.pick(&b, &s, log, &ctx(60)).is_some()
+        };
+        // Worked on 20 m SSB: still wanted on FT8 unless any mode counts.
+        let ssb = log_in_mode("W9XYZ", "20m", "SSB");
+        assert!(with(ChaseDupe::BandMode, &ssb));
+        assert!(with(ChaseDupe::DataModes, &ssb));
+        assert!(!with(ChaseDupe::Band, &ssb));
+        // Worked on 20 m FT4: another data mode.
+        let ft4 = log_in_mode("W9XYZ", "20m", "FT4");
+        assert!(with(ChaseDupe::BandMode, &ft4));
+        assert!(!with(ChaseDupe::DataModes, &ft4));
+        // Worked on 20 m FT8: a dupe whichever way it is asked.
+        let ft8 = log_in_mode("W9XYZ", "20m", "FT8");
+        for d in ChaseDupe::ALL {
+            assert!(!with(d, &ft8), "{d:?}");
+        }
     }
 }

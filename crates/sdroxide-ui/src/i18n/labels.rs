@@ -540,6 +540,17 @@ impl Tr for sdroxide_types::ChaseAnswer {
     }
 }
 
+impl Tr for sdroxide_types::ChaseDupe {
+    fn tr(self) -> String {
+        use sdroxide_types::ChaseDupe::*;
+        match self {
+            BandMode => tr!("chase-dupe-band-mode"),
+            DataModes => tr!("chase-dupe-data-modes"),
+            Band => tr!("chase-dupe-band"),
+        }
+    }
+}
+
 impl Tr for sdroxide_types::ChaseOrder {
     fn tr(self) -> String {
         use sdroxide_types::ChaseOrder::*;

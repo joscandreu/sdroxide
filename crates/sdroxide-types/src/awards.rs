@@ -223,6 +223,13 @@ impl Novelty {
 pub struct LogIndex {
     calls: std::collections::HashSet<String>,
     call_band: std::collections::HashSet<(String, String)>,
+    /// The mode each call was worked in on each band, upper-case as logged.
+    call_band_mode: std::collections::HashSet<(String, String, String)>,
+    /// The same, by kind of mode: what "worked in the data modes" means.
+    call_band_class: std::collections::HashSet<(String, String, ModeClass)>,
+    /// Calls logged on a band with no mode at all — an imported log that left
+    /// it out. Counted as worked in every mode, since nothing says otherwise.
+    call_band_nomode: std::collections::HashSet<(String, String)>,
     dxcc: std::collections::HashSet<String>,
     dxcc_band: std::collections::HashSet<(String, String)>,
     grids: std::collections::HashSet<String>,
@@ -230,6 +237,28 @@ pub struct LogIndex {
     /// columns can't support per-band judgements, and claiming everything is
     /// new-on-this-band would be worse than saying nothing.
     has_bands: bool,
+}
+
+/// The three kinds of mode the awards count separately: what DXCC calls
+/// phone, CW and digital (data).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ModeClass {
+    Phone,
+    Cw,
+    Data,
+}
+
+impl ModeClass {
+    /// The kind a logged mode belongs to, by its ADIF name. Anything that is
+    /// neither speech nor Morse is data.
+    pub fn of(mode: &str) -> ModeClass {
+        match mode.trim().to_ascii_uppercase().as_str() {
+            "CW" => ModeClass::Cw,
+            "SSB" | "USB" | "LSB" | "AM" | "FM" | "PHONE" | "DIGITALVOICE" | "DV" | "FREEDV"
+            | "C4FM" | "DSTAR" | "DMR" | "RADE" => ModeClass::Phone,
+            _ => ModeClass::Data,
+        }
+    }
 }
 
 /// The DXCC entity for a logged QSO: the resolver first, the record's own
@@ -253,6 +282,13 @@ impl LogIndex {
             ix.calls.insert(call.clone());
             if !band.is_empty() {
                 ix.has_bands = true;
+                let mode = q.mode.trim().to_ascii_uppercase();
+                if mode.is_empty() {
+                    ix.call_band_nomode.insert((call.clone(), band.clone()));
+                } else {
+                    ix.call_band_class.insert((call.clone(), band.clone(), ModeClass::of(&mode)));
+                    ix.call_band_mode.insert((call.clone(), band.clone(), mode));
+                }
                 ix.call_band.insert((call, band.clone()));
             }
             if let Some(ent) = record_entity(q) {
@@ -266,6 +302,23 @@ impl LogIndex {
             }
         }
         ix
+    }
+
+    /// True when `call` is in the log on `band` in `mode` (by its ADIF name),
+    /// or on that band with no mode recorded.
+    pub fn worked_band_mode(&self, call: &str, band: &str, mode: &str) -> bool {
+        let (call, band) = (call.trim().to_ascii_uppercase(), band.trim().to_ascii_lowercase());
+        let mode = mode.trim().to_ascii_uppercase();
+        self.call_band_nomode.contains(&(call.clone(), band.clone()))
+            || self.call_band_mode.contains(&(call, band, mode))
+    }
+
+    /// True when `call` is in the log on `band` in a mode of the same kind as
+    /// `mode` — FT4 counts for FT8, SSB does not — or with no mode recorded.
+    pub fn worked_band_class(&self, call: &str, band: &str, mode: &str) -> bool {
+        let (call, band) = (call.trim().to_ascii_uppercase(), band.trim().to_ascii_lowercase());
+        self.call_band_nomode.contains(&(call.clone(), band.clone()))
+            || self.call_band_class.contains(&(call, band, ModeClass::of(mode)))
     }
 
     /// How interesting a heard station is. `band` is the ADIF band we'd work
@@ -384,5 +437,24 @@ mod tests {
         assert!(!n.new_dxcc && !n.new_dxcc_band && !n.new_grid && n.new_call);
         // An empty callsign is not a station.
         assert_eq!(ix.novelty("", None, "20m"), Novelty::default());
+    }
+
+    #[test]
+    fn worked_before_can_be_asked_per_mode() {
+        let mut ssb = qso("W1AW", "20m", None);
+        ssb.mode = "SSB".into();
+        let ix = LogIndex::build(&[ssb, qso("K2XYZ", "20m", None)]);
+        assert!(ix.worked_band_mode("w1aw", "20M", "ssb"));
+        assert!(!ix.worked_band_mode("W1AW", "20m", "FT8"));
+        assert!(!ix.worked_band_class("W1AW", "20m", "FT8"), "phone is not data");
+        assert!(ix.worked_band_class("K2XYZ", "20m", "FT4"), "FT8 and FT4 are both data");
+        assert!(!ix.worked_band_mode("K2XYZ", "20m", "FT4"));
+        assert!(!ix.worked_band_mode("K2XYZ", "40m", "FT8"));
+        // No mode in the log: nothing says it was not this one.
+        let mut bare = qso("N0AA", "20m", None);
+        bare.mode.clear();
+        let ix = LogIndex::build(&[bare]);
+        assert!(ix.worked_band_mode("N0AA", "20m", "FT8"));
+        assert!(ix.worked_band_class("N0AA", "20m", "FT8"));
     }
 }

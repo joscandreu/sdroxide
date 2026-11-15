@@ -14,8 +14,8 @@
 use crate::i18n::{Tr, tr};
 use eframe::egui::{self, RichText};
 use sdroxide_types::{
-    CHASE_ANY_SNR, ChaseAnswer, ChaseCtx, ChaseNeed, ChaseOrder, Command, Decode, DigiStatus,
-    DxpedMode, Mode, QsoStep, parse_chase_list,
+    CHASE_ANY_SNR, ChaseAnswer, ChaseCtx, ChaseDupe, ChaseNeed, ChaseOrder, Command, Decode,
+    DigiStatus, DxpedMode, Mode, QsoStep, parse_chase_list,
 };
 
 use crate::app::SdroxideApp;
@@ -125,7 +125,13 @@ impl SdroxideApp {
         };
         let may_answer = can_tx && (free || unanswered);
         let log = self.log_index();
-        let ctx = ChaseCtx { my_call: &st.config.my_call, my_grid: &st.config.my_grid, band, now };
+        let ctx = ChaseCtx {
+            my_call: &st.config.my_call,
+            my_grid: &st.config.my_grid,
+            band,
+            mode: st.mode.label(),
+            now,
+        };
         let tally = chaser.tally(&settings, log, &ctx);
         let caller = may_answer
             .then(|| chaser.pick_caller(&settings, log, &ctx, st.dx_call.as_deref()))
@@ -381,6 +387,18 @@ impl SdroxideApp {
                             ui.selectable_value(&mut s.order, o, o.tr());
                         }
                     });
+                    ui.end_row();
+
+                    ui.label(tr!("chase-dupe"));
+                    egui::ComboBox::from_id_salt("chase-dupe")
+                        .selected_text(s.dupe.tr())
+                        .show_ui(ui, |ui| {
+                            for d in ChaseDupe::ALL {
+                                ui.selectable_value(&mut s.dupe, d, d.tr());
+                            }
+                        })
+                        .response
+                        .on_hover_text(tr!("chase-dupe-hint"));
                     ui.end_row();
 
                     ui.label(tr!("chase-retry"));
